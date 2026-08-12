@@ -1,0 +1,17 @@
+# Data Manipulation & Visualization
+numpy
+pandas
+matplotlib
+seaborn
+
+# Machine Learning & NLP
+scikit-learn
+nltk
+spacy
+transformers
+torch
+tqdm
+
+# Development & Notebooks
+jupyter
+ipykernel
