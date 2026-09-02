@@ -1,73 +1,69 @@
-# Progetto di Natural Language Processing (NLP)
+# Sistema di supporto alla decisione terapeutica cardiologica
 
-Questo repository contiene la struttura di base per un progetto di elaborazione del linguaggio naturale (NLP).
+Progetto finale per il corso *Natural Language Processing for Digital Health*.
 
-## Struttura del Progetto
+Dato lo stato di un paziente cardiologico (patologie, farmaci in corso,
+allergie), il sistema suggerisce una terapia **spiegabile**, con le motivazioni
+espresse come cammini in una knowledge base a grafo (indicazioni,
+controindicazioni, interazioni, linee guida), ed è esposto come **tool MCP**
+richiamabile da un LLM.
 
-La struttura delle cartelle è organizzata come segue:
+> **Stato: step 0 di 11 completato** (esplorazione dei dati).
+> Lo sviluppo procede per step sequenziali; vedi
+> [`docs/00_architettura.md`](docs/00_architettura.md) per la visione d'insieme
+> e l'indice dei documenti.
 
-```text
-├── data/                  # Cartella per i dataset (CSV, JSON, TXT, ecc.)
-├── notebooks/             # Jupyter Notebooks per l'esplorazione dei dati e prototipazione
-│   └── 01_data_exploration.ipynb  # Notebook iniziale per l'esplorazione dei dati
-├── src/                   # Codice sorgente del progetto (moduli Python, pipeline, ecc.)
-├── .gitignore             # File per escludere file temporanei, virtual env e dataset da Git
-└── requirements.txt       # Dipendenze Python necessarie per il progetto
+## Dataset
+
+`data/raw/anamnesiterapie.txt`: 1000 anamnesi cardiologiche in italiano,
+pseudonimizzate, in un unico array JSON. Ogni record ha un'anamnesi narrativa e
+la terapia all'ingresso; 857 record hanno anche la terapia alla dimissione, che
+fa da ground truth per la valutazione. Il dettaglio empirico del formato è in
+[`docs/00_esplorazione_dati.md`](docs/00_esplorazione_dati.md).
+
+I dati clinici **non sono versionati** (vedi `.gitignore`).
+
+### Due vincoli di provenienza, non negoziabili
+
+1. **Il dataset è l'export grezzo dell'ospedale.** Esistono varianti dello
+   stesso dataset già filtrate e strutturate da un LLM: sono scartate, perché
+   costruirci sopra significherebbe ereditare un'estrazione già fatta da un
+   altro modello — cioè proprio ciò che questo progetto deve implementare e
+   confrontare. Il confronto fra le tre pipeline non sarebbe più interpretabile.
+2. **Ogni mapping viene da una knowledge base citabile.** Le conversioni nome
+   commerciale → principio attivo → codice ATC e condizione → ICD-10 sono
+   ancorate a fonti esterne riportate esplicitamente (WHO ATC/DDD Index, AIFA,
+   openFDA, Wikidata). Le regolarità osservate nel dataset valgono come evidenza
+   da verificare, mai come fonte autorevole. Le voci non coperte da alcuna fonte
+   sono segnalate come mapping manuali con la fonte puntuale, non riempite in
+   silenzio.
+
+## Struttura del repository
+
+```
+data/raw/        dataset e risorse esterne (non versionati)
+data/interim/    vocabolari grezzi rigenerabili
+src/             moduli Python
+docs/            un documento per step + indice architetturale
+kb/              knowledge graph in Turtle          (step 7)
+notebooks/       esplorazione interattiva
+tests/           test                                (dallo step 2)
+reports/         output rigenerabili
 ```
 
-## Configurazione e Installazione
+## Esecuzione
 
-Per iniziare a lavorare sul progetto, si consiglia di creare un ambiente virtuale Python e installare le dipendenze richieste.
-
-### 1. Creare un ambiente virtuale (consigliato)
-
-Esegui il seguente comando nella root del progetto:
+Nessuna dipendenza esterna per lo step 0: solo la libreria standard di Python
+(≥ 3.10, per la sintassi `X | None` nelle annotazioni).
 
 ```bash
-python3 -m venv .venv
+python3 src/explore_dataset.py
 ```
 
-Attiva l'ambiente virtuale:
-*   **Linux/macOS:**
-    ```bash
-    source .venv/bin/activate
-    ```
-*   **Windows (Command Prompt):**
-    ```cmd
-    .venv\Scripts\activate.bat
-    ```
-*   **Windows (PowerShell):**
-    ```powershell
-    .venv\Scripts\Activate.ps1
-    ```
+Rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
 
-### 2. Installare le dipendenze
+## Scelte tecniche
 
-Con l'ambiente virtuale attivo, installa i pacchetti necessari tramite `pip`:
-
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-### 3. Scaricare i modelli NLP (Opzionale)
-
-Se utilizzi librerie come Spacy o NLTK, potresti voler scaricare i relativi modelli linguistici. Ad esempio per Spacy (Italiano o Inglese):
-
-```bash
-# Modello per l'Italiano
-python -m spacy download it_core_news_sm
-
-# Modello per l'Inglese
-python -m spacy download en_core_web_sm
-```
-
-## Utilizzo dei Notebook
-
-Per avviare l'interfaccia di Jupyter e aprire i notebook di esplorazione:
-
-```bash
-jupyter notebook
-```
-
-O apri direttamente il progetto in VS Code / PyCharm, che supportano l'esecuzione diretta dei file `.ipynb`.
+Ogni scelta non ovvia è motivata nel documento dello step corrispondente, con le
+alternative scartate e il perché. Le decisioni dello step 0 sono nella sezione 6
+di [`docs/00_esplorazione_dati.md`](docs/00_esplorazione_dati.md).
