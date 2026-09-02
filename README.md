@@ -55,12 +55,16 @@ reports/         output rigenerabili
 ## Esecuzione
 
 Nessuna dipendenza esterna per lo step 0: solo la libreria standard di Python
-(≥ 3.10, per la sintassi `X | None` nelle annotazioni).
+(≥ 3.10, per la sintassi `X | None` nelle annotazioni). Le dipendenze dei
+prossimi step sono elencate e motivate in `requirements.txt`, commentate finché
+lo step che le richiede non è implementato.
 
 ```bash
 python3 src/explore_dataset.py     # esplorazione: report + vocabolari grezzi
 python3 src/fetch_external_kb.py   # scarica le KB esterne + scrive il manifest
 python3 src/verifica_ponte_aifa.py # confronta il ponte interno con AIFA
+
+python3 -m unittest discover -s tests -v   # 29 test, nessuna dipendenza
 ```
 
 Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.

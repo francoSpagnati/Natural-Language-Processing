@@ -1,0 +1,23 @@
+# Dipendenze del progetto, aggiunte man mano che gli step le richiedono.
+# Ogni voce e' motivata: il progetto richiede di poter giustificare ogni scelta.
+#
+# Python >= 3.10 (sintassi `X | None` nelle annotazioni di tipo).
+#
+# --- Step 0: esplorazione dati ------------------------------------------------
+# Nessuna dipendenza esterna. Il caricamento usa solo `json`, le sonde `re`, i
+# test `unittest`: tutto libreria standard. Restare a zero dipendenze in questa
+# fase e' voluto, cosi' l'esplorazione e' riproducibile ovunque senza installare
+# nulla e senza che una versione di libreria possa alterare i risultati.
+#
+# --- Step successivi (da scommentare quando lo step viene implementato) -------
+# spacy            # step 3: PhraseMatcher per il gazetteer sul testo libero
+# rdflib           # step 7: knowledge graph RDF + query SPARQL
+# networkx         # step 7: conversione dei sottografi per la visualizzazione
+# pyvis            # step 7: resa HTML interattiva dei sottografi
+# matplotlib       # step 7/11: figure statiche e tabelle dei risultati
+# pydantic         # step 10: modelli di input/output del tool MCP
+# mcp              # step 10: SDK ufficiale, FastMCP
+# transformers     # step 5: fine-tuning del modello NER italiano
+# torch            # step 5: backend del training
+# scikit-learn     # step 6/11: metriche di accordo e valutazione
+# pandas           # step 11: tabelle dei risultati

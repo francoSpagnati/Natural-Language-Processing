@@ -78,6 +78,8 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `src/explore_dataset.py` | `data_loading` | nessuno (usa-e-getta, non importato dalle pipeline) | 0 |
 | `src/fetch_external_kb.py` | solo stdlib (`urllib`, `hashlib`) | step 2 (normalizzazione), step 7 (KG) | 0 |
 | `src/verifica_ponte_aifa.py` | fonti AIFA + output di `explore_dataset` | nessuno (verifica di provenienza) | 0 |
+| `tests/test_data_loading.py` | `data_loading` | — | 0 |
+| `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 
 ## Dati
 
@@ -88,6 +90,14 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `kb/manifest_fonti.json` | URL, data, SHA-256 e scopo di ogni fonte esterna | versionato: la tracciabilità sopravvive al clone |
 | `data/interim/*.csv` | vocabolari grezzi e ponte commerciale→principio | rigenerati da `src/explore_dataset.py` |
 | `reports/00_esplorazione.txt` | report completo dello step 0 | rigenerato da `src/explore_dataset.py` |
+
+## Test
+
+`python3 -m unittest discover -s tests -v` — 29 test, nessuna dipendenza esterna.
+
+I test usano dati **sintetici** costruiti nel test stesso, mai il file clinico:
+il dataset non è versionato, quindi chi clona il repository deve poter eseguire
+i test lo stesso, e nessun dato di paziente finisce in un file su GitHub.
 
 ## Principi architetturali adottati
 

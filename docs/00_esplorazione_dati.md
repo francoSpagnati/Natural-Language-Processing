@@ -106,9 +106,9 @@ l'anagrafica AIFA da [`src/verifica_ponte_aifa.py`](../src/verifica_ponte_aifa.p
 
 | Esito | Coppie | % |
 |---|---|---|
-| **confermate da AIFA** | 529 | 66,4 % |
-| **discordanti** | 21 | 2,6 % |
-| nome commerciale non presente in AIFA | 247 | 31,0 % |
+| **confermate da AIFA** | 529 | 67,2 % |
+| **discordanti** | 21 | 2,7 % |
+| nome commerciale non presente in AIFA | 237 | 30,1 % |
 
 Il disaccordo reale è quindi minimo, e ispezionando le 21 discordanze quasi
 tutte si rivelano **falsi disaccordi** dovuti al confronto: AIFA registra la
@@ -168,17 +168,26 @@ Formato prevalente:
 
 | Livello | Voci | % |
 |---|---|---|
-| 1 — formato pieno | 6 223 | 96,44 % |
+| 1 — formato pieno | 6 201 | 96,09 % |
 | 2 — con sinonimo del principio attivo | 58 | 0,90 % |
-| 3 — senza nome commerciale | 11 | 0,17 % |
-| 4 — senza posologia | 63 | 0,98 % |
-| escluso: non farmacologico (ossigeno, CPAP) | 42 | 0,65 % |
+| 3 — senza nome commerciale | 10 | 0,15 % |
+| 4 — senza posologia | 60 | 0,93 % |
+| escluso: non farmacologico (ossigeno, CPAP, NIV) | 46 | 0,71 % |
+| escluso: segnaposto (`Nessun principio attivo`) | 22 | 0,34 % |
 | **non interpretato** | **56** | **0,87 %** |
 
 È il campo **più prezioso del dataset**: espone il **principio attivo**
 (denominazione internazionale) come primo elemento, già separato dal nome
-commerciale. Da qui: **411 principi attivi distinti** e **1 246 nomi
+commerciale. Da qui: **406 principi attivi distinti** e **1 236 nomi
 commerciali distinti**.
+
+Due categorie sono escluse esplicitamente perché non denotano sostanze:
+l'ossigenoterapia e la ventilazione (`Cicli di NIV con auto C-PAP`), e il
+segnaposto `Nessun principio attivo` che l'EHR usa quando il campo non è
+valorizzato — compariva 22 volte e sarebbe entrato nel vocabolario come se
+fosse un farmaco. Sono contate come voci *riconosciute ed escluse*, non come
+fallimenti del parsing: la voce è stata interpretata, semplicemente non è un
+medicinale.
 
 Il livello 2 cattura come effetto collaterale utile 8 coppie di **sinonimi** di
 principio attivo (`Tiamazolo == metimazolo`, `Idrossiclorochina ==
@@ -212,8 +221,8 @@ La dimissione espone la coppia *(principio attivo, nome commerciale)*; l'ingress
 espone solo il nome commerciale. Incrociandoli si copre gran parte del problema
 di normalizzazione **senza inventare nulla**:
 
-- 797 radici di nome commerciale ricavate dalla dimissione;
-- **692 degli 827 nomi in ingresso (83,7 %) risolvibili a un principio attivo**;
+- 787 radici di nome commerciale ricavate dalla dimissione;
+- **691 degli 827 nomi in ingresso (83,6 %) risolvibili a un principio attivo**;
 - solo **7 radici ambigue**, tutte banali: `coumadin → {Warfarin, Warfarin
   sodico}`, `humalog → {Insulina lispro, Insulina lispro da dna ricombinante}`.
 
@@ -224,7 +233,7 @@ furosemide"), non come fonte autorevole. Nello step 2 ogni coppia andrà
 ATC/DDD per i codici); le coppie non confermate vanno segnalate come tali. Il
 ponte serve a *ridurre il lavoro di verifica*, non a sostituirla.
 
-Dei 135 nomi non risolti, molti sono **generici con suffisso del produttore**
+Dei 136 nomi non risolti, molti sono **generici con suffisso del produttore**
 (`Atorvastatina eg`, `Acido folico doc`, `Aciclovir my`): il principio attivo è
 il primo token, quindi una regola aggiuntiva nello step 2 ne recupererà buona
 parte. Il resto richiederà una fonte esterna o un mapping manuale citato.
@@ -302,10 +311,11 @@ Anomalie di **contenuto**, tutte quantificate e nessuna bloccante:
 |---|---|---|
 | Record senza terapia in ingresso | 98 (9,8 %) | legittimo ("Nessuna terapia domiciliare"), non è un errore |
 | Record privi del referto di dimissione | 143 (14,3 %) | coorte separata, esclusa dalla valutazione |
-| Record col referto ma senza voci estratte | 8 | da escludere dalla valutazione: ground truth inutilizzabile |
+| Record col referto ma senza voci estratte | 10 | da escludere dalla valutazione: ground truth inutilizzabile |
 | Frammenti in prosa nel campo ingresso | 111 (1,9 %) | il clinico ha scritto la terapia a mano: `Rybelsus 14 mg 1 cpr la mattina, Jardiance…` |
 | Frammenti non interpretati alla dimissione | 56 (0,9 %) | parentesi annidate: `(Propranololo 10 mg cps (galenico) cps.)` |
-| Voci non farmacologiche | 70 | ossigenoterapia, CPAP/NIV: nessun codice ATC, escluse esplicitamente |
+| Voci non farmacologiche | 74 | ossigenoterapia, CPAP/NIV: nessun codice ATC, escluse esplicitamente |
+| Segnaposto `Nessun principio attivo` | 22 | campo non valorizzato dall'EHR, escluso dal vocabolario |
 | **Duplicazione nei dati sorgente** | ≥ 2 record | il blocco di terapia è ripetuto verbatim (verificato su `encOid` 10223306 e 10219680) |
 | Valore segnaposto `-` come nome commerciale | 15 voci | da trattare come mancante nello step 2 |
 
@@ -345,15 +355,31 @@ Anomalie di **contenuto**, tutte quantificate e nessuna bloccante:
 | `src/data_loading.py` | Carica l'export grezzo in dataclass (`RecordPaziente`, `Referto`), distingue referti obbligatori e opzionali, raccoglie le `Anomalia` invece di sollevare eccezioni. **Nessuna interpretazione clinica.** Riusato da tutti gli step successivi. |
 | `src/explore_dataset.py` | Sonde esplorative a livelli sui tre campi + generazione di report e vocabolari grezzi. Usa-e-getta: non sarà importato dalle pipeline. |
 
+**Test** (`python3 -m unittest discover -s tests -v`, 29 test, nessuna dipendenza)
+
+| File | Copre |
+|---|---|
+| `tests/test_data_loading.py` | caricamento: referto opzionale, `encOid` duplicato, accumulo delle anomalie senza eccezioni |
+| `tests/test_sonde_esplorazione.py` | ogni livello delle sonde, la guardia sui nomi, le allergie a tre stati |
+
+I test usano dati **sintetici** costruiti nel test stesso, mai il file clinico:
+il dataset non è versionato, quindi chi clona il repository deve poter eseguire
+i test lo stesso, e nessun dato di paziente deve finire in un file su GitHub.
+
+Scriverli ha ripagato subito: hanno fatto emergere due difetti reali delle
+sonde, il filtro `cicli notturni` che non intercettava `Cicli di NIV`, e il
+segnaposto `Nessun principio attivo` che entrava nel vocabolario 22 volte.
+Entrambi corretti, entrambi ora coperti da una regressione.
+
 **Output rigenerabili**
 
 | File | Contenuto |
 |---|---|
 | `reports/00_esplorazione.txt` | report completo, tutti i numeri citati qui |
-| `data/interim/vocab_grezzo_farmaci_dimissione.csv` | 411 principi attivi + frequenze |
+| `data/interim/vocab_grezzo_farmaci_dimissione.csv` | 406 principi attivi + frequenze |
 | `data/interim/vocab_grezzo_farmaci_ingresso.csv` | 827 nomi commerciali + frequenze |
-| `data/interim/vocab_grezzo_nomi_commerciali.csv` | 1 246 nomi commerciali → principi attivi associati |
-| `data/interim/ponte_commerciale_principio.csv` | 797 radici commerciali → principio attivo prevalente (**da validare**) |
+| `data/interim/vocab_grezzo_nomi_commerciali.csv` | 1 236 nomi commerciali → principi attivi associati |
+| `data/interim/ponte_commerciale_principio.csv` | 787 radici commerciali → principio attivo prevalente (67,2 % confermate da AIFA) |
 | `data/interim/eco_questionario_condizioni.csv` | 9 condizioni riconoscibili a regola (copertura 26,8 %) |
 
 ## 9. Implicazioni per gli step successivi
@@ -372,6 +398,6 @@ Anomalie di **contenuto**, tutte quantificate e nessuna bloccante:
    **non è affidabile** (668 varianti).
 4. **Step 5 (pipeline C):** i 143 record senza dimissione sono testo aggiuntivo
    per il training silver e per collaudare estrazione ed entity linking.
-5. **Step 11 (valutazione):** utilizzabili 849 record (857 − 8 con referto ma
+5. **Step 11 (valutazione):** utilizzabili 847 record (857 − 10 con referto ma
    senza voci estratte). La ground truth sono i principi attivi del livello 1
-   (96,4 %).
+   (96,1 %).

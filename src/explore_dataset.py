@@ -52,8 +52,21 @@ CARTELLA_INTERIM = RADICE / "data" / "interim"
 # (ossigenoterapia, ventilazione non invasiva). Vanno riconosciute ed escluse
 # esplicitamente: finirebbero altrimenti nel vocabolario dei farmaci come
 # entita' spurie, e non hanno un codice ATC.
+#
+# `cicli` e' ancorato a inizio stringa e delimitato da \b: cosi' intercetta
+# "Cicli di NIV con auto C-PAP" e "Cicli notturni di CPAP" senza toccare
+# principi attivi che contengono la stessa sequenza di lettere, come
+# "Doxiciclina".
 PATTERN_NON_FARMACOLOGICO = re.compile(
-    r"^\s*(ossigeno|cicli\s+notturni|cpap|niv|ventilazione|maschera)\b", re.IGNORECASE
+    r"^\s*(ossigeno|cicli|cpap|c-pap|niv|ventilazione|maschera)\b", re.IGNORECASE
+)
+
+# Segnaposto che il sistema ospedaliero usa quando il principio attivo non e'
+# valorizzato. Non e' un farmaco: comparendo 22 volte alla dimissione,
+# entrerebbe nel vocabolario chiuso come se fosse una sostanza reale.
+PATTERN_PRINCIPIO_SEGNAPOSTO = re.compile(
+    r"^\s*(nessun\s+principio\s+attivo|n\.?d\.?|non\s+specificat\w*|-+)\s*$",
+    re.IGNORECASE,
 )
 
 # Frasi che indicano esplicitamente l'assenza di terapia domiciliare: vanno
@@ -86,7 +99,9 @@ def nome_farmaco_plausibile(candidato: str, massimo_parole: int = 4) -> bool:
     - non deve contenere virgole (nel dataset compaiono solo in voci descrittive);
     - non deve superare `massimo_parole` parole;
     - non deve contenere unita' di misura, forme farmaceutiche o riferimenti
-      orari, segno che la posologia e' rimasta attaccata al nome.
+      orari, segno che la posologia e' rimasta attaccata al nome;
+    - non deve essere un segnaposto del sistema ospedaliero ("Nessun principio
+      attivo", "N.D."), che non denota alcuna sostanza.
     Cifre e punti sono invece ammessi, perche' compaiono in nomi legittimi
     ("Natecal d3", "Creon 10000ui", "Furosemide l.f.m.").
 
@@ -97,6 +112,8 @@ def nome_farmaco_plausibile(candidato: str, massimo_parole: int = 4) -> bool:
     """
     candidato = candidato.strip()
     if not candidato or not candidato[0].isalpha():
+        return False
+    if PATTERN_PRINCIPIO_SEGNAPOSTO.match(candidato):
         return False
     if "," in candidato:
         return False
@@ -240,6 +257,14 @@ def sonda_terapia_dimissione(testo: str) -> tuple[list[dict], list[str], Counter
 
         if PATTERN_NON_FARMACOLOGICO.match(grezza):
             livelli["escluso_non_farmacologico"] += 1
+            continue
+
+        # Il segnaposto va riconosciuto qui e non lasciato cadere fra gli
+        # scarti: la voce E' stata interpretata (sappiamo che non denota alcuna
+        # sostanza), quindi contarla come fallimento del parsing farebbe
+        # apparire la copertura peggiore di quanto sia.
+        if PATTERN_PRINCIPIO_SEGNAPOSTO.match(grezza.split("(")[0].strip()):
+            livelli["escluso_segnaposto"] += 1
             continue
 
         # I livelli si provano dal piu' specifico al piu' generico: quello con
