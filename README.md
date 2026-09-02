@@ -71,7 +71,9 @@ python3 src/verifica_ponte_aifa.py # confronta il ponte interno con AIFA
 
 python3 src/build_vocabularies.py   # vocabolari chiusi in JSON + JSON Schema
 
-python3 -m unittest discover -s tests -v   # 46 test
+python3 src/extract_icd10.py        # terminologia ICD-10 italiana dal PDF
+
+python3 -m unittest discover -s tests -v   # 55 test
 ```
 
 Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
@@ -81,6 +83,7 @@ Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
 | Fonte | Uso | Licenza |
 |---|---|---|
 | [AIFA — Agenzia Italiana del Farmaco](https://www.aifa.gov.it/liste-dei-farmaci) | registro ATC in italiano, anagrafica delle confezioni (nome commerciale → principio attivo → ATC), titolari AIC | CC-BY 4.0 |
+| ICD-10 2019 italiano, Centro Collaboratore OMS — Regione FVG, via [reteclassificazioni.it](https://www.reteclassificazioni.it/) | terminologia delle condizioni: 10 803 codici, 14 898 termini | PDF scaricato manualmente |
 
 `src/fetch_external_kb.py` le scarica e scrive `kb/manifest_fonti.json` con URL,
 data di download, dimensione, SHA-256 e il motivo per cui ogni file serve. Il
