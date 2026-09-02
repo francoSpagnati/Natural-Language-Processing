@@ -3,14 +3,14 @@
 Documento vivo, aggiornato **a ogni step**. Dà la visione d'insieme di come i
 componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
-**Ultimo step completato: 0 — Esplorazione dei dati.**
+**Ultimo step completato: 1 — Schema e vocabolari chiusi** (in attesa di validazione).
 
 ## Indice dei documenti
 
 | Step | Documento | Stato |
 |---|---|---|
 | 0 | [`00_esplorazione_dati.md`](00_esplorazione_dati.md) | ✅ completato |
-| 1 | `01_schema_e_vocabolari.md` | ⬜ da fare |
+| 1 | [`01_schema_e_vocabolari.md`](01_schema_e_vocabolari.md) | ✅ completato, da validare |
 | 2 | `02_normalizzazione_atc_icd.md` | ⬜ da fare |
 | 3 | `03_pipeline_estrazione_A.md` | ⬜ da fare |
 | 4 | `04_pipeline_estrazione_B.md` | ⬜ da fare |
@@ -33,12 +33,12 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
                           ┌─────────────┴─────────────┐
                           ▼                           ▼
                  vocabolari chiusi              testo per paziente
-                 farmaci: dal dataset                  │
-                 condizioni: da terminologia esterna   │
-                     step 1 ⬜                          │
+                 farmaci: 406 principi + 923 marchi    │
+                 condizioni: 249 candidate             │
+                     step 1 ✅                          │
                           │                            │
                  [normalizzazione]                     │
-                  ATC / ICD-10                         │
+                  ATC (AIFA) / ICD (da scegliere)      │
                      step 2 ⬜                          │
                           │                            │
                           └───────────┬────────────────┘
@@ -51,7 +51,7 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
                     └────── etichette silver ────────────────────────►─┘
                                       │
                                       ▼
-                         PatientState (schema unico)          ← definito allo step 1
+                    StatoPaziente (src/schema.py)             ← definito allo step 1 ✅
                                       │              confronto pipeline: step 6 ⬜
                                       ▼
                     ┌───── motore di raccomandazione ─────┐
@@ -78,6 +78,8 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `src/explore_dataset.py` | `data_loading` | nessuno (usa-e-getta, non importato dalle pipeline) | 0 |
 | `src/fetch_external_kb.py` | solo stdlib (`urllib`, `hashlib`) | step 2 (normalizzazione), step 7 (KG) | 0 |
 | `src/verifica_ponte_aifa.py` | fonti AIFA + output di `explore_dataset` | nessuno (verifica di provenienza) | 0 |
+| `src/schema.py` | `pydantic` | **tutti** gli step successivi: e' il contratto dati | 1 |
+| `src/build_vocabularies.py` | `data_loading`, `explore_dataset`, `schema`, fonti AIFA | step 2 (normalizzazione), step 3 (gazetteer) | 1 |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 
@@ -89,11 +91,14 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `data/external/aifa/*.csv` | registro ATC in italiano, anagrafica confezioni, titolari AIC | **AIFA**, CC-BY 4.0, scaricate da `src/fetch_external_kb.py` |
 | `kb/manifest_fonti.json` | URL, data, SHA-256 e scopo di ogni fonte esterna | versionato: la tracciabilità sopravvive al clone |
 | `data/interim/*.csv` | vocabolari grezzi e ponte commerciale→principio | rigenerati da `src/explore_dataset.py` |
+| `data/interim/vocabolario_farmaci.json` | 1 329 voci con esito del confronto AIFA e ATC candidati | `src/build_vocabularies.py` |
+| `data/interim/vocabolario_condizioni.json` | 249 condizioni candidate con contesti e indizi di negazione | `src/build_vocabularies.py` |
+| `data/interim/schema_stato_paziente.json` | JSON Schema generato dai modelli Pydantic | `src/build_vocabularies.py` |
 | `reports/00_esplorazione.txt` | report completo dello step 0 | rigenerato da `src/explore_dataset.py` |
 
 ## Test
 
-`python3 -m unittest discover -s tests -v` — 29 test, nessuna dipendenza esterna.
+`python3 -m unittest discover -s tests -v` — 46 test.
 
 I test usano dati **sintetici** costruiti nel test stesso, mai il file clinico:
 il dataset non è versionato, quindi chi clona il repository deve poter eseguire

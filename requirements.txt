@@ -9,13 +9,18 @@
 # fase e' voluto, cosi' l'esplorazione e' riproducibile ovunque senza installare
 # nulla e senza che una versione di libreria possa alterare i risultati.
 #
+# --- Step 1: schema dello stato paziente -------------------------------------
+# Pydantic valida i dati invece di limitarsi a descriverli, genera lo JSON
+# Schema dei file intermedi, ed e' comunque richiesto dallo step 10 per il tool
+# MCP: definire lo schema altrove significherebbe mantenerne due versioni.
+pydantic>=2.0
+
 # --- Step successivi (da scommentare quando lo step viene implementato) -------
 # spacy            # step 3: PhraseMatcher per il gazetteer sul testo libero
 # rdflib           # step 7: knowledge graph RDF + query SPARQL
 # networkx         # step 7: conversione dei sottografi per la visualizzazione
 # pyvis            # step 7: resa HTML interattiva dei sottografi
 # matplotlib       # step 7/11: figure statiche e tabelle dei risultati
-# pydantic         # step 10: modelli di input/output del tool MCP
 # mcp              # step 10: SDK ufficiale, FastMCP
 # transformers     # step 5: fine-tuning del modello NER italiano
 # torch            # step 5: backend del training

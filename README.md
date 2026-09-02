@@ -8,7 +8,7 @@ espresse come cammini in una knowledge base a grafo (indicazioni,
 controindicazioni, interazioni, linee guida), ed è esposto come **tool MCP**
 richiamabile da un LLM.
 
-> **Stato: step 0 di 11 completato** (esplorazione dei dati).
+> **Stato: step 1 di 11 completato** (schema dello stato paziente e vocabolari chiusi).
 > Lo sviluppo procede per step sequenziali; vedi
 > [`docs/00_architettura.md`](docs/00_architettura.md) per la visione d'insieme
 > e l'indice dei documenti.
@@ -54,17 +54,24 @@ reports/         output rigenerabili
 
 ## Esecuzione
 
-Nessuna dipendenza esterna per lo step 0: solo la libreria standard di Python
-(≥ 3.10, per la sintassi `X | None` nelle annotazioni). Le dipendenze dei
-prossimi step sono elencate e motivate in `requirements.txt`, commentate finché
-lo step che le richiede non è implementato.
+Python ≥ 3.10 (sintassi `X | None` nelle annotazioni). L'unica dipendenza
+esterna finora è **Pydantic**, introdotta allo step 1 per lo schema dei dati:
+
+```bash
+pip install -r requirements.txt
+```
+
+Le dipendenze dei prossimi step sono elencate e motivate in `requirements.txt`,
+commentate finché lo step che le richiede non è implementato.
 
 ```bash
 python3 src/explore_dataset.py     # esplorazione: report + vocabolari grezzi
 python3 src/fetch_external_kb.py   # scarica le KB esterne + scrive il manifest
 python3 src/verifica_ponte_aifa.py # confronta il ponte interno con AIFA
 
-python3 -m unittest discover -s tests -v   # 29 test, nessuna dipendenza
+python3 src/build_vocabularies.py   # vocabolari chiusi in JSON + JSON Schema
+
+python3 -m unittest discover -s tests -v   # 46 test
 ```
 
 Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
