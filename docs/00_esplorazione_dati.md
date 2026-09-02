@@ -57,23 +57,76 @@ poi esattamente lo scopo delle tre pipeline di estrazione (§ 4.5).
 > valutazione delle condizioni. **Punto aperto da confermare**; nel dubbio si
 > procede senza.
 
-### Risorsa esterna: WHO ATC/DDD Index
+### Knowledge base esterne: scelta e download riproducibile
 
-In `data/raw/` è presente anche `WHO ATC-DDD 2026-04-25.csv` (7 536 voci), che
-sarà la spina dorsale della risoluzione ATC obbligatoria dello step 2.
-Proveniva dalla stessa cartella dei file derivati, quindi ne è stata verificata
-l'integrità strutturale prima di tenerlo:
+La cartella conteneva anche due CSV del WHO ATC/DDD Index. Provenendo dalla
+stessa cartella dei file derivati, **sono stati rimossi**: superavano un
+controllo di integrità strutturale, ma "sembra autentico" non è una provenienza.
 
-- 14 gruppi anatomici di primo livello (esattamente quanti ne prevede l'ATC);
-- distribuzione dei livelli 14 / 94 / 271 / 939 / 5 678 coerente con la gerarchia;
-- **zero codici orfani**: ogni codice ha il proprio padre presente;
-- verifica puntuale su codici noti: `C07AB07` → bisoprolol, `C09AA05` → ramipril,
-  `B01AC06` → acetylsalicylic acid, `C09DX04` → valsartan and sacubitril.
+Le fonti sono state quindi riacquisite da zero con
+[`src/fetch_external_kb.py`](../src/fetch_external_kb.py), che le scarica,
+ne calcola lo SHA-256 e scrive `kb/manifest_fonti.json` con URL, data di
+download, dimensione, impronta e **il motivo per cui ogni file serve**. Il
+manifest sta in `kb/` e non in `data/` proprio perché `data/` non è versionato:
+le citazioni devono sopravvivere a un clone.
 
-Un LLM non produce 7 536 righe gerarchicamente consistenti: il file è
-compatibile con un export autentico. **Resta comunque da riscaricare dalla fonte
-ufficiale e citare esplicitamente nello step 2**, come richiesto dal vincolo sui
-mapping (§ 6).
+**Fonte scelta: AIFA — Agenzia Italiana del Farmaco**, licenza **CC-BY 4.0**,
+download senza autenticazione.
+
+| File | Contenuto | Ruolo |
+|---|---|---|
+| `atc.csv` | 7 211 codici ATC con descrizione **in italiano** | gerarchia ATC e metrica dello step 11 |
+| `confezioni_fornitura.csv` | 159 942 confezioni: denominazione, principi attivi, ATC, ditta | dizionario nome commerciale → principio attivo → ATC |
+| `PA_confezioni.csv` | principi attivi per codice AIC | disambigua le associazioni |
+| `Classe_A/H_per_nome_commerciale` | farmaci di classe A e H con **titolare AIC** | valida le abbreviazioni dei produttori |
+
+Perché AIFA e non altro:
+
+- **WHO ATC/DDD Index** è la fonte primaria della classificazione, ma l'indice
+  ufficiale è consultabile via interfaccia web e il download massivo è soggetto
+  a licenza; inoltre è in inglese e non contiene i nomi commerciali italiani,
+  che sono precisamente ciò che il dataset contiene.
+- **Wikidata** è libera (CC0) e interrogabile in SPARQL, ma ha appena **3 763**
+  entità con codice ATC (proprietà `P267`) — verificato con una query diretta:
+  copertura troppo bassa per fare da fonte primaria. Resta candidata per lo
+  step 7, dove serve un compito diverso (relazioni farmaco↔condizione).
+
+Il registro ATC AIFA è stato verificato: 14 gruppi anatomici, distribuzione dei
+livelli 14 / 94 / 270 / 941 / 5 892, **15 codici orfani** (da documentare nello
+step 2), e descrizioni in italiano — `C07AB07` → `BISOPROLOLO`,
+`C07AB` → `BETABLOCCANTI, SELETTIVI`. Che siano in italiano è un vantaggio non
+banale: le motivazioni prodotte dal sistema restano nella lingua delle anamnesi.
+
+### Il ponte interno, verificato contro AIFA
+
+Il ponte di § 4.3 è generato in modo deterministico dal dataset grezzo (nessun
+LLM), ma resta un'**osservazione locale**: dice come un ospedale ha trascritto
+le terapie, non cosa contiene un medicinale. È stato quindi confrontato con
+l'anagrafica AIFA da [`src/verifica_ponte_aifa.py`](../src/verifica_ponte_aifa.py):
+
+| Esito | Coppie | % |
+|---|---|---|
+| **confermate da AIFA** | 529 | 66,4 % |
+| **discordanti** | 21 | 2,6 % |
+| nome commerciale non presente in AIFA | 247 | 31,0 % |
+
+Il disaccordo reale è quindi minimo, e ispezionando le 21 discordanze quasi
+tutte si rivelano **falsi disaccordi** dovuti al confronto: AIFA registra la
+confezione sotto il principio principale (`olmesartan medoxomil`) mentre il
+dataset elenca l'associazione intera (`Olmesartan medoxomil/amlodipina`), oppure
+usa una forma salina o il nome inglese (`levothyroxine sodium` per
+`Levotiroxina`). Un caso è una divergenza sostanziale legittima: `cardirene`,
+che il dataset chiama acido acetilsalicilico e AIFA `acetilsalicilato di lisina`
+— un sale diverso della stessa molecola.
+
+Il 31 % assente non significa "inventato": sono in larga parte galenici,
+integratori, prodotti esteri, o radici estratte in modo troppo aggressivo dalla
+denominazione. Lo step 2 dovrà trattarli caso per caso.
+
+**Conclusione operativa:** il ponte serve a *ridurre il lavoro di verifica*, mai
+a sostituirla. Nello step 2 il dizionario di normalizzazione si costruisce
+sull'anagrafica AIFA; il ponte interviene solo come evidenza di supporto, e ogni
+voce che resta priva di conferma esterna va marcata esplicitamente come tale.
 
 ## 3. Struttura reale del file
 

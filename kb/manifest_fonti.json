@@ -1,0 +1,57 @@
+{
+  "generato_il": "2026-09-02T16:35:53+00:00",
+  "citazione": {
+    "fonte": "AIFA - Agenzia Italiana del Farmaco",
+    "licenza": "CC-BY 4.0",
+    "url_licenza": "https://creativecommons.org/licenses/by/4.0/deed.it",
+    "pagina_open_data": "https://www.aifa.gov.it/open-data",
+    "pagina_liste_farmaci": "https://www.aifa.gov.it/liste-dei-farmaci"
+  },
+  "fonti": [
+    {
+      "nome": "aifa_atc",
+      "url": "https://drive.aifa.gov.it/farmaci/atc.csv",
+      "file": "data/external/aifa/atc.csv",
+      "serve_per": "Registro ATC con descrizioni in italiano: gerarchia completa dei 5 livelli, base della risoluzione ATC e della metrica gerarchica.",
+      "byte": 198443,
+      "sha256": "584f47ac7564c03f3fa21e2a7537d1525262dac33db9501e344404df19f22dd1",
+      "scaricato_il": "2026-09-02T16:35:17+00:00"
+    },
+    {
+      "nome": "aifa_confezioni",
+      "url": "https://drive.aifa.gov.it/farmaci/confezioni_fornitura.csv",
+      "file": "data/external/aifa/confezioni_fornitura.csv",
+      "serve_per": "Anagrafica delle confezioni autorizzate: lega denominazione commerciale, principi attivi e codice ATC. E' la fonte autorevole del dizionario nome commerciale -> principio attivo.",
+      "byte": 82438346,
+      "sha256": "dfb480d9a1a3bbd8dd5f6e4e250618a9960fea5c489bc42888894b8b21c4c43c",
+      "scaricato_il": "2026-09-02T16:35:46+00:00"
+    },
+    {
+      "nome": "aifa_principi_attivi",
+      "url": "https://drive.aifa.gov.it/farmaci/PA_confezioni.csv",
+      "file": "data/external/aifa/PA_confezioni.csv",
+      "serve_per": "Principi attivi per codice AIC, con quantita' e unita' di misura: disambigua le associazioni precostituite.",
+      "byte": 11555347,
+      "sha256": "a5a27096e667322e65bc7ec36e3e92ee074bb23b2e6f24034d20a4e0b964b10e",
+      "scaricato_il": "2026-09-02T16:35:51+00:00"
+    },
+    {
+      "nome": "aifa_classe_a_nome_commerciale",
+      "url": "https://www.aifa.gov.it/documents/20142/3815901/Classe_A_per_nome_commerciale_30-04-2026.csv",
+      "file": "data/external/aifa/Classe_A_per_nome_commerciale_30-04-2026.csv",
+      "serve_per": "Farmaci di classe A per nome commerciale, con titolare AIC: fonte per validare le abbreviazioni dei produttori che compaiono nei nomi dei generici ('Atorvastatina eg').",
+      "byte": 1512604,
+      "sha256": "049a3f5c71ad6776d5bbd471c68ed6e7a3533e595d2336a007ded38502b09738",
+      "scaricato_il": "2026-09-02T16:35:52+00:00"
+    },
+    {
+      "nome": "aifa_classe_h_nome_commerciale",
+      "url": "https://www.aifa.gov.it/documents/20142/3815901/Classe_H_per_nome_commerciale_30-04-2026.csv",
+      "file": "data/external/aifa/Classe_H_per_nome_commerciale_30-04-2026.csv",
+      "serve_per": "Come sopra, per i farmaci di classe H (uso ospedaliero), presenti nel dataset perche' i pazienti sono ricoverati.",
+      "byte": 412538,
+      "sha256": "a10b3d800ef4be5e693df41475408dc080dfaf7a2b4b9b2026ecbdd5349e8330",
+      "scaricato_il": "2026-09-02T16:35:53+00:00"
+    }
+  ]
+}

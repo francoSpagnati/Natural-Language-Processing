@@ -3,6 +3,10 @@ data/raw/
 data/interim/
 data/processed/
 
+# Knowledge base esterne: voluminose e rigenerabili con src/fetch_external_kb.py.
+# Il manifest con fonti, URL, date e checksum sta invece in kb/ ed e' versionato.
+data/external/
+
 # Output rigenerabili
 reports/
 *.log

@@ -41,11 +41,12 @@ I dati clinici **non sono versionati** (vedi `.gitignore`).
 ## Struttura del repository
 
 ```
-data/raw/        dataset e risorse esterne (non versionati)
+data/raw/        dataset clinico grezzo (non versionato)
+data/external/   knowledge base esterne scaricate (non versionate)
 data/interim/    vocabolari grezzi rigenerabili
 src/             moduli Python
 docs/            un documento per step + indice architetturale
-kb/              knowledge graph in Turtle          (step 7)
+kb/              manifest delle fonti esterne + knowledge graph in Turtle (step 7)
 notebooks/       esplorazione interattiva
 tests/           test                                (dallo step 2)
 reports/         output rigenerabili
@@ -57,10 +58,23 @@ Nessuna dipendenza esterna per lo step 0: solo la libreria standard di Python
 (≥ 3.10, per la sintassi `X | None` nelle annotazioni).
 
 ```bash
-python3 src/explore_dataset.py
+python3 src/explore_dataset.py     # esplorazione: report + vocabolari grezzi
+python3 src/fetch_external_kb.py   # scarica le KB esterne + scrive il manifest
+python3 src/verifica_ponte_aifa.py # confronta il ponte interno con AIFA
 ```
 
-Rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
+Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
+
+## Fonti esterne
+
+| Fonte | Uso | Licenza |
+|---|---|---|
+| [AIFA — Agenzia Italiana del Farmaco](https://www.aifa.gov.it/liste-dei-farmaci) | registro ATC in italiano, anagrafica delle confezioni (nome commerciale → principio attivo → ATC), titolari AIC | CC-BY 4.0 |
+
+`src/fetch_external_kb.py` le scarica e scrive `kb/manifest_fonti.json` con URL,
+data di download, dimensione, SHA-256 e il motivo per cui ogni file serve. Il
+manifest è versionato anche se i dati non lo sono, così la tracciabilità
+sopravvive a un clone e si può accorgersi quando una fonte cambia a monte.
 
 ## Scelte tecniche
 

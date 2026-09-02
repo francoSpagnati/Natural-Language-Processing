@@ -76,13 +76,16 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 |---|---|---|---|
 | `src/data_loading.py` | solo stdlib (`json`, `dataclasses`, `pathlib`) | tutti gli step successivi | 0 |
 | `src/explore_dataset.py` | `data_loading` | nessuno (usa-e-getta, non importato dalle pipeline) | 0 |
+| `src/fetch_external_kb.py` | solo stdlib (`urllib`, `hashlib`) | step 2 (normalizzazione), step 7 (KG) | 0 |
+| `src/verifica_ponte_aifa.py` | fonti AIFA + output di `explore_dataset` | nessuno (verifica di provenienza) | 0 |
 
 ## Dati
 
 | Percorso | Contenuto | Origine |
 |---|---|---|
 | `data/raw/anamnesiterapie.txt` | 1000 record (857 con terapia alla dimissione) | **export grezzo** del sistema ospedaliero, pseudonimizzato |
-| `data/raw/WHO ATC-DDD 2026-04-25.csv` | 7 536 voci, gerarchia ATC completa | WHO ATC/DDD Index — integrità verificata, da ri-citare allo step 2 |
+| `data/external/aifa/*.csv` | registro ATC in italiano, anagrafica confezioni, titolari AIC | **AIFA**, CC-BY 4.0, scaricate da `src/fetch_external_kb.py` |
+| `kb/manifest_fonti.json` | URL, data, SHA-256 e scopo di ogni fonte esterna | versionato: la tracciabilità sopravvive al clone |
 | `data/interim/*.csv` | vocabolari grezzi e ponte commerciale→principio | rigenerati da `src/explore_dataset.py` |
 | `reports/00_esplorazione.txt` | report completo dello step 0 | rigenerato da `src/explore_dataset.py` |
 
