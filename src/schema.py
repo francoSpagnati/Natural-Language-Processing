@@ -318,3 +318,60 @@ class Vocabolario(BaseModel):
     )
     farmaci: list[VoceFarmaco] = Field(default_factory=list)
     condizioni: list[VoceCondizione] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Modelli della normalizzazione ATC (step 2)
+# ---------------------------------------------------------------------------
+
+
+class MetodoRisoluzione(str, Enum):
+    """Come una voce del vocabolario e' stata collegata a un codice ATC.
+
+    Il metodo viene registrato su ogni voce perche' i metodi non sono
+    equivalenti: una corrispondenza esatta sulla descrizione ufficiale e' molto
+    piu' affidabile di un accostamento per prefisso di token. Chi legge il file
+    deve poter dare peso diverso alle due cose, e chi valuta il sistema deve
+    poter escludere i metodi piu' deboli per misurarne l'effetto.
+    """
+
+    PRINCIPIO_ESATTO = "principio_esatto"
+    ASSOCIAZIONE = "associazione"
+    SUFFISSO_SALINO = "suffisso_salino"
+    FORMA_SALINA = "forma_salina"
+    COMMERCIALE_ESATTO = "commerciale_esatto"
+    COMMERCIALE_ABBREVIATO = "commerciale_abbreviato"
+    NON_RISOLTO = "non_risolto"
+
+
+class VoceMappaturaATC(BaseModel):
+    """Una voce del vocabolario con il suo esito di risoluzione ATC."""
+
+    forma_grezza: str
+    tipo: str
+    occorrenze: int
+
+    codice_atc: str | None = Field(
+        default=None, description="ATC di 5o livello, se risolto senza ambiguita'."
+    )
+    atc_candidati: list[str] = Field(
+        default_factory=list, description="Tutti i codici compatibili trovati."
+    )
+    descrizione_atc: str | None = None
+    metodo: MetodoRisoluzione = MetodoRisoluzione.NON_RISOLTO
+    stato: StatoNormalizzazione = StatoNormalizzazione.NON_TENTATO
+    fonte: str | None = None
+    evidenza: str | None = Field(
+        default=None,
+        description="La voce della fonte esterna che ha prodotto il collegamento.",
+    )
+
+
+class MappaturaATC(BaseModel):
+    """Il risultato completo della normalizzazione ATC del vocabolario."""
+
+    versione_schema: str = VERSIONE_SCHEMA
+    generato_il: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    fonti_esterne: list[str] = Field(default_factory=list)
+    conteggi: dict[str, int] = Field(default_factory=dict)
+    voci: list[VoceMappaturaATC] = Field(default_factory=list)

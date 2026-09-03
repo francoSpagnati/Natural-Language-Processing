@@ -3,7 +3,7 @@
 Documento vivo, aggiornato **a ogni step**. Dà la visione d'insieme di come i
 componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
-**Ultimo step completato: 1.** Step 2 avviato: terminologia ICD-10 estratta, collegamento delle condizioni in attesa di una decisione (vedi `02_terminologia_icd10.md`, § 6).
+**Ultimo step completato: 2 (farmaci).** ATC risolto al 94,0% delle occorrenze. Il collegamento delle condizioni e' stato spostato negli step 3 e 5, dove ci sono negazione e NER (vedi `02_terminologia_icd10.md`, § 5).
 
 ## Indice dei documenti
 
@@ -11,7 +11,8 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 |---|---|---|
 | 0 | [`00_esplorazione_dati.md`](00_esplorazione_dati.md) | ✅ completato |
 | 1 | [`01_schema_e_vocabolari.md`](01_schema_e_vocabolari.md) | ✅ completato, da validare |
-| 2 | [`02_terminologia_icd10.md`](02_terminologia_icd10.md) | 🟡 parte 1 fatta, decisione aperta |
+| 2 | [`02_terminologia_icd10.md`](02_terminologia_icd10.md) | ✅ terminologia ICD-10 estratta |
+| 2 | [`02b_risoluzione_atc.md`](02b_risoluzione_atc.md) | ✅ ATC dei farmaci risolto |
 | 3 | `03_pipeline_estrazione_A.md` | ⬜ da fare |
 | 4 | `04_pipeline_estrazione_B.md` | ⬜ da fare |
 | 5 | `05_pipeline_estrazione_C.md` | ⬜ da fare |
@@ -38,8 +39,9 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
                      step 1 ✅                          │
                           │                            │
                  [normalizzazione]                     │
-                  ATC (AIFA) / ICD (da scegliere)      │
-                     step 2 ⬜                          │
+                  ATC via AIFA: 94% ✅                  │
+                  ICD-10 italiano estratto ✅           │
+                     step 2                             │
                           │                            │
                           └───────────┬────────────────┘
                                       ▼
@@ -81,6 +83,7 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `src/schema.py` | `pydantic` | **tutti** gli step successivi: e' il contratto dati | 1 |
 | `src/build_vocabularies.py` | `data_loading`, `explore_dataset`, `schema`, fonti AIFA | step 2 (normalizzazione), step 3 (gazetteer) | 1 |
 | `src/extract_icd10.py` | `pdftotext` (poppler), PDF ICD-10 | step 3 (gazetteer condizioni), step 5 (entity linking) | 2 |
+| `src/normalize_drugs.py` | `schema`, vocabolario, fonti AIFA | step 7 (KG), step 8 (filtro), step 11 (metrica ATC) | 2 |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 
@@ -97,11 +100,12 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `data/interim/schema_stato_paziente.json` | JSON Schema generato dai modelli Pydantic | `src/build_vocabularies.py` |
 | `data/external/ICD-10 2019 vol1...pdf` | ICD-10 2019 italiano, Centro Collaboratore OMS (FVG) | scaricato a mano da reteclassificazioni.it |
 | `data/interim/terminologia_icd10.json` | 10 803 codici + indice di 14 898 termini italiani | `src/extract_icd10.py` |
+| `data/interim/mappatura_atc.json` | 1 329 voci con ATC, metodo di risoluzione, fonte ed evidenza | `src/normalize_drugs.py` |
 | `reports/00_esplorazione.txt` | report completo dello step 0 | rigenerato da `src/explore_dataset.py` |
 
 ## Test
 
-`python3 -m unittest discover -s tests -v` — 55 test.
+`python3 -m unittest discover -s tests -v` — 66 test.
 
 I test usano dati **sintetici** costruiti nel test stesso, mai il file clinico:
 il dataset non è versionato, quindi chi clona il repository deve poter eseguire

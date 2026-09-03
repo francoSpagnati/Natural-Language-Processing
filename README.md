@@ -8,7 +8,7 @@ espresse come cammini in una knowledge base a grafo (indicazioni,
 controindicazioni, interazioni, linee guida), ed è esposto come **tool MCP**
 richiamabile da un LLM.
 
-> **Stato: step 1 di 11 completato** (schema dello stato paziente e vocabolari chiusi).
+> **Stato: step 2 di 11 completato** (normalizzazione: ATC dei farmaci risolto al 94% delle occorrenze, terminologia ICD-10 italiana estratta).
 > Lo sviluppo procede per step sequenziali; vedi
 > [`docs/00_architettura.md`](docs/00_architettura.md) per la visione d'insieme
 > e l'indice dei documenti.
@@ -73,7 +73,9 @@ python3 src/build_vocabularies.py   # vocabolari chiusi in JSON + JSON Schema
 
 python3 src/extract_icd10.py        # terminologia ICD-10 italiana dal PDF
 
-python3 -m unittest discover -s tests -v   # 55 test
+python3 src/normalize_drugs.py      # risoluzione ATC dei farmaci
+
+python3 -m unittest discover -s tests -v   # 66 test
 ```
 
 Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
