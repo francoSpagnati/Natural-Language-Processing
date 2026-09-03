@@ -15,8 +15,16 @@
 # MCP: definire lo schema altrove significherebbe mantenerne due versioni.
 pydantic>=2.0
 
+# --- Step 3: pipeline A deterministica ---------------------------------------
+# PhraseMatcher confronta token e non caratteri, quindi non trova "ictus" dentro
+# "peri-ictus", e scala su ~10.000 forme dove un'alternanza di regex no. Il
+# documento tokenizzato serve comunque alla logica di negazione, che ragiona su
+# frasi e distanze in token.
+#   Richiede anche il modello italiano:
+#   python3 -m spacy download it_core_news_sm
+spacy>=3.7
+
 # --- Step successivi (da scommentare quando lo step viene implementato) -------
-# spacy            # step 3: PhraseMatcher per il gazetteer sul testo libero
 # rdflib           # step 7: knowledge graph RDF + query SPARQL
 # networkx         # step 7: conversione dei sottografi per la visualizzazione
 # pyvis            # step 7: resa HTML interattiva dei sottografi

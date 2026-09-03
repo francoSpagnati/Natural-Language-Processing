@@ -8,7 +8,7 @@ espresse come cammini in una knowledge base a grafo (indicazioni,
 controindicazioni, interazioni, linee guida), ed è esposto come **tool MCP**
 richiamabile da un LLM.
 
-> **Stato: step 2 di 11 completato** (normalizzazione: ATC dei farmaci risolto al 94% delle occorrenze, terminologia ICD-10 italiana estratta).
+> **Stato: step 3 di 11 completato** (pipeline A deterministica: gazetteer sui vocabolari chiusi + logica di negazione ConText adattata all'italiano).
 > Lo sviluppo procede per step sequenziali; vedi
 > [`docs/00_architettura.md`](docs/00_architettura.md) per la visione d'insieme
 > e l'indice dei documenti.
@@ -59,6 +59,7 @@ esterna finora è **Pydantic**, introdotta allo step 1 per lo schema dei dati:
 
 ```bash
 pip install -r requirements.txt
+python3 -m spacy download it_core_news_sm   # modello italiano, serve dallo step 3
 ```
 
 Le dipendenze dei prossimi step sono elencate e motivate in `requirements.txt`,
@@ -75,7 +76,9 @@ python3 src/extract_icd10.py        # terminologia ICD-10 italiana dal PDF
 
 python3 src/normalize_drugs.py      # risoluzione ATC dei farmaci
 
-python3 -m unittest discover -s tests -v   # 66 test
+python3 src/extract_a.py            # pipeline A su tutti i record
+
+python3 -m unittest discover -s tests -v   # 96 test
 ```
 
 Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.

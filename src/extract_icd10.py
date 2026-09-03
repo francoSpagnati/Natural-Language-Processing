@@ -136,33 +136,60 @@ def espandi_parentetici(termine: str) -> list[str]:
     """Espande la convenzione ICD dei modificatori fra parentesi.
 
     Nell'ICD le parole fra parentesi sono *opzionali*: il termine
-        "ipertensione (arteriosa) (benigna) (essenziale)"
-    vale sia come "ipertensione" sia come "ipertensione arteriosa" e cosi' via.
-    E' il meccanismo che collega il nostro candidato piu' frequente,
-    "ipertensione arteriosa", al codice I10.
+        "diabete (mellito) (non obeso) a esordio nell'eta' adulta"
+    vale come "diabete a esordio nell'eta' adulta", come "diabete mellito a
+    esordio nell'eta' adulta", e cosi' via.
 
-    Generiamo la forma senza alcun modificatore piu' una forma per ciascun
-    modificatore preso singolarmente, invece dell'insieme delle combinazioni:
-    con sette parentetici le combinazioni sarebbero 128, quasi tutte forme che
-    nessuno scrive davvero, e gonfierebbero il gazetteer di rumore.
+    I modificatori vanno reinseriti **nella posizione in cui stanno**, non
+    accodati in fondo. Accodarli funzionava per i casi in cui la parentesi e'
+    gia' finale ("ipertensione (arteriosa)") ma produceva forme prive di senso
+    quando e' in mezzo, e soprattutto **non generava** la forma piu' comune di
+    tutte: da "diabete (mellito) ..." non usciva mai "diabete mellito".
+
+    Generiamo tre gruppi di forme: nessun modificatore, ciascun modificatore
+    preso singolarmente, e tutti insieme. Non l'insieme delle combinazioni:
+    con sette parentetici sarebbero 128 forme, quasi tutte mai scritte da
+    nessuno, e gonfierebbero il gazetteer di rumore.
 
     I parentetici che contengono un codice sono rimandi, non modificatori, e
-    vengono semplicemente rimossi.
+    vengono rimossi in ogni forma.
     """
-    parentetici = [
-        p for p in PATTERN_PARENTETICO.findall(termine) if not PATTERN_SEMBRA_CODICE.search(p)
-    ]
-    senza = PATTERN_PARENTETICO.sub(" ", termine)
-    senza = re.sub(r"\s+", " ", senza).strip(" ,;:")
-    if not senza:
-        return []
+    # Segmenta il termine alternando testo fisso e parentetici, cosi' la
+    # ricostruzione puo' decidere per ciascuno se tenerlo o toglierlo.
+    segmenti: list[tuple[str, str]] = []   # ("fisso"|"opzionale", testo)
+    posizione = 0
+    for trovato in PATTERN_PARENTETICO.finditer(termine):
+        if trovato.start() > posizione:
+            segmenti.append(("fisso", termine[posizione:trovato.start()]))
+        contenuto = trovato.group(1)
+        # Un parentetico con un codice e' un rimando: si scarta sempre.
+        tipo = "scarto" if PATTERN_SEMBRA_CODICE.search(contenuto) else "opzionale"
+        segmenti.append((tipo, contenuto))
+        posizione = trovato.end()
+    if posizione < len(termine):
+        segmenti.append(("fisso", termine[posizione:]))
 
-    forme = [senza]
-    for parentetico in parentetici:
-        # Il modificatore si inserisce dove stava la parentesi; approssimiamo
-        # accodandolo, che e' la forma corretta in italiano per gli aggettivi
-        # ("ipertensione" + "arteriosa") e copre la quasi totalita' dei casi.
-        forme.append(f"{senza} {parentetico.strip()}")
+    indici_opzionali = [i for i, (tipo, _) in enumerate(segmenti) if tipo == "opzionale"]
+
+    def ricostruisci(da_tenere: set[int]) -> str:
+        parti = [
+            testo
+            for i, (tipo, testo) in enumerate(segmenti)
+            if tipo == "fisso" or (tipo == "opzionale" and i in da_tenere)
+        ]
+        unito = re.sub(r"\s+", " ", " ".join(parti))
+        return unito.strip(" ,;:")
+
+    selezioni: list[set[int]] = [set()]
+    selezioni.extend({i} for i in indici_opzionali)
+    if len(indici_opzionali) > 1:
+        selezioni.append(set(indici_opzionali))
+
+    forme = []
+    for selezione in selezioni:
+        forma = ricostruisci(selezione)
+        if forma and forma not in forme:
+            forme.append(forma)
     return forme
 
 
@@ -187,6 +214,12 @@ def analizza(testo: str) -> list[VoceICD]:
     prefisso_elenco = ""           # termine che introduce un sotto-elenco
     gruppo_corrente: list[tuple] = []   # bullet in attesa del suffisso di graffa
     suffisso_graffa = ""
+    # Le note istruttive dell'ICD ("Utilizzare un codice aggiuntivo...") vanno
+    # a capo. Filtrare solo la prima riga lascerebbe passare la coda come se
+    # fosse un termine: da "...manifestazione in atto del diabete / mellito."
+    # sopravviveva "mellito", che nel gazetteer diventava un falso positivo
+    # verso il diabete in gravidanza.
+    dentro_nota = False
     capitolo: str | None = None
 
     for riga in testo.split("\n"):
@@ -210,6 +243,7 @@ def analizza(testo: str) -> list[VoceICD]:
                 _chiudi_gruppo(gruppo_corrente, suffisso_graffa)
                 gruppo_corrente = []
                 suffisso_graffa = ""
+                dentro_nota = False
                 codice, titolo = match.group(1), pulisci_termine(match.group(2))
                 # Il PDF ripete le categorie nell'indice iniziale e poi
                 # nell'elenco sistematico: teniamo la prima occorrenza con un
@@ -232,6 +266,7 @@ def analizza(testo: str) -> list[VoceICD]:
                 _chiudi_gruppo(gruppo_corrente, suffisso_graffa)
                 gruppo_corrente = []
                 suffisso_graffa = ""
+                dentro_nota = False
                 blocco = "inclusi" if inclusi else "esclusi"
                 resto = (inclusi or esclusi).group(1).strip()
                 prefisso_elenco = resto[:-1].strip() if resto.endswith(":") else ""
@@ -244,6 +279,7 @@ def analizza(testo: str) -> list[VoceICD]:
 
             elemento = PATTERN_ELENCO.match(riga)
             if elemento:
+                dentro_nota = False
                 voce = elemento.group(1).strip()
                 if voce.endswith(":"):
                     # Sotto-elenco annidato: diventa il nuovo prefisso.
@@ -269,11 +305,20 @@ def analizza(testo: str) -> list[VoceICD]:
 
             # Riga di continuazione dentro un blocco, senza marcatore di elenco.
             testo_riga = riga.strip()
-            if testo_riga and not testo_riga.startswith(("Incl", "Escl")):
-                if testo_riga.endswith(":"):
-                    prefisso_elenco = testo_riga[:-1].strip()
-                else:
-                    _aggiungi(corrente, blocco, pulisci_termine(testo_riga))
+            if not testo_riga or testo_riga.startswith(("Incl", "Escl")):
+                continue
+
+            if PATTERN_NOTA_ISTRUTTIVA.match(testo_riga):
+                dentro_nota = True
+                continue
+            if dentro_nota:
+                # Coda della nota istruttiva: non e' un termine clinico.
+                continue
+
+            if testo_riga.endswith(":"):
+                prefisso_elenco = testo_riga[:-1].strip()
+            else:
+                _aggiungi(corrente, blocco, pulisci_termine(testo_riga))
 
     _chiudi_gruppo(gruppo_corrente, suffisso_graffa)
     return list(voci.values())
@@ -291,9 +336,21 @@ def _chiudi_gruppo(gruppo: list[tuple], suffisso: str) -> None:
         _aggiungi(voce_icd, blocco, pulisci_termine(completo))
 
 
+# Righe che nell'ICD sono istruzioni al codificatore, non termini clinici.
+# Finivano fra i sinonimi ("Utilizzare un codice aggiuntivo se si desidera
+# identificare...") e da li' nel gazetteer.
+PATTERN_NOTA_ISTRUTTIVA = re.compile(
+    r"^(utilizzare|usare|codificare|questa categoria|questo capitolo|nota|"
+    r"include|comprende|per |se si desidera|i codici|il codice)\b",
+    re.IGNORECASE,
+)
+
+
 def _aggiungi(voce: VoceICD, blocco: str, termine: str) -> None:
     """Aggiunge un termine al blocco giusto, scartando i vuoti e i duplicati."""
     if not termine or len(termine) < 3:
+        return
+    if PATTERN_NOTA_ISTRUTTIVA.match(termine):
         return
     destinazione = voce.inclusi if blocco == "inclusi" else voce.esclusi
     if termine not in destinazione:
