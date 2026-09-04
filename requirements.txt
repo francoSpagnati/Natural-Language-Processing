@@ -24,6 +24,16 @@ pydantic>=2.0
 #   python3 -m spacy download it_core_news_sm
 spacy>=3.7
 
+# --- Step 4: pipeline B (estrazione con LLM) ---------------------------------
+# Nessuna dipendenza aggiunta. Le chiamate a Google AI Studio passano da
+# `urllib` della libreria standard (vedi src/llm_backend.py): il protocollo e'
+# una singola POST JSON, e tenerla esplicita mantiene visibile nel codice il
+# formato del messaggio invece di nasconderlo dentro un SDK, senza legare la
+# riproducibilita' dei risultati alla versione di un pacchetto.
+#
+# Serve invece una chiave API in `.env.local` (non versionato):
+#   GEMINI_API_KEY=...
+#
 # --- Step successivi (da scommentare quando lo step viene implementato) -------
 # rdflib           # step 7: knowledge graph RDF + query SPARQL
 # networkx         # step 7: conversione dei sottografi per la visualizzazione

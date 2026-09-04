@@ -33,7 +33,6 @@ SULLE SONDE DELLO STEP 0
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -60,32 +59,13 @@ from schema import (  # noqa: E402
     StatoPaziente,
 )
 
+from risolutori import RisolutoreATC  # ri-esportato: gia' usato come extract_a.RisolutoreATC
+
 RADICE = Path(__file__).resolve().parent.parent
-PERCORSO_MAPPATURA_ATC = RADICE / "data" / "interim" / "mappatura_atc.json"
 
 CAMPO_ANAMNESI = "Anamnesi"
 CAMPO_INGRESSO = "Terapia medica all'ingresso"
 CAMPO_DIMISSIONE = "Terapia alla Dimissione"
-
-
-class RisolutoreATC:
-    """Traduce una forma testuale di farmaco nel suo codice ATC.
-
-    Legge la mappatura prodotta dallo step 2 invece di ricalcolarla: la
-    risoluzione è già stata fatta, verificata e documentata, e rifarla qui
-    significherebbe avere due verità possibili sullo stesso dato.
-    """
-
-    def __init__(self, percorso: Path = PERCORSO_MAPPATURA_ATC) -> None:
-        dati = json.loads(percorso.read_text(encoding="utf-8"))
-        self.per_forma = {v["forma_grezza"].lower(): v for v in dati["voci"]}
-
-    def risolvi(self, nome: str) -> tuple[str | None, StatoNormalizzazione, str | None]:
-        """(codice ATC, stato, fonte) per una forma testuale."""
-        voce = self.per_forma.get(nome.strip().lower())
-        if voce is None:
-            return None, StatoNormalizzazione.NIL, None
-        return voce["codice_atc"], StatoNormalizzazione(voce["stato"]), voce["fonte"]
 
 
 def _stato_da_attributi(attributi: dict) -> StatoConoscenza:

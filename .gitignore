@@ -21,4 +21,7 @@ venv/
 # Editor
 .vscode/
 .idea/
-data/processed/
+
+# Segreti: chiavi API locali
+.env
+.env.local

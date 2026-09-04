@@ -375,3 +375,133 @@ class MappaturaATC(BaseModel):
     fonti_esterne: list[str] = Field(default_factory=list)
     conteggi: dict[str, int] = Field(default_factory=dict)
     voci: list[VoceMappaturaATC] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Schema di uscita della pipeline B (estrazione con LLM)
+#
+# Non e' `StatoPaziente`: e' volutamente piu' povero. Al modello si chiede solo
+# cio' che un modello sa fare in modo verificabile -- individuare le menzioni,
+# citarle alla lettera e interpretarne il contesto clinico -- e nient'altro.
+#
+# In particolare NON si chiedono i codici ATC e ICD. Un LLM li produrrebbe
+# volentieri e spesso in modo plausibile, ma sarebbero conoscenza interna del
+# modello e non conoscenza tracciabile a una fonte citabile. La codifica resta
+# quindi affidata agli stessi risolutori usati dalla pipeline A, che poggiano su
+# AIFA e sull'ICD-10 italiano. Cosi' il confronto dello step 6 isola davvero la
+# differenza di *estrazione*, a normalizzazione identica.
+#
+# La citazione letterale (`testo_grezzo`) ha una seconda funzione: e' un test di
+# allucinazione. Se la stringa restituita non compare nel referto, la menzione e'
+# inventata, e questo e' misurabile in modo automatico.
+#
+# Alle condizioni si chiede anche un `concetto`: la stessa menzione con gli
+# acronimi sciolti. Non e' una violazione del vincolo di provenienza, perche' non
+# e' un codice e non viene creduto sulla parola: serve solo come *chiave di
+# ricerca* nell'indice ICD-10 ufficiale, che resta l'unica autorita' a decidere
+# se quel concetto esiste e con quale codice. E' anche il punto in cui la
+# pipeline B puo' superare la A, che su "BPCO" non ha appiglio perche'
+# l'acronimo nel volume ICD non compare.
+# ---------------------------------------------------------------------------
+
+
+class CampoReferto(str, Enum):
+    """Campo del record da cui proviene una menzione.
+
+    I valori coincidono con i tipi di referto di `data_loading`, cosi' che il
+    campo dichiarato dal modello sia verificabile contro il testo reale.
+    """
+
+    ANAMNESI = "Anamnesi"
+    TERAPIA_INGRESSO = "Terapia medica all'ingresso"
+    TERAPIA_DIMISSIONE = "Terapia alla Dimissione"
+
+
+class FarmacoLLM(BaseModel):
+    """Menzione di un farmaco individuata dal modello."""
+
+    testo_grezzo: str = Field(
+        description="Il nome del farmaco copiato alla lettera dal referto, senza correzioni."
+    )
+    campo: CampoReferto = Field(description="Campo del referto in cui compare la menzione.")
+    stato: StatoConoscenza = Field(
+        description="AFFERMATO se il paziente lo assume, NEGATO se e' esplicitamente escluso, "
+        "INCERTO se e' dubbio o solo ipotizzato."
+    )
+    posologia: str | None = Field(
+        default=None, description="Dose e frequenza come scritte nel referto, se presenti."
+    )
+
+
+class CondizioneLLM(BaseModel):
+    """Menzione di una condizione clinica individuata dal modello."""
+
+    testo_grezzo: str = Field(
+        description="La condizione copiata alla lettera dal referto, senza correzioni."
+    )
+    concetto: str = Field(
+        description="La stessa condizione in forma estesa e distesa, in italiano, con gli "
+        "acronimi sciolti (es. 'BPCO' -> 'broncopneumopatia cronica ostruttiva'). Se il "
+        "referto la scrive gia' per esteso, ripeti la stessa forma."
+    )
+    campo: CampoReferto = Field(description="Campo del referto in cui compare la menzione.")
+    stato: StatoConoscenza = Field(
+        description="AFFERMATO se il paziente ne e' affetto, NEGATO se e' esplicitamente "
+        "esclusa, INCERTO se e' sospetta o da confermare."
+    )
+
+
+class AllergiaLLM(BaseModel):
+    """Allergia o intolleranza individuata dal modello."""
+
+    allergene: str = Field(description="La sostanza, copiata alla lettera dal referto.")
+    categoria: str = Field(
+        description="'principi attivi', 'alimenti', 'altro' o la categoria indicata nel referto."
+    )
+
+
+class EstrazioneLLM(BaseModel):
+    """Uscita completa di una chiamata di estrazione.
+
+    Vincolando la generazione a questo schema la risposta non puo' essere JSON
+    malformato: la validita' sintattica e' garantita dal decodificatore, non
+    sperata dal prompt.
+    """
+
+    condizioni: list[CondizioneLLM] = Field(default_factory=list)
+    farmaci: list[FarmacoLLM] = Field(default_factory=list)
+    allergie: list[AllergiaLLM] = Field(default_factory=list)
+    stato_sezione_allergie: StatoConoscenza = Field(
+        default=StatoConoscenza.IGNOTO,
+        description="AFFERMATO se il referto elenca allergie, NEGATO se dichiara che non "
+        "ce ne sono, IGNOTO se non se ne parla.",
+    )
+
+
+def schema_estrazione_llm() -> dict:
+    """JSON Schema di `EstrazioneLLM` nella forma accettata dall'API Gemini.
+
+    Pydantic genera riferimenti a `$defs` e chiavi (`default`, `title`) che
+    l'API non usa; qui i riferimenti vengono espansi in linea e le chiavi
+    superflue rimosse. Le descrizioni restano: fanno parte delle istruzioni che
+    il modello riceve.
+    """
+    grezzo = EstrazioneLLM.model_json_schema()
+    definizioni = grezzo.pop("$defs", {})
+
+    def espandi(nodo):
+        if isinstance(nodo, list):
+            return [espandi(v) for v in nodo]
+        if not isinstance(nodo, dict):
+            return nodo
+        if "$ref" in nodo:
+            nome = nodo["$ref"].rsplit("/", 1)[-1]
+            unito = {**definizioni[nome], **{k: v for k, v in nodo.items() if k != "$ref"}}
+            return espandi(unito)
+        return {
+            chiave: espandi(valore)
+            for chiave, valore in nodo.items()
+            if chiave not in ("default", "title")
+        }
+
+    return espandi(grezzo)

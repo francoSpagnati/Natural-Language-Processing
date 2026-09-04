@@ -14,7 +14,7 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | 2 | [`02_terminologia_icd10.md`](02_terminologia_icd10.md) | ✅ terminologia ICD-10 estratta |
 | 2 | [`02b_risoluzione_atc.md`](02b_risoluzione_atc.md) | ✅ ATC dei farmaci risolto |
 | 3 | [`03_pipeline_estrazione_A.md`](03_pipeline_estrazione_A.md) | ✅ completato |
-| 4 | `04_pipeline_estrazione_B.md` | ⬜ da fare |
+| 4 | [`04_pipeline_estrazione_B.md`](04_pipeline_estrazione_B.md) | ✅ completato |
 | 5 | `05_pipeline_estrazione_C.md` | ⬜ da fare |
 | 6 | `06_confronto_pipeline.md` | ⬜ da fare |
 | 7 | `07_knowledge_graph.md` | ⬜ da fare |
@@ -47,8 +47,8 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
                                       ▼
                     ┌─────────── tre pipeline di estrazione ───────────┐
                     ▼                 ▼                                ▼
-             A: deterministica   B: LLM (Claude)          C: NER + Entity Linking
-                 step 3 ✅          step 4 ⬜                    step 5 ⬜
+             A: deterministica   B: LLM (Gemini)         C: NER + Entity Linking
+                 step 3 ✅          step 4 ✅                    step 5 ⬜
                     │                 │                                │
                     └────── etichette silver ────────────────────────►─┘
                                       │
@@ -87,8 +87,16 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `src/gazetteer.py` | `spacy`, vocabolari chiusi | step 3, step 5 (candidati per l'EL) | 3 |
 | `src/context_it.py` | nessuna (solo stdlib) | step 3, step 5 | 3 |
 | `src/extract_a.py` | tutti i precedenti | step 5 (etichette silver), step 6, step 8 | 3 |
+| `src/risolutori.py` | `schema`, mappatura ATC, terminologia ICD | **tutte** le pipeline: la normalizzazione dev'essere identica | 4 |
+| `src/llm_backend.py` | solo stdlib (`urllib`, `hashlib`) | step 4, step 9 (LLMRanker), step 10 | 4 |
+| `src/extract_b.py` | `llm_backend`, `risolutori`, `gazetteer`, `schema` | step 6 (confronto) | 4 |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
+| `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
+
+I test sono 134 in tutto e **nessuno usa la rete**: la pipeline B e' provata
+con un backend fittizio, perche' una suite dipendente dall'API sarebbe lenta,
+costosa e verde o rossa a seconda del carico dei server.
 
 ## Dati
 
@@ -102,8 +110,12 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `data/interim/vocabolario_condizioni.json` | 249 condizioni candidate con contesti e indizi di negazione | `src/build_vocabularies.py` |
 | `data/interim/schema_stato_paziente.json` | JSON Schema generato dai modelli Pydantic | `src/build_vocabularies.py` |
 | `data/external/ICD-10 2019 vol1...pdf` | ICD-10 2019 italiano, Centro Collaboratore OMS (FVG) | scaricato a mano da reteclassificazioni.it |
-| `data/interim/terminologia_icd10.json` | 10 803 codici + indice di 14 898 termini italiani | `src/extract_icd10.py` |
+| `data/interim/terminologia_icd10.json` | 10 803 codici + indice di 13 642 termini italiani | `src/extract_icd10.py` |
 | `data/interim/mappatura_atc.json` | 1 329 voci con ATC, metodo di risoluzione, fonte ed evidenza | `src/normalize_drugs.py` |
+| `data/processed/pipeline_a/*.json` | uno `StatoPaziente` per record (1 000) | `src/extract_a.py` |
+| `data/processed/pipeline_b/*.json` | uno `StatoPaziente` per record elaborato dall'LLM | `src/extract_b.py` |
+| `data/interim/cache_llm/*.json` | risposte del modello indicizzate per impronta: rendono ripetibile la valutazione | `src/llm_backend.py` |
+| `.env.local` | chiave API di Google AI Studio | **non versionato**, escluso da `.gitignore` |
 | `data/processed/pipeline_a/*.json` | 1 000 stati paziente estratti dalla pipeline A | `src/extract_a.py` |
 | `reports/00_esplorazione.txt` | report completo dello step 0 | rigenerato da `src/explore_dataset.py` |
 

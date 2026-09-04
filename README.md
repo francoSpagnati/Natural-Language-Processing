@@ -8,7 +8,7 @@ espresse come cammini in una knowledge base a grafo (indicazioni,
 controindicazioni, interazioni, linee guida), ed è esposto come **tool MCP**
 richiamabile da un LLM.
 
-> **Stato: step 3 di 11 completato** (pipeline A deterministica: gazetteer sui vocabolari chiusi + logica di negazione ConText adattata all'italiano).
+> **Stato: step 4 di 11 completato** (pipeline B: estrazione con un modello linguistico, codici sempre assegnati dalle knowledge base e mai dal modello).
 > Lo sviluppo procede per step sequenziali; vedi
 > [`docs/00_architettura.md`](docs/00_architettura.md) per la visione d'insieme
 > e l'indice dei documenti.
@@ -62,6 +62,17 @@ pip install -r requirements.txt
 python3 -m spacy download it_core_news_sm   # modello italiano, serve dallo step 3
 ```
 
+La pipeline B (step 4) chiama Google AI Studio e richiede una chiave in
+`.env.local`, file escluso da git:
+
+```bash
+echo 'GEMINI_API_KEY=...' > .env.local
+```
+
+Le chiamate passano dalla libreria standard, quindi non aggiungono
+dipendenze, e ogni risposta e' messa in cache su disco: rilanciare la
+pipeline non riconsuma la quota e restituisce gli stessi risultati.
+
 Le dipendenze dei prossimi step sono elencate e motivate in `requirements.txt`,
 commentate finché lo step che le richiede non è implementato.
 
@@ -78,7 +89,9 @@ python3 src/normalize_drugs.py      # risoluzione ATC dei farmaci
 
 python3 src/extract_a.py            # pipeline A su tutti i record
 
-python3 -m unittest discover -s tests -v   # 96 test
+python3 src/extract_b.py --record 25 --parallele 8   # pipeline B (richiede la chiave)
+
+python3 -m unittest discover -s tests -v   # 134 test, nessuno usa la rete
 ```
 
 Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
@@ -88,7 +101,8 @@ Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
 | Fonte | Uso | Licenza |
 |---|---|---|
 | [AIFA — Agenzia Italiana del Farmaco](https://www.aifa.gov.it/liste-dei-farmaci) | registro ATC in italiano, anagrafica delle confezioni (nome commerciale → principio attivo → ATC), titolari AIC | CC-BY 4.0 |
-| ICD-10 2019 italiano, Centro Collaboratore OMS — Regione FVG, via [reteclassificazioni.it](https://www.reteclassificazioni.it/) | terminologia delle condizioni: 10 803 codici, 14 898 termini | PDF scaricato manualmente |
+| [Google AI Studio — API Gemini](https://ai.google.dev/) | modello linguistico della pipeline B (step 4) e del ranker LLM (step 9). **Non** è una fonte di conoscenza: non fornisce codici, solo l'individuazione delle menzioni | servizio, chiave personale |
+| ICD-10 2019 italiano, Centro Collaboratore OMS — Regione FVG, via [reteclassificazioni.it](https://www.reteclassificazioni.it/) | terminologia delle condizioni: 10 803 codici, 13 642 termini | PDF scaricato manualmente |
 
 `src/fetch_external_kb.py` le scarica e scrive `kb/manifest_fonti.json` con URL,
 data di download, dimensione, SHA-256 e il motivo per cui ogni file serve. Il
