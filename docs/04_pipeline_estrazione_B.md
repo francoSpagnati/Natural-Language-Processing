@@ -177,7 +177,65 @@ dovrebbero concordare è un dato da guardare, non da risolvere in silenzio.
 
 ---
 
-## 5. Risultati misurati
+## 5. Il ripiego sulla categoria ICD
+
+Il 72% delle condizioni restava senza codice non perché il concetto fosse
+sbagliato, ma perché il lessico clinico e quello del volume ICD divergono. Il
+caso tipico: **«fibrillazione atriale» non è un termine indicizzato**. Il volume
+elenca solo le forme qualificate — parossistica (I48.0), persistente (I48.1),
+cronica (I48.2), non specificata (I48.9) — e la categoria che le raccoglie,
+`I48`.
+
+La regola aggiunta è ricavata per intero dalla gerarchia del volume e non
+contiene una riga di conoscenza medica scritta a mano:
+
+> Se **tutti** i termini dell'indice che estendono la menzione a confine di
+> parola ricadono in un'unica categoria a tre caratteri, allora la menzione
+> denota quella categoria e il suo codice è la risposta.
+
+Un codice a tre caratteri è una codifica ICD-10 valida, non un ripiego
+inventato: dire `I48` significa «fibrillazione o flutter atriale, senza
+specificare quale forma», che è esattamente ciò che il referto dice.
+
+Quando invece le forme qualificate si distribuiscono su categorie diverse la
+menzione resta `AMBIGUO` con i candidati in vista. «Diabete mellito» tocca
+E10 (tipo 1), E11 (tipo 2), E12 e O24 (gestazionale): distinguerli richiede il
+contesto clinico, che è il compito dello step 5.
+
+### Un vincolo imposto da un falso positivo
+
+La prima versione della regola generalizzava anche con **una sola** forma
+qualificata, e ha prodotto subito un errore grave: «insufficienza mitralica» →
+`Q23`, cioè *malformazioni congenite delle valvole aortica e mitrale*. L'unico
+termine indicizzato che estende quella menzione è «insufficienza mitralica
+congenita» (Q23.3), e la regola ne aveva dedotto la categoria sbagliata,
+attribuendo a una valvulopatia acquisita un codice di cardiopatia congenita.
+
+Con una sola forma non si distingue un **concetto padre** da un **fratello più
+specifico**. La regola richiede quindi almeno due forme qualificate: è il
+segnale che il volume sta davvero enumerando le varianti di un concetto
+generico. Il caso è fissato in un test di regressione.
+
+### Effetto misurato
+
+| | prima | dopo |
+|---|---|---|
+| condizioni con codice ICD | 25,0% | **28,9%** |
+| senza codice (`NIL`) | 72,1% | **64,6%** |
+| ambigue | 2,9% | 6,5% |
+
+L'aumento delle ambigue non è un peggioramento: sono menzioni che prima
+risultavano semplicemente NIL e ora mostrano i candidati fra cui lo step 5 dovrà
+scegliere.
+
+Il metodo che ha prodotto ogni collegamento (`termine_esatto`,
+`generalizzazione_a_categoria`, `gazetteer`, …) è registrato nella provenienza
+di ogni condizione: un codice di categoria e uno di sottocategoria non valgono
+la stessa cosa e chi legge deve poterli distinguere senza risalire al testo.
+
+---
+
+## 6. Risultati misurati
 
 Su **14 record** (quanti la quota gratuita ha consentito), 552 entità estratte.
 
@@ -218,7 +276,7 @@ record**. Sul listino AI Studio:
 
 ---
 
-## 6. Limiti noti
+## 7. Limiti noti
 
 * **La quota gratuita è il vincolo dominante**: 20 richieste al giorno per
   modello rendono impraticabile una corsa sull'intero dataset senza attivare la
@@ -242,7 +300,7 @@ record**. Sul listino AI Studio:
 
 ---
 
-## 7. Componenti creati
+## 8. Componenti creati
 
 | File | Ruolo |
 |---|---|

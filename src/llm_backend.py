@@ -53,6 +53,12 @@ CARTELLA_CACHE = RADICE / "data" / "interim" / "cache_llm"
 # su un modello stabile (non "preview") tiene i risultati confrontabili nel
 # tempo. Si puo' comunque sceglierne un altro con --modello.
 MODELLO_PREDEFINITO = "gemini-3.5-flash"
+
+# Modello locale. La macchina ha 11 GiB di RAM e nessuna GPU utilizzabile,
+# quindi il tetto pratico e' un modello da ~4 miliardi di parametri
+# quantizzato: gemma2:9b (5,4 GB) ha fatto intervenire l'OOM killer.
+MODELLO_LOCALE_PREDEFINITO = "qwen3:4b"
+OLLAMA_HOST = "http://127.0.0.1:11434"
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{modello}:generateContent"
 
 # 429 = quota esaurita, 5xx = capacita' del servizio. Entrambi transitori: durante
@@ -183,6 +189,58 @@ class BackendLLM(ABC):
         """Restituisce la risposta del modello, gia' decodificata da JSON."""
 
 
+class CacheRisposte:
+    """Risposte del modello su disco, indicizzate per impronta della richiesta.
+
+    Serve a due cose diverse che si sostengono a vicenda: non ripagare (in
+    denaro o in ore di CPU) una risposta gia' ottenuta, e rendere **ripetibile**
+    la valutazione dello step 11, che altrimenti dipenderebbe da una generazione
+    non deterministica.
+
+    E' condivisa fra i backend: passare dal modello remoto a quello locale non
+    deve cambiare il modo in cui i risultati vengono conservati.
+    """
+
+    def __init__(self, cartella: Path | None) -> None:
+        self.cartella = cartella
+        if self.cartella is not None:
+            self.cartella.mkdir(parents=True, exist_ok=True)
+
+    def leggi(self, impronta: str, modello: str) -> Risposta | None:
+        if self.cartella is None:
+            return None
+        percorso = self.cartella / f"{impronta}.json"
+        if not percorso.exists():
+            return None
+        salvato = json.loads(percorso.read_text(encoding="utf-8"))
+        return Risposta(
+            contenuto=salvato["contenuto"],
+            modello=salvato.get("modello", modello),
+            token_ingresso=salvato.get("token_ingresso", 0),
+            token_uscita=salvato.get("token_uscita", 0),
+            token_ragionamento=salvato.get("token_ragionamento", 0),
+            da_cache=True,
+        )
+
+    def scrivi(self, impronta: str, risposta: Risposta) -> None:
+        if self.cartella is None:
+            return
+        (self.cartella / f"{impronta}.json").write_text(
+            json.dumps(
+                {
+                    "modello": risposta.modello,
+                    "contenuto": risposta.contenuto,
+                    "token_ingresso": risposta.token_ingresso,
+                    "token_uscita": risposta.token_uscita,
+                    "token_ragionamento": risposta.token_ragionamento,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+
 class BackendGemini(BackendLLM):
     """Backend su Google AI Studio, con cache su disco e ritentativi."""
 
@@ -197,52 +255,10 @@ class BackendGemini(BackendLLM):
     ) -> None:
         self.modello = modello
         self._chiave = chiave or chiave_api()
-        self.cartella_cache = cartella_cache
+        self.cache = CacheRisposte(cartella_cache)
         self.tentativi_massimi = tentativi_massimi
         self.attesa_iniziale = attesa_iniziale
         self.timeout = timeout
-        if self.cartella_cache is not None:
-            self.cartella_cache.mkdir(parents=True, exist_ok=True)
-
-    # -- cache -------------------------------------------------------------
-
-    def _percorso_cache(self, impronta: str) -> Path | None:
-        if self.cartella_cache is None:
-            return None
-        return self.cartella_cache / f"{impronta}.json"
-
-    def _leggi_cache(self, impronta: str) -> Risposta | None:
-        percorso = self._percorso_cache(impronta)
-        if percorso is None or not percorso.exists():
-            return None
-        salvato = json.loads(percorso.read_text(encoding="utf-8"))
-        return Risposta(
-            contenuto=salvato["contenuto"],
-            modello=salvato.get("modello", self.modello),
-            token_ingresso=salvato.get("token_ingresso", 0),
-            token_uscita=salvato.get("token_uscita", 0),
-            token_ragionamento=salvato.get("token_ragionamento", 0),
-            da_cache=True,
-        )
-
-    def _scrivi_cache(self, impronta: str, risposta: Risposta) -> None:
-        percorso = self._percorso_cache(impronta)
-        if percorso is None:
-            return
-        percorso.write_text(
-            json.dumps(
-                {
-                    "modello": risposta.modello,
-                    "contenuto": risposta.contenuto,
-                    "token_ingresso": risposta.token_ingresso,
-                    "token_uscita": risposta.token_uscita,
-                    "token_ragionamento": risposta.token_ragionamento,
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
 
     # -- chiamata ----------------------------------------------------------
 
@@ -273,7 +289,7 @@ class BackendGemini(BackendLLM):
 
     def genera(self, richiesta: Richiesta) -> Risposta:
         impronta = richiesta.impronta(self.modello)
-        in_cache = self._leggi_cache(impronta)
+        in_cache = self.cache.leggi(impronta, self.modello)
         if in_cache is not None:
             return in_cache
 
@@ -286,7 +302,8 @@ class BackendGemini(BackendLLM):
             try:
                 grezza = self._invia(corpo)
             except urllib.error.HTTPError as errore:
-                corpo_errore = errore.read().decode("utf-8", errors="replace")
+                with errore:
+                    corpo_errore = errore.read().decode("utf-8", errors="replace")
                 ultimo_errore = ErroreLLM(f"HTTP {errore.code}: {corpo_errore[:300]}")
                 if errore.code == 429:
                     giornaliera, suggerita = _dettagli_errore(corpo_errore)
@@ -301,7 +318,7 @@ class BackendGemini(BackendLLM):
                 ultimo_errore = ErroreLLM(f"{type(errore).__name__}: {errore}")
             else:
                 risposta = self._interpreta(grezza, tentativo, time.monotonic() - avvio)
-                self._scrivi_cache(impronta, risposta)
+                self.cache.scrivi(impronta, risposta)
                 return risposta
 
             if tentativo < self.tentativi_massimi:
@@ -344,6 +361,125 @@ class BackendGemini(BackendLLM):
             token_ingresso=uso.get("promptTokenCount", 0),
             token_uscita=uso.get("candidatesTokenCount", 0),
             token_ragionamento=uso.get("thoughtsTokenCount", 0),
+            tentativi=tentativi,
+            secondi=secondi,
+        )
+
+
+class BackendOllama(BackendLLM):
+    """Backend su un modello eseguito in locale tramite Ollama.
+
+    Stessa interfaccia e stessa cache del backend remoto: la pipeline non sa
+    quale dei due sta usando, e i due sono confrontabili a parita' di prompt.
+
+    Anche qui la generazione e' **vincolata allo schema**: Ollama accetta uno
+    JSON Schema nel campo `format` e lo impone al decodificatore, quindi un
+    modello locale piccolo non puo' comunque produrre JSON malformato. E' la
+    ragione per cui la pipeline regge il passaggio a un modello molto meno
+    capace: la struttura e' garantita dal motore, non dalla bravura del modello.
+
+    Vincoli reali della macchina su cui gira: l'inferenza e' su CPU (il
+    rilevamento della GPU integrata fallisce) e la memoria disponibile e' poca,
+    quindi il timeout predefinito e' generoso e il servizio va tenuto sotto un
+    limite di memoria -- vedi `docs/04_pipeline_estrazione_B.md`.
+    """
+
+    def __init__(
+        self,
+        modello: str = MODELLO_LOCALE_PREDEFINITO,
+        host: str = OLLAMA_HOST,
+        cartella_cache: Path | None = CARTELLA_CACHE,
+        tentativi_massimi: int = 3,
+        attesa_iniziale: float = 2.0,
+        timeout: float = 1800.0,
+        contesto: int = 8192,
+        ragionamento: bool = False,
+    ) -> None:
+        self.modello = modello
+        self.host = host.rstrip("/")
+        self.cache = CacheRisposte(cartella_cache)
+        self.tentativi_massimi = tentativi_massimi
+        self.attesa_iniziale = attesa_iniziale
+        self.timeout = timeout
+        self.contesto = contesto
+        # I modelli a ragionamento ibrido (qwen3) altrimenti spendono la maggior
+        # parte dei token generati a pensare. Su CPU e' il costo che decide se
+        # una corsa sul dataset dura ore o giorni.
+        self.ragionamento = ragionamento
+
+    def _corpo(self, richiesta: Richiesta) -> dict:
+        return {
+            "model": self.modello,
+            "system": richiesta.istruzioni,
+            "prompt": richiesta.testo,
+            "format": richiesta.schema,
+            "stream": False,
+            "think": self.ragionamento,
+            "options": {
+                "temperature": richiesta.temperatura,
+                "num_ctx": self.contesto,
+            },
+        }
+
+    def _invia(self, corpo: dict) -> dict:
+        domanda = urllib.request.Request(
+            f"{self.host}/api/generate",
+            data=json.dumps(corpo, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(domanda, timeout=self.timeout) as risposta:
+            return json.loads(risposta.read().decode("utf-8"))
+
+    def genera(self, richiesta: Richiesta) -> Risposta:
+        impronta = richiesta.impronta(self.modello)
+        in_cache = self.cache.leggi(impronta, self.modello)
+        if in_cache is not None:
+            return in_cache
+
+        corpo = self._corpo(richiesta)
+        avvio = time.monotonic()
+        ultimo_errore: Exception | None = None
+
+        for tentativo in range(1, self.tentativi_massimi + 1):
+            try:
+                grezza = self._invia(corpo)
+            except urllib.error.HTTPError as errore:
+                with errore:
+                    dettaglio = errore.read().decode("utf-8", errors="replace")[:300]
+                # Un modello assente o una richiesta malformata non migliorano
+                # ritentando: meglio dirlo subito e con il messaggio del server.
+                raise ErroreLLM(f"HTTP {errore.code}: {dettaglio}") from errore
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as errore:
+                ultimo_errore = ErroreLLM(f"{type(errore).__name__}: {errore}")
+            else:
+                risposta = self._interpreta(grezza, tentativo, time.monotonic() - avvio)
+                self.cache.scrivi(impronta, risposta)
+                return risposta
+
+            if tentativo < self.tentativi_massimi:
+                attesa = self.attesa_iniziale * (2 ** (tentativo - 1))
+                time.sleep(attesa + random.uniform(0, attesa / 2))
+
+        raise ErroreLLM(
+            f"{self.tentativi_massimi} tentativi falliti su {self.modello}: {ultimo_errore}"
+        )
+
+    def _interpreta(self, grezza: dict, tentativi: int, secondi: float) -> Risposta:
+        testo = grezza.get("response", "")
+        if not testo.strip():
+            motivo = grezza.get("done_reason", "sconosciuto")
+            raise ErroreLLM(f"Risposta vuota dal modello locale (done_reason={motivo}).")
+        try:
+            contenuto = json.loads(testo)
+        except json.JSONDecodeError as errore:
+            raise ErroreLLM(f"JSON non valido nella risposta: {errore}") from errore
+
+        return Risposta(
+            contenuto=contenuto,
+            modello=self.modello,
+            token_ingresso=grezza.get("prompt_eval_count", 0),
+            token_uscita=grezza.get("eval_count", 0),
             tentativi=tentativi,
             secondi=secondi,
         )

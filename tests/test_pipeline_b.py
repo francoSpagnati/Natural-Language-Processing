@@ -27,6 +27,7 @@ from data_loading import RecordPaziente, Referto  # noqa: E402
 from llm_backend import (  # noqa: E402
     BackendFittizio,
     BackendGemini,
+    BackendOllama,
     ErroreLLM,
     ErroreQuotaGiornaliera,
     Richiesta,
@@ -72,12 +73,18 @@ class RisolutoreATCFinto:
 
 class RisolutoreICDFinto:
     def risolvi(self, testo):
+        from risolutori import EsitoICD
+
         chiave = testo.strip().lower()
         if chiave == "broncopneumopatia cronica ostruttiva":
-            return "J44.9", StatoNormalizzazione.RISOLTO, chiave, ["J44.9"]
+            return EsitoICD(
+                "J44.9", StatoNormalizzazione.RISOLTO, chiave, ("J44.9",), "termine_esatto"
+            )
         if chiave == "cardiopatia ischemica":
-            return None, StatoNormalizzazione.AMBIGUO, chiave, ["I25.1", "I25.9"]
-        return None, StatoNormalizzazione.NIL, None, []
+            return EsitoICD(
+                None, StatoNormalizzazione.AMBIGUO, chiave, ("I25.1", "I34.0"), "generalizzazione_ambigua"
+            )
+        return EsitoICD(None, StatoNormalizzazione.NIL, None, (), "non_risolto")
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +318,73 @@ class TestInterpretazioneRisposta(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+
+class TestBackendLocale(unittest.TestCase):
+    """Il backend locale deve essere intercambiabile con quello remoto.
+
+    Non si verifica la bravura del modello ma il contratto: stessa interfaccia,
+    stessa cache, schema imposto al decodificatore, e un errore leggibile quando
+    la risposta non e' utilizzabile.
+    """
+
+    class BackendFinto(BackendOllama):
+        risposte: list = []
+        corpi: list = []
+
+        def _invia(self, corpo):
+            type(self).corpi.append(corpo)
+            return type(self).risposte.pop(0)
+
+    def _backend(self, risposte, **kw):
+        self.BackendFinto.risposte = list(risposte)
+        self.BackendFinto.corpi = []
+        return self.BackendFinto(modello="finto", cartella_cache=None, **kw)
+
+    def test_lo_schema_viene_imposto_al_decodificatore(self):
+        """E' cio' che rende utilizzabile un modello locale piccolo: la validita'
+        del JSON e' garantita dal motore, non sperata dal prompt."""
+        backend = self._backend([{"response": '{"ok": true}', "eval_count": 4}])
+        schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+        backend.genera(Richiesta(istruzioni="i", testo="t", schema=schema))
+        self.assertEqual(self.BackendFinto.corpi[0]["format"], schema)
+
+    def test_ragionamento_disattivato_per_impostazione(self):
+        """Su CPU i token di pensiero decidono se una corsa dura ore o giorni."""
+        backend = self._backend([{"response": "{}", "eval_count": 1}])
+        backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+        self.assertFalse(self.BackendFinto.corpi[0]["think"])
+
+    def test_conta_i_token(self):
+        backend = self._backend(
+            [{"response": "{}", "prompt_eval_count": 120, "eval_count": 340}]
+        )
+        risposta = backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+        self.assertEqual(risposta.token_ingresso, 120)
+        self.assertEqual(risposta.token_uscita, 340)
+
+    def test_risposta_vuota_e_un_errore(self):
+        backend = self._backend([{"response": "", "done_reason": "length"}])
+        with self.assertRaises(ErroreLLM):
+            backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+
+    def test_condivide_la_cache_col_backend_remoto(self):
+        """Stessa cache per i due motori: cambiare motore non cambia il modo in
+        cui i risultati vengono conservati. Il modello entra nell'impronta,
+        quindi le risposte dei due non si confondono."""
+        with tempfile.TemporaryDirectory() as cartella:
+            self.BackendFinto.risposte = [{"response": '{"a": 1}', "eval_count": 2}]
+            self.BackendFinto.corpi = []
+            backend = self.BackendFinto(
+                modello="finto", cartella_cache=Path(cartella)
+            )
+            richiesta = Richiesta(istruzioni="i", testo="t", schema={})
+            prima = backend.genera(richiesta)
+            seconda = backend.genera(richiesta)
+            self.assertEqual(len(self.BackendFinto.corpi), 1)
+            self.assertTrue(seconda.da_cache)
+            self.assertEqual(prima.contenuto, seconda.contenuto)
+
+
 class TestAncoraggio(unittest.TestCase):
     def test_citazione_esatta(self):
         self.assertEqual(extract_b.ancora("Paziente con diabete mellito.", "diabete"), (13, 20))
@@ -536,6 +610,70 @@ class TestMenzioniComposte(unittest.TestCase):
             "Bisoprololo (Congescor cp.riv. 2.5 mg)"
         )
         self.assertEqual(da_principio, da_composta)
+
+
+
+@unittest.skipUnless(
+    (
+        Path(__file__).resolve().parent.parent / "data/interim/terminologia_icd10.json"
+    ).exists(),
+    "terminologia ICD-10 non generata",
+)
+class TestGeneralizzazioneICD(unittest.TestCase):
+    """Il lessico clinico e quello del volume ICD divergono.
+
+    Il volume elenca "fibrillazione atriale parossistica/persistente/cronica" ma
+    non "fibrillazione atriale" da sola. Quando tutte le forme qualificate
+    ricadono in un'unica categoria, quella categoria e' cio' che la menzione
+    generica denota, e il suo codice a 3 caratteri e' una codifica ICD-10 valida.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from risolutori import RisolutoreICD
+
+        cls.risolutore = RisolutoreICD()
+
+    def test_menzione_generica_risolve_alla_categoria(self):
+        esito = self.risolutore.risolvi("fibrillazione atriale")
+        self.assertEqual(esito.codice, "I48")
+        self.assertEqual(esito.stato, StatoNormalizzazione.RISOLTO)
+        self.assertEqual(esito.metodo, "generalizzazione_a_categoria")
+        # I candidati restano visibili: si vede da cosa e' stata generalizzata.
+        self.assertIn("I48.0", esito.candidati)
+
+    def test_categorie_diverse_restano_ambigue(self):
+        """"diabete mellito" copre tipo 1, tipo 2 e quello gestazionale."""
+        esito = self.risolutore.risolvi("diabete mellito")
+        self.assertIsNone(esito.codice)
+        self.assertEqual(esito.stato, StatoNormalizzazione.AMBIGUO)
+        self.assertGreater(len(esito.candidati), 1)
+
+    def test_una_sola_forma_qualificata_non_generalizza(self):
+        """Regressione. L'unica forma indicizzata che estende "insufficienza
+        mitralica" e' "insufficienza mitralica congenita" (Q23.3): generalizzare
+        avrebbe dato a una valvulopatia acquisita un codice congenito. Con una
+        sola forma non si distingue un concetto padre da un fratello piu'
+        specifico, quindi non si generalizza."""
+        esito = self.risolutore.risolvi("insufficienza mitralica")
+        self.assertNotEqual(esito.codice, "Q23")
+        self.assertIsNone(esito.codice)
+
+    def test_termine_esatto_ha_la_precedenza(self):
+        esito = self.risolutore.risolvi("ipertensione arteriosa")
+        self.assertEqual(esito.metodo, "termine_esatto")
+        self.assertEqual(esito.codice, "I10")
+
+    def test_menzione_ignota_resta_nil(self):
+        esito = self.risolutore.risolvi("qwertyuiop asdfgh")
+        self.assertEqual(esito.stato, StatoNormalizzazione.NIL)
+        self.assertIsNone(esito.codice)
+
+    def test_categoria_di_un_codice(self):
+        from risolutori import RisolutoreICD
+
+        self.assertEqual(RisolutoreICD.categoria("I48.0"), "I48")
+        self.assertEqual(RisolutoreICD.categoria("I10"), "I10")
 
 
 class TestComposizioneTesto(unittest.TestCase):

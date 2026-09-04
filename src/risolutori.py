@@ -18,6 +18,8 @@ from __future__ import annotations
 import json
 import re
 import threading
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 from explore_dataset import radice_nome_commerciale
@@ -120,22 +122,54 @@ class RisolutoreATC:
         return codice, stato, fonte, forma
 
 
+@dataclass(frozen=True)
+class EsitoICD:
+    """Esito di un collegamento a ICD-10, con il metodo che l'ha prodotto.
+
+    Il metodo viaggia insieme al codice perche' un codice di categoria e uno di
+    sottocategoria non valgono la stessa cosa: il primo dice "fibrillazione
+    atriale", il secondo dice quale. Chi legge lo stato paziente deve poterli
+    distinguere senza risalire al testo.
+    """
+
+    codice: str | None
+    stato: StatoNormalizzazione
+    concetto: str | None
+    candidati: tuple[str, ...]
+    metodo: str
+
+
 class RisolutoreICD:
     """Traduce una menzione di condizione in un codice ICD-10.
 
-    Due passaggi, entrambi ancorati all'indice estratto dal volume ufficiale:
+    Tre passaggi, tutti ancorati all'indice estratto dal volume ufficiale.
 
-    1. corrispondenza esatta della menzione normalizzata con un termine
-       dell'indice;
-    2. se fallisce e si dispone di un gazetteer, ricerca del termine piu' lungo
-       contenuto nella menzione -- lo stesso meccanismo della pipeline A, cosi'
-       che una menzione come "ipertensione arteriosa in trattamento" trovi
-       "ipertensione arteriosa".
+    1. **Termine esatto.** La menzione normalizzata compare nell'indice.
 
-    Una menzione compatibile con piu' codici non viene decisa: resta `AMBIGUO`
-    con i candidati in vista. Sceglierne uno a caso darebbe una copertura piu'
-    alta e una codifica meno affidabile, che e' il compromesso sbagliato in un
-    sistema che deve poi ragionare sulla sicurezza di una terapia.
+    2. **Generalizzazione a categoria.** Il lessico clinico e quello del volume
+       divergono: "fibrillazione atriale" non e' un termine indicizzato, perche'
+       l'ICD elenca solo le forme qualificate -- parossistica (I48.0),
+       persistente (I48.1), cronica (I48.2) -- e la categoria che le raccoglie.
+       Quando *tutti* i termini dell'indice che cominciano con la menzione
+       ricadono in un'unica categoria a 3 caratteri, quella categoria e' cio'
+       che la menzione denota, e il suo codice e' la risposta corretta: un
+       codice a 3 caratteri e' una codifica ICD-10 valida, non un ripiego
+       inventato. Se invece i termini si distribuiscono su categorie diverse --
+       "insufficienza mitralica" sta sia fra le forme reumatiche sia fra quelle
+       non reumatiche -- la menzione resta AMBIGUO: distinguerle richiede il
+       contesto clinico, che e' il compito dello step 5.
+
+       La regola non contiene alcuna conoscenza medica scritta a mano: deriva
+       per intero dalla gerarchia del volume.
+
+    3. **Ripiego sul gazetteer.** Il termine piu' lungo dell'indice contenuto
+       nella menzione, con lo stesso meccanismo della pipeline A, cosi' che
+       "ipertensione arteriosa in trattamento" trovi "ipertensione arteriosa".
+
+    In nessun caso una menzione compatibile con piu' categorie riceve un codice
+    scelto a caso: una copertura piu' alta pagata con una codifica meno
+    affidabile e' il compromesso sbagliato in un sistema che deve poi ragionare
+    sulla sicurezza di una terapia.
     """
 
     def __init__(
@@ -148,6 +182,14 @@ class RisolutoreICD:
             normalizza(termine): codici
             for termine, codici in dati["indice_termini"].items()
         }
+        # Indice per primo token: la generalizzazione deve poter trovare tutti i
+        # termini che cominciano con una data menzione senza scorrere ogni volta
+        # le 13.642 voci.
+        self._per_primo_token: dict[str, list[str]] = defaultdict(list)
+        for termine in self.indice:
+            primo = termine.split(" ", 1)[0]
+            self._per_primo_token[primo].append(termine)
+
         self.gazetteer = gazetteer
         # Il ripiego sul gazetteer attraversa la pipeline spaCy, che non e'
         # garantita sicura da piu' thread contemporaneamente. Le pipeline
@@ -155,6 +197,46 @@ class RisolutoreICD:
         # serializzato: e' un ripiego e non il percorso principale, quindi
         # la contesa resta bassa.
         self._lucchetto = threading.Lock()
+
+    # -- passaggi ----------------------------------------------------------
+
+    @staticmethod
+    def categoria(codice: str) -> str:
+        """La categoria a 3 caratteri di un codice ICD-10 (I48.0 -> I48)."""
+        return codice.split(".", 1)[0]
+
+    def _categoria_comune(self, codici) -> str | None:
+        """La categoria condivisa da tutti i codici, se ce n'e' una sola."""
+        categorie = {self.categoria(codice) for codice in codici}
+        return categorie.pop() if len(categorie) == 1 else None
+
+    def _generalizza(self, chiave: str) -> tuple[str | None, tuple[str, ...]]:
+        """(categoria, codici delle forme qualificate) per una menzione generica.
+
+        Considera solo i termini che *estendono* la menzione a confine di
+        parola: "fibrillazione atriale" raccoglie "fibrillazione atriale
+        parossistica" ma non "fibrillazione atriale" stessa (gia' cercata) ne'
+        parole che iniziano allo stesso modo per caso.
+        """
+        prefisso = chiave + " "
+        forme: list[str] = []
+        codici: list[str] = []
+        for termine in self._per_primo_token.get(chiave.split(" ", 1)[0], ()):
+            if termine.startswith(prefisso):
+                forme.append(termine)
+                codici.extend(self.indice[termine])
+        if not codici:
+            return None, ()
+        # Serve piu' di una forma qualificata. Con una sola non si distingue un
+        # concetto padre da un fratello piu' specifico, e l'errore che ne segue
+        # e' del tipo peggiore: plausibile. Il caso reale che ha imposto il
+        # vincolo e' "insufficienza mitralica", la cui unica forma indicizzata
+        # che la estende e' "insufficienza mitralica congenita" (Q23.3,
+        # malformazioni congenite): generalizzare avrebbe attribuito a una
+        # valvulopatia acquisita un codice di cardiopatia congenita.
+        if len(forme) < 2:
+            return None, tuple(sorted(set(codici)))
+        return self._categoria_comune(codici), tuple(sorted(set(codici)))
 
     def _per_gazetteer(self, testo: str) -> tuple[str, list[str]] | None:
         """Termine piu' lungo dell'indice contenuto nella menzione, se esiste."""
@@ -172,21 +254,58 @@ class RisolutoreICD:
             return None
         return migliore.forma_vocabolario, migliore.codici
 
-    def risolvi(
-        self, testo: str
-    ) -> tuple[str | None, StatoNormalizzazione, str | None, list[str]]:
-        """(codice, stato, concetto, candidati) per una menzione di condizione."""
+    # -- risoluzione -------------------------------------------------------
+
+    def _esito(self, codici, concetto: str, metodo: str) -> EsitoICD:
+        """Un insieme di codici candidati diventa un esito, senza forzature."""
+        candidati = tuple(sorted(set(codici)))
+        if len(candidati) == 1:
+            return EsitoICD(
+                candidati[0], StatoNormalizzazione.RISOLTO, concetto, candidati, metodo
+            )
+        categoria = self._categoria_comune(candidati)
+        if categoria is not None:
+            return EsitoICD(
+                categoria,
+                StatoNormalizzazione.RISOLTO,
+                concetto,
+                candidati,
+                f"{metodo}+categoria",
+            )
+        return EsitoICD(None, StatoNormalizzazione.AMBIGUO, concetto, candidati, metodo)
+
+    def risolvi(self, testo: str) -> EsitoICD:
+        """Collega una menzione di condizione a ICD-10."""
         chiave = normalizza(testo)
+        if not chiave:
+            return EsitoICD(None, StatoNormalizzazione.NIL, None, (), "non_risolto")
+
         codici = self.indice.get(chiave)
-        concetto = chiave if codici else None
+        if codici:
+            return self._esito(codici, chiave, "termine_esatto")
 
-        if codici is None:
-            esito = self._per_gazetteer(testo)
-            if esito is not None:
-                concetto, codici = esito
+        categoria, qualificate = self._generalizza(chiave)
+        if categoria is not None:
+            return EsitoICD(
+                categoria,
+                StatoNormalizzazione.RISOLTO,
+                chiave,
+                qualificate,
+                "generalizzazione_a_categoria",
+            )
 
-        if not codici:
-            return None, StatoNormalizzazione.NIL, None, []
-        if len(codici) == 1:
-            return codici[0], StatoNormalizzazione.RISOLTO, concetto, codici
-        return None, StatoNormalizzazione.AMBIGUO, concetto, codici
+        esito = self._per_gazetteer(testo)
+        if esito is not None:
+            forma, codici = esito
+            return self._esito(codici, forma, "gazetteer")
+
+        if qualificate:
+            # Forme qualificate esistono, ma sparse su categorie diverse (o una
+            # sola, troppo poco per generalizzare). Sceglierne una richiede il
+            # contesto clinico, che e' il compito dello step 5: i candidati
+            # restano visibili e la decisione no.
+            return EsitoICD(
+                None, StatoNormalizzazione.AMBIGUO, chiave, qualificate, "generalizzazione_ambigua"
+            )
+
+        return EsitoICD(None, StatoNormalizzazione.NIL, None, (), "non_risolto")

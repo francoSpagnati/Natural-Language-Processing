@@ -43,6 +43,7 @@ from gazetteer import GazetteerClinico
 from llm_backend import (
     BackendGemini,
     BackendLLM,
+    BackendOllama,
     ErroreLLM,
     ErroreQuotaGiornaliera,
     Richiesta,
@@ -203,24 +204,27 @@ def converti(
         # quando il risolutore aggancia un termine diverso: e' un dato prodotto
         # dalla pipeline e deve restare ispezionabile, non essere sovrascritto
         # dall'esito della normalizzazione.
-        provenienza, ancorata = _provenienza(
-            record, voce.campo, voce.testo_grezzo, f"{regola} concetto='{voce.concetto}'"
-        )
-        non_ancorate += not ancorata
         # Si tenta prima il concetto esteso e poi la citazione letterale: la
         # forma estesa e' quella che ha qualche possibilita' di comparire
         # nell'indice ICD, il letterale e' il ripiego quando l'espansione
         # allontana dal lessico del volume.
-        codice, stato_norm, concetto, _ = risolutore_icd.risolvi(voce.concetto)
-        if stato_norm is StatoNormalizzazione.NIL:
-            codice, stato_norm, concetto, _ = risolutore_icd.risolvi(voce.testo_grezzo)
+        esito = risolutore_icd.risolvi(voce.concetto)
+        if esito.stato is StatoNormalizzazione.NIL:
+            esito = risolutore_icd.risolvi(voce.testo_grezzo)
+        provenienza, ancorata = _provenienza(
+            record,
+            voce.campo,
+            voce.testo_grezzo,
+            f"{regola} concetto='{voce.concetto}' icd:{esito.metodo}",
+        )
+        non_ancorate += not ancorata
         condizioni.append(
             CondizioneEstratta(
                 testo_grezzo=voce.testo_grezzo,
-                concetto=concetto or voce.concetto,
-                codice=codice,
-                sistema_codifica="ICD-10" if codice else None,
-                stato_normalizzazione=stato_norm,
+                concetto=esito.concetto or voce.concetto,
+                codice=esito.codice,
+                sistema_codifica="ICD-10" if esito.codice else None,
+                stato_normalizzazione=esito.stato,
                 stato=voce.stato,
                 provenienza=provenienza,
             )
@@ -346,7 +350,17 @@ def _elabora(rec, backend, risolutore_atc, risolutore_icd, ragionamento, interru
 
 def main() -> None:
     argomenti = argparse.ArgumentParser(description="Pipeline B: estrazione con LLM.")
-    argomenti.add_argument("--modello", default=None, help="Modello Gemini da usare.")
+    argomenti.add_argument(
+        "--motore",
+        default="locale",
+        choices=["locale", "gemini"],
+        help="Dove gira il modello. 'locale' usa Ollama sulla macchina; 'gemini' "
+        "usa Google AI Studio, che sul piano gratuito concede 20 richieste al "
+        "giorno per modello.",
+    )
+    argomenti.add_argument(
+        "--modello", default=None, help="Modello da usare, se diverso dal predefinito del motore."
+    )
     argomenti.add_argument(
         "--record", type=int, default=None, help="Numero di record da elaborare."
     )
@@ -357,16 +371,19 @@ def main() -> None:
     argomenti.add_argument(
         "--parallele",
         type=int,
-        default=8,
-        help="Richieste contemporanee. L'API impiega decine di secondi per record, "
-        "quindi in sequenza l'intero dataset richiederebbe ore.",
+        default=None,
+        help="Richieste contemporanee. Predefinito 8 sul motore remoto, dove il "
+        "tempo e' attesa di rete; 1 sul motore locale, dove e' calcolo e "
+        "parallelizzare non aggiunge nulla se non consumo di memoria.",
     )
     opzioni = argomenti.parse_args()
 
     record, _ = carica_dataset(PERCORSO_DATASET)
     selezione = scegli_record(record, opzioni.record, opzioni.seme)
+    parallele = opzioni.parallele or (1 if opzioni.motore == "locale" else 8)
 
-    backend = BackendGemini(**({"modello": opzioni.modello} if opzioni.modello else {}))
+    classe = BackendOllama if opzioni.motore == "locale" else BackendGemini
+    backend = classe(**({"modello": opzioni.modello} if opzioni.modello else {}))
     risolutore_atc = RisolutoreATC()
     # Stesso gazetteer della pipeline A: la normalizzazione deve essere
     # identica nelle due pipeline, altrimenti il confronto dello step 6
@@ -376,7 +393,7 @@ def main() -> None:
     CARTELLA_USCITA.mkdir(parents=True, exist_ok=True)
     print(
         f"Pipeline B su {len(selezione)} record con {backend.modello}, "
-        f"{opzioni.parallele} richieste in parallelo."
+        f"{parallele} richieste in parallelo."
     )
 
     totali = {"condizioni": 0, "farmaci": 0, "allergie": 0, "menzioni_non_ancorate": 0}
@@ -385,7 +402,7 @@ def main() -> None:
     interruzione = threading.Event()
     avvio = time.monotonic()
 
-    with ThreadPoolExecutor(max_workers=opzioni.parallele) as pool:
+    with ThreadPoolExecutor(max_workers=parallele) as pool:
         futuri = [
             pool.submit(
                 _elabora,
