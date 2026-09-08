@@ -8,11 +8,21 @@ scelta deterministica dello step 3.
 
 ---
 
-## 1. Il fornitore: Google AI Studio, non Anthropic
+## 1. Quale modello, e perché
 
-Il progetto usa **Gemini via Google AI Studio**. La ragione è economica e non
-tecnica: le API Anthropic si pagano a consumo e non rientrano nel piano a
-disposizione, mentre AI Studio offre una quota utilizzabile.
+La scelta è vincolata dal costo, non dalla qualità: le API Anthropic si pagano
+a consumo e non rientrano nel piano a disposizione. Si sono quindi percorse due
+strade, in quest'ordine:
+
+1. **Google AI Studio (Gemini flash)**, gratuito ma limitato a 20 richieste al
+   giorno per modello — abbastanza per capire come si comporta un modello
+   grande su questo compito, non per elaborare il dataset;
+2. **un modello locale** (`qwen3:4b` via Ollama), che è la configurazione
+   effettiva della pipeline. Vedi la sezione 6.
+
+Entrambi stanno dietro la stessa interfaccia e la stessa cache, e si scelgono
+con `--motore locale|gemini`. Quanto segue in questa sezione riguarda il
+motore remoto.
 
 La chiave sta in `.env.local`, escluso da git; non compare in nessun file
 versionato. `llm_backend.chiave_api()` la legge dall'ambiente e ripiega sul file
@@ -235,9 +245,112 @@ la stessa cosa e chi legge deve poterli distinguere senza risalire al testo.
 
 ---
 
-## 6. Risultati misurati
+## 6. Il passaggio al modello locale
+
+La quota gratuita di AI Studio — 20 richieste al giorno per modello — rende
+impraticabile una corsa sul dataset, e la fatturazione e' stata esclusa. La
+pipeline B gira quindi su un **modello eseguito in locale** con Ollama,
+`qwen3:4b`, dietro la stessa interfaccia e la stessa cache del backend remoto
+(`--motore locale|gemini`).
+
+Anche in locale la generazione e' **vincolata allo schema**: Ollama accetta uno
+JSON Schema nel campo `format` e lo impone al decodificatore. E' cio' che rende
+sostenibile il passaggio a un modello molto meno capace — la validita'
+strutturale e' garantita dal motore, non dalla bravura del modello.
+
+### L'hardware, e cosa ci sta
+
+| | |
+|---|---|
+| CPU | AMD Ryzen AI 7 PRO 350, 8 core / 16 thread |
+| RAM | 14 GiB |
+| GPU | Radeon 860M (`gfx1152`), via ROCm — 37/37 livelli sulla GPU |
+
+Il tetto pratico e' un modello da ~4 miliardi di parametri quantizzato. Due
+tentativi con modelli piu' grandi hanno fatto intervenire l'**OOM killer del
+kernel**, che ha ucciso `ollama` insieme all'editor: `gemma2:9b` (5,4 GB) e
+`medgemma-4b-it`, che pur essendo un file da 3,3 GB e' multimodale e in memoria
+occupa molto di piu'. Il modello medicale resta quindi **non valutato**.
+
+### Due difetti trovati misurando, non ipotizzando
+
+**1. Il campo `system` di Ollama non raggiungeva il modello.** Stesso record,
+stesse identiche istruzioni:
+
+| dove stanno le istruzioni | token generati | risultato |
+|---|---|---|
+| campo `system` | 39 | **0 entita'** |
+| in testa al `prompt` | 3 063 | 40 condizioni, 6 farmaci |
+
+Non era un limite del modello ne' del ragionamento: era il canale sbagliato.
+
+**2. Lo schema non dichiarava obbligatori i campi di primo livello.** Pydantic
+non marca obbligatorio un campo che ha un valore predefinito, e il modello
+sfruttava la scappatoia restituendo `{"condizioni": []}` e omettendo il resto.
+Il predefinito serve al codice Python, non al modello: `schema_estrazione_llm()`
+ora elenca tutti i campi in `required`.
+
+### Il prompt riscritto per un modello piccolo
+
+La prima versione del prompt enunciava regole astratte. Su un modello da 4
+miliardi di parametri ha prodotto l'errore piu' grave possibile: **le negazioni
+finivano nel testo del concetto invece che nel campo `stato`**.
+
+| testo nel referto | `stato` | `concetto` |
+|---|---|---|
+| «Non noto distiroidismo» | `affermato` ❌ | "non distiroidismo" |
+| «no diabete» | `affermato` ❌ | "non diabete" |
+| «nega iperuricemia» | `affermato` ❌ | "non iperuricemia" |
+
+E' esattamente cio' per cui esiste la logica ConText dello step 3, ed e' cio'
+che rende una condizione sicura o pericolosa per il filtro dello step 8.
+
+Il prompt e' stato riscritto **per esempi invece che per regole**, con la
+negazione come regola numero uno e l'errore commesso mostrato come
+controesempio esplicito (`SBAGLIATO: concetto "non diabete" con stato
+"affermato"`). Sullo stesso record: **3 negazioni su 3 corrette**, acronimi
+sciolti meglio (`OSAS` → «sindrome delle apnee ostruttive del sonno») e 16% di
+token generati in meno.
+
+### Cosa il modello locale fa bene e cosa no
+
+Sul record di prova, 38 condizioni:
+
+* **0 menzioni non ancorate.** Ogni citazione esiste alla lettera nel referto:
+  nessuna allucinazione.
+* **negazione corretta** dopo la riscrittura del prompt;
+* **21% di menzioni ripetute** (38 menzioni per 30 concetti distinti). Non
+  vengono eliminate: hanno offset diversi, sono menzioni distinte dello stesso
+  fatto, e il progetto richiede che tutti i dati restino ispezionabili. La
+  deduplica appartiene semmai al knowledge graph dello step 7;
+* **estrae ancora non-condizioni** («108 glicemia», «Vaccino x 3»,
+  «ecocardiogramma normofunzione») e talvolta la familiarita', nonostante le
+  regole lo vietino. In gran parte questi si autoescludono in fase di
+  normalizzazione, perche' non corrispondono ad alcun termine ICD;
+* **sotto-estrae dall'elenco di dimissione**: su un referto con 889 caratteri di
+  terapia ha trovato 6 farmaci contro i 16 della pipeline A. E' il campo
+  semi-strutturato che il parser deterministico interpreta gia' al 99%.
+
+### Tempi
+
+| | s/record | 857 record |
+|---|---|---|
+| referto intero | 199 | ~47 h |
+| sola anamnesi | 158 | ~38 h |
+
+~11 token/s con il modello interamente sulla GPU. Dare al modello la sola prosa
+dell'anamnesi fa risparmiare il 21%, molto meno di quanto ci si aspetterebbe: il
+costo sta quasi tutto nelle condizioni estratte dalla prosa, non nei campi di
+terapia.
+
+---
+
+## 7. Risultati misurati (motore remoto)
 
 Su **14 record** (quanti la quota gratuita ha consentito), 552 entità estratte.
+Queste misure sono state prese con il **prompt precedente** e con Gemini, prima
+del passaggio al modello locale: restano come riferimento di quanto un modello
+grande ottiene sullo stesso compito.
 
 | | pipeline B | pipeline A (riferimento) |
 |---|---|---|
@@ -276,7 +389,7 @@ record**. Sul listino AI Studio:
 
 ---
 
-## 7. Limiti noti
+## 8. Limiti noti
 
 * **La quota gratuita è il vincolo dominante**: 20 richieste al giorno per
   modello rendono impraticabile una corsa sull'intero dataset senza attivare la
@@ -300,7 +413,7 @@ record**. Sul listino AI Studio:
 
 ---
 
-## 8. Componenti creati
+## 9. Componenti creati
 
 | File | Ruolo |
 |---|---|

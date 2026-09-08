@@ -408,10 +408,15 @@ class BackendOllama(BackendLLM):
         self.ragionamento = ragionamento
 
     def _corpo(self, richiesta: Richiesta) -> dict:
+        # Le istruzioni vanno nel prompt, non nel campo `system`. Misurato sullo
+        # stesso record con qwen3:4b: con le istruzioni in `system` il modello
+        # genera 39 token e restituisce liste vuote; con le stesse identiche
+        # istruzioni in testa al prompt ne genera 3.063 e trova 40 condizioni e
+        # 6 farmaci. Il campo `system` di Ollama non raggiunge il modello in modo
+        # efficace, almeno con questo template e in presenza di `format`.
         return {
             "model": self.modello,
-            "system": richiesta.istruzioni,
-            "prompt": richiesta.testo,
+            "prompt": f"{richiesta.istruzioni}\n\nREFERTI DEL RICOVERO:\n{richiesta.testo}",
             "format": richiesta.schema,
             "stream": False,
             "think": self.ragionamento,

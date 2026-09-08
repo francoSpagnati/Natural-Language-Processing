@@ -47,7 +47,7 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
                                       ▼
                     ┌─────────── tre pipeline di estrazione ───────────┐
                     ▼                 ▼                                ▼
-             A: deterministica   B: LLM (Gemini)         C: NER + Entity Linking
+             A: deterministica   B: LLM (locale)         C: NER + Entity Linking
                  step 3 ✅          step 4 ✅                    step 5 ⬜
                     │                 │                                │
                     └────── etichette silver ────────────────────────►─┘
@@ -94,7 +94,7 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
 
-I test sono 134 in tutto e **nessuno usa la rete**: la pipeline B e' provata
+I test sono 146 in tutto e **nessuno usa la rete**: la pipeline B e' provata
 con un backend fittizio, perche' una suite dipendente dall'API sarebbe lenta,
 costosa e verde o rossa a seconda del carico dei server.
 

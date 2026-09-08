@@ -348,6 +348,18 @@ class TestBackendLocale(unittest.TestCase):
         backend.genera(Richiesta(istruzioni="i", testo="t", schema=schema))
         self.assertEqual(self.BackendFinto.corpi[0]["format"], schema)
 
+    def test_le_istruzioni_finiscono_nel_prompt(self):
+        """Regressione. Con le istruzioni nel campo `system` di Ollama, qwen3:4b
+        generava 39 token e restituiva liste vuote; con le stesse istruzioni in
+        testa al prompt ne generava 3.063 e trovava 40 condizioni. Il campo
+        `system` non deve essere usato."""
+        backend = self._backend([{"response": "{}", "eval_count": 1}])
+        backend.genera(Richiesta(istruzioni="REGOLE-QUI", testo="referto", schema={}))
+        corpo = self.BackendFinto.corpi[0]
+        self.assertNotIn("system", corpo)
+        self.assertIn("REGOLE-QUI", corpo["prompt"])
+        self.assertIn("referto", corpo["prompt"])
+
     def test_ragionamento_disattivato_per_impostazione(self):
         """Su CPU i token di pensiero decidono se una corsa dura ore o giorni."""
         backend = self._backend([{"response": "{}", "eval_count": 1}])

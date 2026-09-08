@@ -79,45 +79,67 @@ MOMENTO_PER_CAMPO = {
 
 
 ISTRUZIONI = """\
-Sei un estrattore di informazioni cliniche da referti cardiologici italiani.
-Ricevi i referti di un ricovero e restituisci le entita' che vi compaiono.
+Estrai le entita' cliniche dai referti di un ricovero cardiologico italiano.
 
-REGOLE
+REGOLA 1 - LO STATO VA NEL CAMPO `stato`, MAI NEL TESTO
+Quando il referto nega o mette in dubbio qualcosa, questo si registra nel campo
+`stato`. Non si scrive mai la negazione dentro `concetto`.
 
-1. Riporta in `testo_grezzo` (per le allergie in `allergene`) la porzione di
-   referto copiata alla lettera, carattere per carattere: stessa grafia, stesse
-   abbreviazioni, stessi eventuali errori di battitura. Serve a ritrovare la
-   menzione nel testo, quindi non correggerla e non tradurla.
+  "Non noto distiroidismo"  ->  concetto "distiroidismo",  stato "negato"
+  "no diabete"              ->  concetto "diabete mellito", stato "negato"
+  "nega iperuricemia"       ->  concetto "iperuricemia",   stato "negato"
+  "sospetta angina"         ->  concetto "angina",         stato "incerto"
 
-2. Per le condizioni compila anche `concetto` con la forma estesa e standard
-   dello stesso termine, con gli acronimi sciolti. Esempi: "BPCO" ->
-   "broncopneumopatia cronica ostruttiva"; "FA" -> "fibrillazione atriale";
-   "IRC" -> "insufficienza renale cronica". Se il referto usa gia' la forma
-   estesa, ripetila identica.
+  SBAGLIATO: concetto "non diabete" con stato "affermato".
 
-3. Assegna lo stato guardando il contesto, non la singola parola:
-   - "negato" quando il referto esclude la condizione o l'assunzione del
-     farmaco. Attenzione: una negazione in italiano copre tutto l'elenco che la
-     segue, quindi in "Nega diabete, ipertensione e dislipidemia" sono negate
-     tutte e tre;
-   - "incerto" quando la menzione e' sospetta, probabile, dubbia o da
-     confermare;
-   - "affermato" negli altri casi, comprese le condizioni pregresse o risolte:
-     restano parte della storia clinica del paziente.
+Una negazione copre tutto l'elenco che la segue: in "Nega diabete, ipertensione
+e dislipidemia" sono negate tutte e tre.
 
-4. Non elencare fra le condizioni del paziente cio' che il referto attribuisce a
-   un familiare (per esempio "familiarita' per cardiopatia ischemica").
+REGOLA 2 - COSA E' UNA CONDIZIONE
+Solo diagnosi, patologie e fattori di rischio del paziente.
 
-5. Elenca come condizioni le diagnosi, le patologie e i fattori di rischio.
-   Escludi sintomi isolati, parametri strumentali, valori di laboratorio e
-   descrizioni di procedure.
+  SI:  ipertensione arteriosa, fibrillazione atriale, BPCO, diabete, obesita',
+       fumo, stenosi aortica, insufficienza renale cronica
+  NO:  stato civile, professione, valori di laboratorio ("108 glicemia"),
+       esami e referti strumentali ("ecocardiogramma normale", "coro-CT"),
+       ricoveri e visite, terapie, "asintomatico", "alvo regolare"
 
-6. Elenca ogni farmaco separatamente, anche quando compare in un elenco di
-   terapia. Riporta in `posologia` dose e frequenza cosi' come sono scritte.
+REGOLA 3 - NIENTE FAMILIARITA'
+Cio' che il referto attribuisce a un familiare non e' una condizione del
+paziente. "Familiarita' per ipertensione" e "il padre e' cardiopatico" non
+vanno elencati.
 
-7. Non dedurre nulla: non aggiungere il farmaco che tratterebbe una condizione
-   presente, ne' la condizione che giustificherebbe un farmaco. Riporta solo
-   cio' che e' scritto. Se un campo non contiene entita', lascia la lista vuota.
+REGOLA 4 - UNA VOLTA SOLA
+Se la stessa condizione compare piu' volte nel referto, elencala una volta
+sola. "Ipertensione arteriosa essenziale" e "ipertensione da 15 aa" sono la
+stessa condizione.
+
+REGOLA 5 - CITAZIONE ALLA LETTERA
+`testo_grezzo` (per le allergie `allergene`) e' una porzione del referto
+copiata carattere per carattere: stessa grafia, stesse abbreviazioni, stessi
+errori di battitura. Serve a ritrovare la menzione nel testo, quindi non
+correggerla e non tradurla. Cita la menzione, non la frase intera.
+
+REGOLA 6 - CONCETTO ESTESO
+In `concetto` scrivi lo stesso termine in forma estesa e standard, con gli
+acronimi sciolti:
+
+  "BPCO" -> "broncopneumopatia cronica ostruttiva"
+  "FA"   -> "fibrillazione atriale"
+  "IRC"  -> "insufficienza renale cronica"
+  "OSAS" -> "sindrome delle apnee ostruttive del sonno"
+
+Se il referto usa gia' la forma estesa, ripetila identica.
+
+REGOLA 7 - FARMACI
+Elenca ogni farmaco separatamente, anche dentro un elenco di terapia. In
+`posologia` riporta dose e frequenza come sono scritte. Le condizioni pregresse
+o risolte restano "affermato": fanno parte della storia clinica.
+
+REGOLA 8 - NON DEDURRE
+Non aggiungere il farmaco che tratterebbe una condizione presente, ne' la
+condizione che giustificherebbe un farmaco. Solo cio' che e' scritto. Se un
+campo non contiene entita', lascia la lista vuota.
 """
 
 

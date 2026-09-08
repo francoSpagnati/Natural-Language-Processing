@@ -488,6 +488,12 @@ def schema_estrazione_llm() -> dict:
     """
     grezzo = EstrazioneLLM.model_json_schema()
     definizioni = grezzo.pop("$defs", {})
+    # Pydantic non marca obbligatorio un campo che ha un valore predefinito, ma
+    # qui il predefinito serve al codice Python, non al modello: senza `required`
+    # un modello piccolo soddisfa lo schema restituendo `{"condizioni": []}` e
+    # omettendo il resto -- e' successo davvero con qwen3:4b. Elencarli tutti lo
+    # costringe a pronunciarsi su ciascuno.
+    grezzo["required"] = list(grezzo["properties"])
 
     def espandi(nodo):
         if isinstance(nodo, list):

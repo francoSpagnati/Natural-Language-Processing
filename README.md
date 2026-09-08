@@ -62,8 +62,15 @@ pip install -r requirements.txt
 python3 -m spacy download it_core_news_sm   # modello italiano, serve dallo step 3
 ```
 
-La pipeline B (step 4) chiama Google AI Studio e richiede una chiave in
-`.env.local`, file escluso da git:
+La pipeline B (step 4) gira per impostazione predefinita su un **modello
+locale** servito da [Ollama](https://ollama.com):
+
+```bash
+ollama pull qwen3:4b
+```
+
+In alternativa puo' usare Google AI Studio (`--motore gemini`), che richiede una
+chiave in `.env.local`, file escluso da git:
 
 ```bash
 echo 'GEMINI_API_KEY=...' > .env.local
@@ -89,9 +96,10 @@ python3 src/normalize_drugs.py      # risoluzione ATC dei farmaci
 
 python3 src/extract_a.py            # pipeline A su tutti i record
 
-python3 src/extract_b.py --record 25 --parallele 8   # pipeline B (richiede la chiave)
+python3 src/extract_b.py --record 25                 # pipeline B, modello locale (Ollama)
+python3 src/extract_b.py --motore gemini --record 10 # pipeline B, Google AI Studio
 
-python3 -m unittest discover -s tests -v   # 134 test, nessuno usa la rete
+python3 -m unittest discover -s tests -v   # 146 test, nessuno usa la rete
 ```
 
 Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
@@ -101,7 +109,8 @@ Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
 | Fonte | Uso | Licenza |
 |---|---|---|
 | [AIFA — Agenzia Italiana del Farmaco](https://www.aifa.gov.it/liste-dei-farmaci) | registro ATC in italiano, anagrafica delle confezioni (nome commerciale → principio attivo → ATC), titolari AIC | CC-BY 4.0 |
-| [Google AI Studio — API Gemini](https://ai.google.dev/) | modello linguistico della pipeline B (step 4) e del ranker LLM (step 9). **Non** è una fonte di conoscenza: non fornisce codici, solo l'individuazione delle menzioni | servizio, chiave personale |
+| [Google AI Studio — API Gemini](https://ai.google.dev/) | modello linguistico di riferimento per la pipeline B (step 4). **Non** è una fonte di conoscenza: non fornisce codici, solo l'individuazione delle menzioni | servizio, 20 richieste/giorno sul piano gratuito |
+| [Qwen3 4B](https://ollama.com/library/qwen3) via Ollama | modello linguistico effettivo della pipeline B, eseguito in locale | Apache 2.0 |
 | ICD-10 2019 italiano, Centro Collaboratore OMS — Regione FVG, via [reteclassificazioni.it](https://www.reteclassificazioni.it/) | terminologia delle condizioni: 10 803 codici, 13 642 termini | PDF scaricato manualmente |
 
 `src/fetch_external_kb.py` le scarica e scrive `kb/manifest_fonti.json` con URL,
