@@ -8,7 +8,7 @@ espresse come cammini in una knowledge base a grafo (indicazioni,
 controindicazioni, interazioni, linee guida), ed è esposto come **tool MCP**
 richiamabile da un LLM.
 
-> **Stato: step 4 di 11 completato** (pipeline B: estrazione con un modello linguistico, codici sempre assegnati dalle knowledge base e mai dal modello).
+> **Stato: step 5 di 11 completato** (pipeline C: NER italiano addestrato su etichette silver + collegamento alla knowledge base).
 > Lo sviluppo procede per step sequenziali; vedi
 > [`docs/00_architettura.md`](docs/00_architettura.md) per la visione d'insieme
 > e l'indice dei documenti.
@@ -99,7 +99,11 @@ python3 src/extract_a.py            # pipeline A su tutti i record
 python3 src/extract_b.py --record 25                 # pipeline B, modello locale (Ollama)
 python3 src/extract_b.py --motore gemini --record 10 # pipeline B, Google AI Studio
 
-python3 -m unittest discover -s tests -v   # 146 test, nessuno usa la rete
+python3 src/silver_labels.py        # etichette silver dall'uscita di pipeline A
+python3 src/ner_train.py            # addestra il NER (circa un'ora su CPU)
+python3 src/extract_c.py            # pipeline C su tutti i record
+
+python3 -m unittest discover -s tests -v   # 179 test, nessuno usa la rete
 ```
 
 Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
@@ -111,6 +115,7 @@ Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
 | [AIFA — Agenzia Italiana del Farmaco](https://www.aifa.gov.it/liste-dei-farmaci) | registro ATC in italiano, anagrafica delle confezioni (nome commerciale → principio attivo → ATC), titolari AIC | CC-BY 4.0 |
 | [Google AI Studio — API Gemini](https://ai.google.dev/) | modello linguistico di riferimento per la pipeline B (step 4). **Non** è una fonte di conoscenza: non fornisce codici, solo l'individuazione delle menzioni | servizio, 20 richieste/giorno sul piano gratuito |
 | [Qwen3 4B](https://ollama.com/library/qwen3) via Ollama | modello linguistico effettivo della pipeline B, eseguito in locale | Apache 2.0 |
+| [bioBIT](https://huggingface.co/IVN-RIN/bioBIT) — Buonocore et al., *J. Biomed. Inform.* 2023 | modello di base del NER italiano della pipeline C (step 5) | modello pubblico su Hugging Face |
 | ICD-10 2019 italiano, Centro Collaboratore OMS — Regione FVG, via [reteclassificazioni.it](https://www.reteclassificazioni.it/) | terminologia delle condizioni: 10 803 codici, 13 642 termini | PDF scaricato manualmente |
 
 `src/fetch_external_kb.py` le scarica e scrive `kb/manifest_fonti.json` con URL,

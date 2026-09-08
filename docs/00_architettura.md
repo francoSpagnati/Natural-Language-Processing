@@ -15,7 +15,7 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | 2 | [`02b_risoluzione_atc.md`](02b_risoluzione_atc.md) | ✅ ATC dei farmaci risolto |
 | 3 | [`03_pipeline_estrazione_A.md`](03_pipeline_estrazione_A.md) | ✅ completato |
 | 4 | [`04_pipeline_estrazione_B.md`](04_pipeline_estrazione_B.md) | ✅ completato |
-| 5 | `05_pipeline_estrazione_C.md` | ⬜ da fare |
+| 5 | [`05_pipeline_estrazione_C.md`](05_pipeline_estrazione_C.md) | ✅ completato |
 | 6 | `06_confronto_pipeline.md` | ⬜ da fare |
 | 7 | `07_knowledge_graph.md` | ⬜ da fare |
 | 8 | `08_motore_fase1_filtro.md` | ⬜ da fare |
@@ -48,7 +48,7 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
                     ┌─────────── tre pipeline di estrazione ───────────┐
                     ▼                 ▼                                ▼
              A: deterministica   B: LLM (locale)         C: NER + Entity Linking
-                 step 3 ✅          step 4 ✅                    step 5 ⬜
+                 step 3 ✅          step 4 ✅                    step 5 ✅
                     │                 │                                │
                     └────── etichette silver ────────────────────────►─┘
                                       │
@@ -90,11 +90,17 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `src/risolutori.py` | `schema`, mappatura ATC, terminologia ICD | **tutte** le pipeline: la normalizzazione dev'essere identica | 4 |
 | `src/llm_backend.py` | solo stdlib (`urllib`, `hashlib`) | step 4, step 9 (LLMRanker), step 10 | 4 |
 | `src/extract_b.py` | `llm_backend`, `risolutori`, `gazetteer`, `schema` | step 6 (confronto) | 4 |
+| `src/entity_linking.py` | `risolutori`, terminologia ICD | pipeline A e C: la codifica dev'essere identica | 5 |
+| `src/silver_labels.py` | uscita di `extract_a` | `ner_train`, `ner_infer` | 5 |
+| `src/ner_train.py` | `torch`, `transformers`, bioBIT | produce il modello in `data/processed/ner_it/` | 5 |
+| `src/ner_infer.py` | il modello addestrato | `extract_c` | 5 |
+| `src/extract_c.py` | `ner_infer`, `entity_linking`, `extract_a` (parti condivise) | step 6 (confronto) | 5 |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
+| `tests/test_pipeline_c.py` | `silver_labels`, `ner_train`, `entity_linking` | — | 5 |
 
-I test sono 146 in tutto e **nessuno usa la rete**: la pipeline B e' provata
+I test sono 179 in tutto e **nessuno usa la rete**: la pipeline B e' provata
 con un backend fittizio, perche' una suite dipendente dall'API sarebbe lenta,
 costosa e verde o rossa a seconda del carico dei server.
 
@@ -115,6 +121,9 @@ costosa e verde o rossa a seconda del carico dei server.
 | `data/processed/pipeline_a/*.json` | uno `StatoPaziente` per record (1 000) | `src/extract_a.py` |
 | `data/processed/pipeline_b/*.json` | uno `StatoPaziente` per record elaborato dall'LLM | `src/extract_b.py` |
 | `data/interim/cache_llm/*.json` | risposte del modello indicizzate per impronta: rendono ripetibile la valutazione | `src/llm_backend.py` |
+| `data/interim/silver_ner/*.json` | etichette BIO divise per ricovero (700/150/150) | `src/silver_labels.py` |
+| `data/processed/ner_it/` | modello NER addestrato e sue misure su sviluppo | `src/ner_train.py` |
+| `data/processed/pipeline_c/*.json` | uno `StatoPaziente` per record dalla pipeline C | `src/extract_c.py` |
 | `.env.local` | chiave API di Google AI Studio | **non versionato**, escluso da `.gitignore` |
 | `data/processed/pipeline_a/*.json` | 1 000 stati paziente estratti dalla pipeline A | `src/extract_a.py` |
 | `reports/00_esplorazione.txt` | report completo dello step 0 | rigenerato da `src/explore_dataset.py` |

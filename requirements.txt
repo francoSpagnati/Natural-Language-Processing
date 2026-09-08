@@ -34,13 +34,23 @@ spacy>=3.7
 # Serve invece una chiave API in `.env.local` (non versionato):
 #   GEMINI_API_KEY=...
 #
+# --- Step 5: pipeline C (NER + entity linking) -------------------------------
+# Il riconoscitore di entita' e' un transformer per classificazione di token,
+# affinato sulle etichette silver prodotte dalla pipeline A. `transformers`
+# fornisce il modello e il tokenizzatore veloce (serve la mappa di offset per
+# allineare intervalli di caratteri e sottotoken); `torch` e' il motore di
+# addestramento. Il ciclo di addestramento e' scritto a mano invece di usare
+# `Trainer`: quaranta righe in cambio della visibilita' di ogni passaggio.
+#   Modello di base: IVN-RIN/bioBIT (BERT italiano biomedico), scaricato
+#   automaticamente al primo addestramento.
+transformers>=4.40
+torch>=2.0
+
 # --- Step successivi (da scommentare quando lo step viene implementato) -------
 # rdflib           # step 7: knowledge graph RDF + query SPARQL
 # networkx         # step 7: conversione dei sottografi per la visualizzazione
 # pyvis            # step 7: resa HTML interattiva dei sottografi
 # matplotlib       # step 7/11: figure statiche e tabelle dei risultati
 # mcp              # step 10: SDK ufficiale, FastMCP
-# transformers     # step 5: fine-tuning del modello NER italiano
-# torch            # step 5: backend del training
 # scikit-learn     # step 6/11: metriche di accordo e valutazione
 # pandas           # step 11: tabelle dei risultati

@@ -59,7 +59,11 @@ from schema import (  # noqa: E402
     StatoPaziente,
 )
 
-from risolutori import RisolutoreATC  # ri-esportato: gia' usato come extract_a.RisolutoreATC
+from entity_linking import CollegatoreICD
+from risolutori import (  # RisolutoreATC ri-esportato: gia' usato come extract_a.RisolutoreATC
+    RisolutoreATC,
+    RisolutoreICD,
+)
 
 RADICE = Path(__file__).resolve().parent.parent
 
@@ -68,7 +72,7 @@ CAMPO_INGRESSO = "Terapia medica all'ingresso"
 CAMPO_DIMISSIONE = "Terapia alla Dimissione"
 
 
-def _stato_da_attributi(attributi: dict) -> StatoConoscenza:
+def stato_da_attributi(attributi: dict) -> StatoConoscenza:
     """Traduce gli attributi ConText nello stato di conoscenza dello schema.
 
     La negazione prevale sull'incertezza: "non si esclude" a parte, quando un
@@ -83,7 +87,7 @@ def _stato_da_attributi(attributi: dict) -> StatoConoscenza:
     return StatoConoscenza.AFFERMATO
 
 
-def _regola(attributi: dict, base: str) -> str:
+def regola_provenienza(attributi: dict, base: str) -> str:
     """Descrive in una stringa la regola che ha prodotto l'entità.
 
     È il requisito di tracciabilità del brief: per ogni entità si deve poter
@@ -98,7 +102,7 @@ def _regola(attributi: dict, base: str) -> str:
     return f"{base} + ConText({dettagli})"
 
 
-def _farmaci_da_campo_strutturato(
+def farmaci_da_campo_strutturato(
     record: RecordPaziente, risolutore: RisolutoreATC
 ) -> list[FarmacoEstratto]:
     """Estrae i farmaci dai due campi terapia semi-strutturati."""
@@ -158,7 +162,10 @@ def _farmaci_da_campo_strutturato(
 
 
 def _entita_dalla_prosa(
-    record: RecordPaziente, gazetteer: GazetteerClinico, risolutore: RisolutoreATC
+    record: RecordPaziente,
+    gazetteer: GazetteerClinico,
+    risolutore: RisolutoreATC,
+    collegatore: CollegatoreICD,
 ) -> tuple[list[CondizioneEstratta], list[FarmacoEstratto]]:
     """Riconosce condizioni e farmaci nella prosa, con negazione e incertezza."""
     testo = record.testo_anamnesi or ""
@@ -178,28 +185,25 @@ def _entita_dalla_prosa(
             testo_originale=menzione.testo,
             inizio=menzione.inizio,
             fine=menzione.fine,
-            regola=_regola(attributi, f"gazetteer:{menzione.forma_vocabolario}"),
+            regola=regola_provenienza(attributi, f"gazetteer:{menzione.forma_vocabolario}"),
         )
 
         if menzione.etichetta == ETICHETTA_CONDIZIONE:
-            # Una menzione con più codici compatibili non viene decisa qui: la
-            # disambiguazione ha bisogno del contesto e appartiene allo step 5.
-            codice = menzione.codici[0] if len(menzione.codici) == 1 else None
-            stato_norm = (
-                StatoNormalizzazione.RISOLTO
-                if codice
-                else StatoNormalizzazione.AMBIGUO
-                if menzione.codici
-                else StatoNormalizzazione.NIL
-            )
+            # La codifica passa dallo stesso collegatore usato dalla pipeline C.
+            # Prendere qui i codici direttamente dal gazetteer sarebbe piu'
+            # semplice ma renderebbe le due pipeline diverse anche nella
+            # normalizzazione, e il confronto dello step 6 misurerebbe la somma
+            # di due differenze invece del solo riconoscimento delle menzioni.
+            esito = collegatore.collega(menzione.testo)
+            codice, stato_norm = esito.codice, esito.stato
             condizioni.append(
                 CondizioneEstratta(
                     testo_grezzo=menzione.testo,
-                    concetto=menzione.forma_vocabolario,
+                    concetto=esito.concetto or menzione.forma_vocabolario,
                     codice=codice,
                     sistema_codifica="ICD-10" if codice else None,
                     stato_normalizzazione=stato_norm,
-                    stato=_stato_da_attributi(attributi),
+                    stato=stato_da_attributi(attributi),
                     provenienza=provenienza,
                 )
             )
@@ -212,7 +216,7 @@ def _entita_dalla_prosa(
                     stato_normalizzazione=stato_norm,
                     fonte_normalizzazione=fonte,
                     momento=MomentoTerapia.NARRATIVO,
-                    stato=_stato_da_attributi(attributi),
+                    stato=stato_da_attributi(attributi),
                     provenienza=provenienza,
                 )
             )
@@ -220,7 +224,7 @@ def _entita_dalla_prosa(
     return condizioni, farmaci
 
 
-def _allergie(record: RecordPaziente) -> tuple[list[AllergiaEstratta], StatoConoscenza]:
+def allergie_dal_referto(record: RecordPaziente) -> tuple[list[AllergiaEstratta], StatoConoscenza]:
     """Estrae le allergie e lo *stato* della sezione, che sono cose diverse.
 
     Una lista vuota può voler dire "il clinico ha verificato che non ce ne sono"
@@ -261,12 +265,19 @@ def _allergie(record: RecordPaziente) -> tuple[list[AllergiaEstratta], StatoCono
 
 
 def estrai(
-    record: RecordPaziente, gazetteer: GazetteerClinico, risolutore: RisolutoreATC
+    record: RecordPaziente,
+    gazetteer: GazetteerClinico,
+    risolutore: RisolutoreATC,
+    collegatore: CollegatoreICD | None = None,
 ) -> StatoPaziente:
     """Costruisce lo stato paziente strutturato a partire da un record."""
-    condizioni, farmaci_prosa = _entita_dalla_prosa(record, gazetteer, risolutore)
-    farmaci = _farmaci_da_campo_strutturato(record, risolutore) + farmaci_prosa
-    allergie, stato_sezione = _allergie(record)
+    if collegatore is None:
+        collegatore = CollegatoreICD(RisolutoreICD(gazetteer=gazetteer))
+    condizioni, farmaci_prosa = _entita_dalla_prosa(
+        record, gazetteer, risolutore, collegatore
+    )
+    farmaci = farmaci_da_campo_strutturato(record, risolutore) + farmaci_prosa
+    allergie, stato_sezione = allergie_dal_referto(record)
 
     note: list[str] = []
     _, scarti_ingresso, _ = sonda_terapia_ingresso(record.testo_terapia_ingresso or "")
@@ -316,6 +327,7 @@ def main() -> None:
     print("Costruzione del gazetteer...")
     gazetteer = GazetteerClinico()
     risolutore = RisolutoreATC()
+    collegatore = CollegatoreICD(RisolutoreICD(gazetteer=gazetteer))
     print(f"  forme farmaci: {len(gazetteer.forme_farmaci)}")
     print(f"  forme condizioni: {len(gazetteer.forme_condizioni)}")
 
@@ -324,7 +336,7 @@ def main() -> None:
     inizio = time.time()
 
     for indice, rec in enumerate(record, 1):
-        stato = estrai(rec, gazetteer, risolutore)
+        stato = estrai(rec, gazetteer, risolutore, collegatore)
         (CARTELLA_USCITA / f"{rec.enc_oid}.json").write_text(
             stato.model_dump_json(indent=2), encoding="utf-8"
         )

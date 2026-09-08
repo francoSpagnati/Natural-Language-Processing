@@ -93,6 +93,42 @@ class Menzione:
     codici: list[str]     # ATC o ICD associati alla forma
 
 
+# Parole che nel nome di un farmaco sono unita' di misura, forme farmaceutiche o
+# indicazioni orarie: da sole non identificano nulla.
+PATTERN_UNITA_O_FORMA = re.compile(
+    r"^(mg|mcg|g|gr|ml|ui|u|cp|cpr|cps|cpz|gtt|fl|bust|puff|ore|die|al|alle|"
+    r"cpr\.?|cp\.?|riv|gastr|rp|sc|ev|os)$",
+    re.IGNORECASE,
+)
+
+
+def forma_farmaco_ammissibile(forma: str) -> bool:
+    """Il vocabolario contiene residui di parsing che come gazetteer fanno danno.
+
+    Il campo di terapia e' semi-strutturato e il suo parsing ha lasciato nel
+    vocabolario voci come "5 mg", "2.5 mg", "ore 17", "cpr." e "-". Da sole non
+    sono nomi di farmaco, ma come forme del gazetteer trovano riscontro
+    ovunque: nella pipeline A producevano 51 menzioni di farmaco inesistenti
+    ("Ramipril 2.5 mg" faceva emergere un farmaco chiamato "2.5 mg"), che
+    finivano nelle etichette silver dello step 5 e da li' venivano imparate dal
+    NER, che le riproduceva su scala maggiore.
+
+    La regola: dopo aver tolto cifre, punteggiatura e parole che sono solo
+    unita' di misura o forme farmaceutiche, deve restare almeno un pezzo
+    alfabetico di tre lettere. Cosi' cadono "5 mg" e "ore 17", e restano nomi
+    commerciali legittimi che contengono cifre come "mag 2", "omega 3 aur" o
+    "cacit 1000".
+    """
+    forma = forma.strip()
+    if len(forma) < 4 or forma == "-":
+        return False
+    for pezzo in re.split(r"[\s/,+.\-]+", forma):
+        pezzo = pezzo.strip()
+        if len(pezzo) >= 3 and pezzo.isalpha() and not PATTERN_UNITA_O_FORMA.match(pezzo):
+            return True
+    return False
+
+
 def carica_forme_farmaci() -> dict[str, list[str]]:
     """Forma testuale -> codici ATC, dalle voci risolte o ambigue.
 
@@ -105,7 +141,7 @@ def carica_forme_farmaci() -> dict[str, list[str]]:
     forme: dict[str, list[str]] = {}
     for voce in dati["voci"]:
         forma = voce["forma_grezza"].strip()
-        if len(forma) < 4 or forma == "-":
+        if not forma_farmaco_ammissibile(forma):
             continue
         codici = [voce["codice_atc"]] if voce["codice_atc"] else voce["atc_candidati"]
         forme.setdefault(forma.lower(), []).extend(codici)

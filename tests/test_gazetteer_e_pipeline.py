@@ -190,3 +190,25 @@ class TestPipelineA(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFormeFarmacoAmmissibili(unittest.TestCase):
+    """Regressione. Il parsing del campo semi-strutturato aveva lasciato nel
+    vocabolario voci come "5 mg" e "2.5 mg". Come forme del gazetteer trovavano
+    riscontro ovunque: "Ramipril 2.5 mg" faceva emergere un farmaco chiamato
+    "2.5 mg", che finiva nelle etichette silver dello step 5 e veniva imparato
+    dal NER."""
+
+    def test_dosi_e_forme_farmaceutiche_respinte(self):
+        from gazetteer import forma_farmaco_ammissibile
+
+        for forma in ("5 mg", "2.5 mg", "ore 17", "cpr.", "-", "td"):
+            self.assertFalse(forma_farmaco_ammissibile(forma), forma)
+
+    def test_nomi_commerciali_con_cifre_conservati(self):
+        """Il filtro non deve buttare via i marchi che contengono numeri."""
+        from gazetteer import forma_farmaco_ammissibile
+
+        for forma in ("mag 2", "omega 3 aur", "cacit 1000", "ciprofloxacina 500"):
+            self.assertTrue(forma_farmaco_ammissibile(forma), forma)
+
