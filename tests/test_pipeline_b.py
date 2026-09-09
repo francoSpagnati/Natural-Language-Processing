@@ -615,6 +615,26 @@ class TestMenzioniComposte(unittest.TestCase):
         self.assertIsNone(codice)
         self.assertEqual(stato, StatoNormalizzazione.NIL)
 
+
+    def test_formato_ingresso_col_due_punti(self):
+        """Regressione. Il campo di terapia all'ingresso ha formato
+        "Nome: dose forma /die (ore N)" e il modello ne cita la riga intera.
+        Sui due record di verifica, 14 farmaci su 14 restavano senza ATC."""
+        codice, stato, _, forma = self.risolutore.risolvi_menzione(
+            "Medrol: 4 mg cpr. /die (ore 8)"
+        )
+        self.assertEqual(stato, StatoNormalizzazione.RISOLTO)
+        self.assertEqual(forma, "Medrol")
+        self.assertIsNotNone(codice)
+
+    def test_nome_con_punti_interni_conservato(self):
+        """"Furosemide l.f.m." contiene punti ma il taglio e' sui due punti."""
+        _, stato, _, forma = self.risolutore.risolvi_menzione(
+            "Furosemide l.f.m.: 25 mg cpr. mar-gio (ore 8)"
+        )
+        self.assertEqual(stato, StatoNormalizzazione.RISOLTO)
+        self.assertEqual(forma, "Furosemide l.f.m.")
+
     def test_le_due_vie_concordano(self):
         """Principio attivo e nome commerciale devono portare allo stesso ATC."""
         da_principio, _, _, _ = self.risolutore.risolvi_menzione("Bisoprololo")
@@ -756,6 +776,118 @@ class TestCampionamento(unittest.TestCase):
     def test_richiesta_maggiore_del_disponibile(self):
         record = [record_di_prova() for _ in range(3)]
         self.assertEqual(len(extract_b.scegli_record(record, 99, seme=7)), 3)
+
+
+
+class TestRipresaDellaCorsa(unittest.TestCase):
+    """Il checkpoint serve proprio quando qualcosa va storto.
+
+    Una corsa di undici ore verra' interrotta: quello che conta e' che
+    riprenderla non rifaccia il lavoro e, soprattutto, che non mescoli nella
+    stessa cartella risultati ottenuti con modelli o prompt diversi -- una
+    cartella cosi' non sarebbe piu' interpretabile da nessuno.
+    """
+
+    class Opzioni:
+        motore = "locale"
+        ragionamento = "low"
+        seme = 1
+        record = 200
+
+    class BackendFinto:
+        modello = "modello-a"
+
+    def _configurazione(self, modello="modello-a"):
+        backend = self.BackendFinto()
+        backend.modello = modello
+        return extract_b.impronta_configurazione(backend, self.Opzioni(), {"tipo": "oggetto"})
+
+    def test_cartella_vuota_si_puo_usare(self):
+        with tempfile.TemporaryDirectory() as cartella:
+            extract_b.prepara_cartella(Path(cartella), self._configurazione(), rifai=False)
+
+    def test_ripresa_con_stessa_configurazione(self):
+        with tempfile.TemporaryDirectory() as cartella:
+            percorso = Path(cartella)
+            configurazione = self._configurazione()
+            extract_b.salva_registro(percorso, configurazione, 3, 10)
+            (percorso / "1.json").write_text("{}", encoding="utf-8")
+            extract_b.prepara_cartella(percorso, configurazione, rifai=False)  # non solleva
+
+    def test_modello_diverso_blocca_la_ripresa(self):
+        with tempfile.TemporaryDirectory() as cartella:
+            percorso = Path(cartella)
+            extract_b.salva_registro(percorso, self._configurazione("modello-a"), 3, 10)
+            with self.assertRaises(SystemExit) as errore:
+                extract_b.prepara_cartella(percorso, self._configurazione("modello-b"), rifai=False)
+            self.assertIn("modello", str(errore.exception))
+
+    def test_risultati_senza_registro_bloccano(self):
+        """File prodotti da una corsa sconosciuta non vanno ne' riusati ne'
+        cancellati in silenzio."""
+        with tempfile.TemporaryDirectory() as cartella:
+            percorso = Path(cartella)
+            (percorso / "1.json").write_text("{}", encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                extract_b.prepara_cartella(percorso, self._configurazione(), rifai=False)
+
+    def test_rifai_ripulisce(self):
+        with tempfile.TemporaryDirectory() as cartella:
+            percorso = Path(cartella)
+            (percorso / "1.json").write_text("{}", encoding="utf-8")
+            extract_b.salva_registro(percorso, self._configurazione("altro"), 1, 10)
+            extract_b.prepara_cartella(percorso, self._configurazione(), rifai=True)
+            self.assertFalse((percorso / "1.json").exists())
+
+    def test_il_registro_conserva_l_avanzamento(self):
+        with tempfile.TemporaryDirectory() as cartella:
+            percorso = Path(cartella)
+            extract_b.salva_registro(percorso, self._configurazione(), 42, 200)
+            salvato = json.loads((percorso / extract_b.NOME_REGISTRO).read_text(encoding="utf-8"))
+            self.assertEqual(salvato["record_completati"], 42)
+            self.assertEqual(salvato["record_totali"], 200)
+
+
+class TestMisuraProduzione(unittest.TestCase):
+    def test_conta_dai_file_e_non_dalla_memoria(self):
+        """Su una corsa ripresa piu' volte i contatori in memoria coprono solo
+        l'ultimo tratto: le misure vere si ricavano da cio' che e' su disco."""
+        with tempfile.TemporaryDirectory() as cartella:
+            percorso = Path(cartella)
+            stato = extract_b.converti(
+                record_di_prova(anamnesi="Nota BPCO.", dimissione="x"),
+                EstrazioneLLM.model_validate(
+                    {
+                        "condizioni": [
+                            {
+                                "testo_grezzo": "BPCO",
+                                "concetto": "broncopneumopatia cronica ostruttiva",
+                                "campo": "Anamnesi",
+                                "stato": "affermato",
+                            }
+                        ],
+                        "farmaci": [
+                            {
+                                "testo_grezzo": "Bisoprololo",
+                                "campo": "Terapia alla Dimissione",
+                                "stato": "affermato",
+                            }
+                        ],
+                    }
+                ),
+                "m",
+                RisolutoreATCFinto(),
+                RisolutoreICDFinto(),
+            )
+            (percorso / "1.json").write_text(stato.model_dump_json(), encoding="utf-8")
+            (percorso / "_corsa.json").write_text("{}", encoding="utf-8")
+
+            m = extract_b.misura_produzione(percorso)
+            self.assertEqual(m["record"], 1)  # il file con underscore non e' un record
+            self.assertEqual(m["condizioni"], 1)
+            self.assertEqual(m["condizioni_con_codice"], 1)
+            self.assertEqual(m["farmaci"], 1)
+            self.assertEqual(m["per_stato"]["affermato"], 1)
 
 
 if __name__ == "__main__":

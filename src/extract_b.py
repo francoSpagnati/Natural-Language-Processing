@@ -31,10 +31,13 @@ stessi risultati, il che rende ripetibile la valutazione dello step 11.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import random
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -67,6 +70,11 @@ from schema import (
 RADICE = Path(__file__).resolve().parent.parent
 PERCORSO_DATASET = RADICE / "data" / "raw" / "anamnesiterapie.txt"
 CARTELLA_USCITA = RADICE / "data" / "processed" / "pipeline_b"
+# Registro della corsa: consente di riprendere dopo un'interruzione senza
+# rifare cio' che e' gia' stato prodotto, e impedisce di mescolare in una
+# stessa cartella risultati ottenuti con configurazioni diverse.
+NOME_REGISTRO = "_corsa.json"
+NOME_RIEPILOGO = "_riepilogo.json"
 
 # Il campo dichiarato dal modello determina il momento della terapia: dedurlo
 # dalla struttura del record invece di chiederlo elimina una possibile
@@ -347,6 +355,86 @@ def scegli_record(record: list[RecordPaziente], quanti: int | None, seme: int):
     return sorted(generatore.sample(record, quanti), key=lambda r: r.enc_oid)
 
 
+def impronta_configurazione(backend, opzioni, schema: dict) -> dict:
+    """Tutto cio' che, cambiando, renderebbe i risultati non confrontabili.
+
+    Riprendere una corsa mescolando modelli o prompt diversi produrrebbe una
+    cartella di risultati che nessuno potrebbe piu' interpretare: meta' prodotti
+    da una configurazione, meta' da un'altra, senza modo di distinguerli. Il
+    registro rende la cosa impossibile per costruzione.
+    """
+    def breve(testo: str) -> str:
+        return hashlib.sha256(testo.encode("utf-8")).hexdigest()[:16]
+
+    return {
+        "motore": opzioni.motore,
+        "modello": backend.modello,
+        "ragionamento": opzioni.ragionamento,
+        "seme": opzioni.seme,
+        "record_richiesti": opzioni.record,
+        "impronta_istruzioni": breve(ISTRUZIONI),
+        "impronta_schema": breve(json.dumps(schema, sort_keys=True, ensure_ascii=False)),
+    }
+
+
+def prepara_cartella(cartella, configurazione: dict, rifai: bool) -> None:
+    """Verifica che la cartella sia coerente con questa configurazione.
+
+    Tre casi: cartella vuota (si parte), registro compatibile (si riprende),
+    tutto il resto (ci si ferma e si spiega perche'). Cancellare in silenzio il
+    lavoro di una notte precedente sarebbe il comportamento peggiore possibile.
+    """
+    cartella.mkdir(parents=True, exist_ok=True)
+    registro = cartella / NOME_REGISTRO
+    prodotti = [f for f in cartella.glob("*.json") if not f.name.startswith("_")]
+
+    if rifai:
+        for percorso in prodotti:
+            percorso.unlink()
+        registro.unlink(missing_ok=True)
+        (cartella / NOME_RIEPILOGO).unlink(missing_ok=True)
+        print(f"  --rifai: rimossi {len(prodotti)} risultati precedenti.")
+        prodotti = []
+
+    if registro.exists():
+        precedente = json.loads(registro.read_text(encoding="utf-8")).get("configurazione", {})
+        differenze = [
+            f"{k}: {precedente.get(k)!r} -> {v!r}"
+            for k, v in configurazione.items()
+            if precedente.get(k) != v
+        ]
+        if differenze:
+            raise SystemExit(
+                "La cartella contiene una corsa con una configurazione diversa:\n  "
+                + "\n  ".join(differenze)
+                + f"\n\nRiprendere mescolerebbe risultati non confrontabili. Usa --rifai "
+                f"per ricominciare, oppure --uscita per una cartella nuova."
+            )
+    elif prodotti:
+        raise SystemExit(
+            f"{len(prodotti)} risultati sono gia' presenti in {cartella} ma senza registro "
+            f"di corsa: non e' possibile sapere con quale configurazione siano stati "
+            f"prodotti.\nUsa --rifai per ricominciare, oppure --uscita per una cartella nuova."
+        )
+
+
+def salva_registro(cartella, configurazione: dict, fatti: int, totale: int) -> None:
+    """Scrive lo stato della corsa. Chiamata di continuo: deve restare economica."""
+    (cartella / NOME_REGISTRO).write_text(
+        json.dumps(
+            {
+                "configurazione": configurazione,
+                "record_totali": totale,
+                "record_completati": fatti,
+                "aggiornato_il": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
 def _elabora(rec, backend, risolutore_atc, risolutore_icd, ragionamento, interruzione):
     """Un record, in un thread. Restituisce l'errore invece di sollevarlo.
 
@@ -398,6 +486,14 @@ def main() -> None:
         "tempo e' attesa di rete; 1 sul motore locale, dove e' calcolo e "
         "parallelizzare non aggiunge nulla se non consumo di memoria.",
     )
+    argomenti.add_argument(
+        "--uscita", type=Path, default=CARTELLA_USCITA, help="Cartella dei risultati."
+    )
+    argomenti.add_argument(
+        "--rifai",
+        action="store_true",
+        help="Cancella i risultati precedenti e ricomincia da zero invece di riprendere.",
+    )
     opzioni = argomenti.parse_args()
 
     record, _ = carica_dataset(PERCORSO_DATASET)
@@ -412,11 +508,22 @@ def main() -> None:
     # misurerebbe anche la differenza di risoluzione dei codici.
     risolutore_icd = RisolutoreICD(gazetteer=GazetteerClinico())
 
-    CARTELLA_USCITA.mkdir(parents=True, exist_ok=True)
+    cartella = opzioni.uscita
+    configurazione = impronta_configurazione(backend, opzioni, schema_estrazione_llm())
+    prepara_cartella(cartella, configurazione, opzioni.rifai)
+
+    gia_fatti = {r.enc_oid for r in selezione if (cartella / f"{r.enc_oid}.json").exists()}
+    da_fare = [r for r in selezione if r.enc_oid not in gia_fatti]
+    salva_registro(cartella, configurazione, len(gia_fatti), len(selezione))
+
     print(
         f"Pipeline B su {len(selezione)} record con {backend.modello}, "
         f"{parallele} richieste in parallelo."
     )
+    if gia_fatti:
+        print(f"  ripresa: {len(gia_fatti)} gia' completati, {len(da_fare)} da fare.")
+    if not da_fare:
+        print("  nulla da fare: la corsa e' gia' completa.")
 
     totali = {"condizioni": 0, "farmaci": 0, "allergie": 0, "menzioni_non_ancorate": 0}
     token = {"ingresso": 0, "uscita": 0, "ragionamento": 0}
@@ -435,7 +542,7 @@ def main() -> None:
                 opzioni.ragionamento,
                 interruzione,
             )
-            for rec in selezione
+            for rec in da_fare
         ]
         for indice, futuro in enumerate(as_completed(futuri), start=1):
             rec, stato, risposta, errore = futuro.result()
@@ -447,7 +554,7 @@ def main() -> None:
                     print(f"  [{rec.enc_oid}] fallito: {errore}", file=sys.stderr)
                 continue
 
-            (CARTELLA_USCITA / f"{rec.enc_oid}.json").write_text(
+            (cartella / f"{rec.enc_oid}.json").write_text(
                 stato.model_dump_json(indent=2), encoding="utf-8"
             )
             totali["condizioni"] += len(stato.condizioni)
@@ -464,39 +571,122 @@ def main() -> None:
             da_cache += risposta.da_cache
             ritentati += risposta.tentativi > 1
 
-            if indice % 25 == 0 or indice == len(selezione):
+            if indice % 5 == 0 or indice == len(da_fare):
+                # Il registro viene aggiornato spesso: se la corsa viene
+                # interrotta, cio' che si e' gia' prodotto resta ritrovabile.
+                salva_registro(cartella, configurazione, len(gia_fatti) + indice, len(selezione))
+            if indice % 25 == 0 or indice == len(da_fare):
                 trascorso = time.monotonic() - avvio
-                print(f"  {indice}/{len(selezione)} record ({trascorso:.0f}s)", flush=True)
+                rimasti = len(da_fare) - indice
+                stima = (trascorso / max(indice, 1)) * rimasti
+                print(
+                    f"  {indice}/{len(da_fare)} record ({trascorso / 60:.0f} min, "
+                    f"stimati {stima / 60:.0f} min alla fine)",
+                    flush=True,
+                )
 
     durata = time.monotonic() - avvio
-    riusciti = len(selezione) - falliti - saltati
-    menzioni = totali["condizioni"] + totali["farmaci"] + totali["allergie"]
+    riusciti = len(da_fare) - falliti - saltati
+    salva_registro(cartella, configurazione, len(gia_fatti) + riusciti, len(selezione))
+
     print(
-        f"\nCompletati {riusciti}/{len(selezione)} record in {durata:.0f}s "
+        f"\nSessione: {riusciti}/{len(da_fare)} record in {durata / 60:.0f} min "
         f"({da_cache} da cache, {ritentati} con ritentativi, {falliti} falliti)."
     )
     if interruzione.is_set():
         print(
             f"Corsa interrotta: quota giornaliera esaurita per {backend.modello}. "
-            f"{saltati} record non tentati. I risultati gia' ottenuti sono in cache: "
-            f"rilanciando lo stesso comando non verranno richiesti di nuovo.",
+            f"{saltati} record non tentati. Rilanciando lo stesso comando la corsa "
+            f"riprende da dove si e' fermata.",
             file=sys.stderr,
         )
-    print(
-        f"Entita': {totali['condizioni']} condizioni, {totali['farmaci']} farmaci, "
-        f"{totali['allergie']} allergie."
-    )
-    if menzioni:
-        quota = 100 * totali["menzioni_non_ancorate"] / menzioni
+    if token["uscita"]:
         print(
-            f"Menzioni non ritrovate alla lettera nel referto: "
-            f"{totali['menzioni_non_ancorate']}/{menzioni} ({quota:.2f}%)."
+            f"Token: {token['ingresso']} in ingresso, {token['uscita']} in uscita "
+            f"({token['uscita'] / max(durata, 1):.1f} token/s)."
         )
-    print(
-        f"Token: {token['ingresso']} in ingresso, {token['uscita']} in uscita, "
-        f"{token['ragionamento']} di ragionamento."
+
+    riepilogo = misura_produzione(cartella)
+    riepilogo["configurazione"] = configurazione
+    riepilogo["secondi_per_record_sessione"] = round(durata / max(riusciti, 1), 1)
+    (cartella / NOME_RIEPILOGO).write_text(
+        json.dumps(riepilogo, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    print(f"Uscita in {CARTELLA_USCITA.relative_to(RADICE)}/")
+    stampa_riepilogo(riepilogo)
+    print(f"\nRisultati in {cartella.relative_to(RADICE)}/  ·  riepilogo in {NOME_RIEPILOGO}")
+
+
+def misura_produzione(cartella) -> dict:
+    """Misura tutto cio' che e' stato prodotto, non solo la sessione corrente.
+
+    Su una corsa lunga e ripresa piu' volte, i contatori accumulati in memoria
+    raccontano solo l'ultimo tratto. Le misure che contano si ricavano dai file,
+    che sono la produzione vera.
+    """
+    percorsi = sorted(f for f in cartella.glob("*.json") if not f.name.startswith("_"))
+    misure = {
+        "record": len(percorsi),
+        "condizioni": 0,
+        "condizioni_con_codice": 0,
+        "condizioni_ambigue": 0,
+        "farmaci": 0,
+        "farmaci_con_atc": 0,
+        "allergie": 0,
+        "menzioni_non_ancorate": 0,
+        "per_stato": {},
+        "per_momento": {},
+    }
+    for percorso in percorsi:
+        stato = json.loads(percorso.read_text(encoding="utf-8"))
+        for condizione in stato["condizioni"]:
+            misure["condizioni"] += 1
+            misure["condizioni_con_codice"] += bool(condizione["codice"])
+            misure["condizioni_ambigue"] += condizione["stato_normalizzazione"] == "ambiguo"
+            chiave = condizione["stato"]
+            misure["per_stato"][chiave] = misure["per_stato"].get(chiave, 0) + 1
+            if condizione["provenienza"]["inizio"] is None:
+                misure["menzioni_non_ancorate"] += 1
+        for farmaco in stato["farmaci"]:
+            misure["farmaci"] += 1
+            misure["farmaci_con_atc"] += bool(farmaco["codice_atc"])
+            chiave = farmaco["momento"]
+            misure["per_momento"][chiave] = misure["per_momento"].get(chiave, 0) + 1
+            if farmaco["provenienza"]["inizio"] is None:
+                misure["menzioni_non_ancorate"] += 1
+        misure["allergie"] += len(stato["allergie"])
+    return misure
+
+
+def stampa_riepilogo(m: dict) -> None:
+    """Le misure che dicono se la produzione e' utilizzabile."""
+    def quota(parte, tutto):
+        return f"{100 * parte / tutto:.1f}%" if tutto else "n/d"
+
+    menzioni = m["condizioni"] + m["farmaci"] + m["allergie"]
+    print(f"\nPRODUZIONE COMPLESSIVA — {m['record']} record")
+    print(
+        f"  condizioni {m['condizioni']:6d}   con codice ICD {m['condizioni_con_codice']:6d} "
+        f"({quota(m['condizioni_con_codice'], m['condizioni'])}), ambigue {m['condizioni_ambigue']}"
+    )
+    print(
+        f"  farmaci    {m['farmaci']:6d}   con codice ATC {m['farmaci_con_atc']:6d} "
+        f"({quota(m['farmaci_con_atc'], m['farmaci'])})"
+    )
+    print(f"  allergie   {m['allergie']:6d}")
+    print(
+        f"  stato clinico: "
+        + ", ".join(f"{k} {v}" for k, v in sorted(m["per_stato"].items(), key=lambda x: -x[1]))
+    )
+    print(
+        f"  momento terapia: "
+        + ", ".join(f"{k} {v}" for k, v in sorted(m["per_momento"].items(), key=lambda x: -x[1]))
+    )
+    # E' il controllo di allucinazione: una citazione che non si ritrova nel
+    # referto e' una menzione inventata dal modello.
+    print(
+        f"  menzioni non ancorate: {m['menzioni_non_ancorate']}/{menzioni} "
+        f"({quota(m['menzioni_non_ancorate'], menzioni)})"
+    )
 
 
 if __name__ == "__main__":

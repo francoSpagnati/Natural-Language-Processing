@@ -68,49 +68,53 @@ class RisolutoreATC:
     ) -> tuple[str | None, StatoNormalizzazione, str | None, str]:
         """Come `risolvi`, ma accetta anche una menzione composta.
 
-        Nel referto di dimissione un farmaco e' scritto per esteso, per esempio
-        "Furosemide (Lasix cpr. 25 mg)": principio attivo, nome commerciale,
-        forma e dose in una stringa sola. Il vocabolario ATC ha invece una voce
-        per "Furosemide" e una per "Lasix", quindi la stringa intera non risolve
-        mai. La pipeline A non incontra il problema perche' il suo parser separa
-        i tre pezzi prima di cercarli; qui la scomposizione va fatta a valle,
-        sulla menzione che il modello ha citato alla lettera.
+        I due campi di terapia hanno formati diversi, e un modello linguistico
+        cita la riga intera invece del solo nome:
 
-        L'ordine e': prima la menzione intera, poi il principio attivo che la
-        precede, poi il nome commerciale fra parentesi (ripulito da forma e dose
-        con la funzione gia' usata nello step 0). Il quarto valore restituito
-        dice quale forma ha prodotto il collegamento, perche' la provenienza
-        deve restare vera anche quando il codice e' corretto.
+            dimissione   "Furosemide (Lasix cpr. 25 mg)"
+            ingresso     "Medrol: 4 mg cpr. /die (ore 8)"
 
-        Se principio attivo e nome commerciale portano a codici diversi il
-        risultato e' AMBIGUO e nessuno dei due viene scelto: un disaccordo fra
-        due vie che dovrebbero concordare e' un dato da guardare, non da
-        risolvere in silenzio.
+        Il vocabolario ATC ha una voce per "Furosemide", una per "Lasix" e una
+        per "Medrol": nessuna delle due righe intere risolve. La pipeline A non
+        incontra il problema perche' il suo parser separa i pezzi *prima* di
+        cercarli; qui la scomposizione va fatta a valle, sulla menzione che il
+        modello ha citato alla lettera.
+
+        Si provano quindi, nell'ordine: la menzione intera; il nome che precede
+        i due punti (formato d'ingresso); il principio attivo che precede la
+        parentesi (formato di dimissione); il nome commerciale dentro la
+        parentesi, ripulito da forma e dose con la funzione gia' usata nello
+        step 0. Il quarto valore restituito dice quale forma ha prodotto il
+        collegamento, perche' la provenienza deve restare vera anche quando il
+        codice e' corretto.
+
+        Se due vie che dovrebbero concordare portano a codici diversi il
+        risultato e' AMBIGUO e nessuna viene scelta: un disaccordo e' un dato da
+        guardare, non da risolvere in silenzio.
         """
         codice, stato, fonte = self.risolvi(menzione)
         if stato is not StatoNormalizzazione.NIL:
             return codice, stato, fonte, menzione.strip()
 
+        varianti: list[str] = []
+        prima_dei_due_punti = menzione.split(":", 1)[0].strip()
+        if prima_dei_due_punti and prima_dei_due_punti != menzione.strip():
+            varianti.append(prima_dei_due_punti)
+
         principio, _, resto = menzione.partition("(")
-        if not resto:
-            return None, StatoNormalizzazione.NIL, None, menzione.strip()
-        commerciale = radice_nome_commerciale(resto.rstrip(") "))
+        if resto:
+            principio = principio.strip()
+            if principio and principio not in varianti:
+                varianti.append(principio)
+            commerciale = radice_nome_commerciale(resto.rstrip(") "))
+            if commerciale:
+                varianti.append(commerciale)
 
-        da_principio = self.risolvi(principio.strip())
-        da_commerciale = self.risolvi(commerciale) if commerciale else (
-            None,
-            StatoNormalizzazione.NIL,
-            None,
-        )
-
-        risolti = [
-            (esito, forma)
-            for esito, forma in (
-                (da_principio, principio.strip()),
-                (da_commerciale, commerciale),
-            )
-            if esito[1] is not StatoNormalizzazione.NIL
-        ]
+        risolti = []
+        for forma in varianti:
+            esito = self.risolvi(forma)
+            if esito[1] is not StatoNormalizzazione.NIL:
+                risolti.append((esito, forma))
         if not risolti:
             return None, StatoNormalizzazione.NIL, None, menzione.strip()
 
