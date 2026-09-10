@@ -44,7 +44,7 @@ from extract_a import (
 )
 from gazetteer import GazetteerClinico
 from ner_infer import RiconoscitoreNER
-from risolutori import RisolutoreATC, RisolutoreICD
+from risolutori import RisolutoreATC, RisolutoreICD, soggetto_della_menzione
 from schema import (
     CondizioneEstratta,
     FarmacoEstratto,
@@ -94,13 +94,17 @@ def _entita_dalla_prosa(
             if intervallo is not None
             else {}
         )
+        soggetto, nota_soggetto = soggetto_della_menzione(
+            testo, menzione.inizio, menzione.fine
+        )
+        regola = regola_provenienza(attributi, f"ner:{menzione.etichetta.lower()}")
         provenienza = Provenienza(
             pipeline=Pipeline.C_NER_EL,
             campo_sorgente=CAMPO_ANAMNESI,
             testo_originale=menzione.testo,
             inizio=menzione.inizio,
             fine=menzione.fine,
-            regola=regola_provenienza(attributi, f"ner:{menzione.etichetta.lower()}"),
+            regola=f"{regola} {nota_soggetto}" if nota_soggetto else regola,
         )
 
         if menzione.etichetta == ETICHETTA_CONDIZIONE:
@@ -113,6 +117,7 @@ def _entita_dalla_prosa(
                     sistema_codifica="ICD-10" if esito.codice else None,
                     stato_normalizzazione=esito.stato,
                     stato=stato_da_attributi(attributi),
+                    soggetto=soggetto,
                     provenienza=provenienza.model_copy(
                         update={"regola": f"{provenienza.regola} icd:{esito.metodo}"}
                     ),
@@ -128,6 +133,7 @@ def _entita_dalla_prosa(
                     fonte_normalizzazione=fonte,
                     momento=MomentoTerapia.NARRATIVO,
                     stato=stato_da_attributi(attributi),
+                    soggetto=soggetto,
                     provenienza=provenienza.model_copy(
                         update={"regola": f"{provenienza.regola} atc:{forma}"}
                     ),

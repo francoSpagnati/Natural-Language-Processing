@@ -51,7 +51,7 @@ from llm_backend import (
     ErroreQuotaGiornaliera,
     Richiesta,
 )
-from risolutori import RisolutoreATC, RisolutoreICD
+from risolutori import RisolutoreATC, RisolutoreICD, soggetto_della_menzione
 from schema import (
     AllergiaEstratta,
     CampoReferto,
@@ -248,6 +248,18 @@ def converti(
             f"{regola} concetto='{voce.concetto}' icd:{esito.metodo}",
         )
         non_ancorate += not ancorata
+        # L'asse dell'experiencer non si chiede al modello: si calcola sul testo
+        # del referto con la stessa regola delle altre due pipeline, cosi' il
+        # confronto dello step 6 non misura anche questa differenza.
+        soggetto, nota_soggetto = soggetto_della_menzione(
+            _testo_del_campo(record, voce.campo) or "",
+            provenienza.inizio,
+            provenienza.fine,
+        )
+        if nota_soggetto:
+            provenienza = provenienza.model_copy(
+                update={"regola": f"{provenienza.regola} {nota_soggetto}"}
+            )
         condizioni.append(
             CondizioneEstratta(
                 testo_grezzo=voce.testo_grezzo,
@@ -256,6 +268,7 @@ def converti(
                 sistema_codifica="ICD-10" if esito.codice else None,
                 stato_normalizzazione=esito.stato,
                 stato=voce.stato,
+                soggetto=soggetto,
                 provenienza=provenienza,
             )
         )

@@ -37,7 +37,7 @@ from pydantic import BaseModel, Field
 # Versione dello schema. Cambiarla quando la struttura cambia in modo non
 # retrocompatibile: i file intermedi la riportano, cosi' e' sempre possibile
 # capire con quale versione sono stati prodotti.
-VERSIONE_SCHEMA = "1.0.0"
+VERSIONE_SCHEMA = "1.1.0"
 
 
 class StatoConoscenza(str, Enum):
@@ -74,6 +74,23 @@ class StatoNormalizzazione(str, Enum):
     NIL = "nil"                   # nessun candidato affidabile: entita' fuori KB
     AMBIGUO = "ambiguo"           # piu' candidati, nessuno prevalente
     NON_TENTATO = "non_tentato"   # normalizzazione non ancora eseguita
+
+
+class Soggetto(str, Enum):
+    """Di chi parla l'affermazione: l'asse *experiencer* di ConText.
+
+    Senza questo asse una frase di familiarita' non e' rappresentabile. "Nega
+    diabete" e "familiarita' per diabete" finivano entrambe in `stato`, che pero'
+    misura la polarita' e non il soggetto: la prima dice che il paziente non ha
+    il diabete, la seconda che ce l'ha un parente — e sulla seconda `affermato` e
+    `negato` sono ugualmente sbagliati.
+
+    I due assi restano indipendenti: "familiarita' negativa per cardiopatia
+    ischemica" e' `soggetto=familiare` e `stato=negato` insieme.
+    """
+
+    PAZIENTE = "paziente"
+    FAMILIARE = "familiare"
 
 
 class Pipeline(str, Enum):
@@ -150,6 +167,10 @@ class CondizioneEstratta(BaseModel):
     )
     stato_normalizzazione: StatoNormalizzazione = StatoNormalizzazione.NON_TENTATO
     stato: StatoConoscenza
+    soggetto: Soggetto = Field(
+        default=Soggetto.PAZIENTE,
+        description="Chi ha la condizione: il paziente o un familiare.",
+    )
     provenienza: Provenienza
 
 

@@ -19,7 +19,9 @@ import spacy  # noqa: E402
 from context_it import (  # noqa: E402
     Attributo,
     Direzione,
+    ambiti_familiarita,
     attributi_per_entita,
+    soggetto_familiare,
     trova_ambiti,
 )
 
@@ -158,6 +160,77 @@ class TestNessunAttributo(BaseConText):
         )
 
         self.assertEqual(attributi, {})
+
+
+class TestSoggettoFamiliare(unittest.TestCase):
+    """L'asse *experiencer*: distinguere il paziente dai suoi parenti.
+
+    Ogni frase e' presa dal corpus grezzo. Questi casi nascono dal confronto fra
+    pipeline A e B su 198 record, dove 21 disaccordi su 55 erano frasi di
+    familiarita' che nessuna delle due sapeva rappresentare.
+    """
+
+    def ambito(self, testo: str) -> str | None:
+        ambiti = ambiti_familiarita(testo)
+        return testo[ambiti[0].inizio:ambiti[0].fine].strip() if ambiti else None
+
+    def test_la_forma_piu_frequente_del_corpus(self):
+        # "familiarita per" ricorre 431 volte nelle 1000 anamnesi.
+        testo = "Familiarita per cardiopatia ischemica (padre)."
+        self.assertEqual(self.ambito(testo), "cardiopatia ischemica (padre)")
+
+    def test_la_menzione_dentro_l_ambito_e_di_un_familiare(self):
+        testo = "Familiarita per diabete mellito (madre)."
+        inizio = testo.index("diabete mellito")
+        trovato = soggetto_familiare(testo, inizio, inizio + len("diabete mellito"))
+        self.assertIsNotNone(trovato)
+        self.assertEqual(trovato.espressione.lower(), "familiarita per")
+
+    def test_la_menzione_fuori_dall_ambito_resta_del_paziente(self):
+        # Il punto chiude l'ambito: l'ipertensione e' del paziente.
+        testo = "Familiarita per diabete mellito. Ipertensione arteriosa in terapia."
+        inizio = testo.index("Ipertensione")
+        self.assertIsNone(soggetto_familiare(testo, inizio, inizio + 12))
+
+    def test_i_due_assi_sono_indipendenti(self):
+        # "familiarita negativa per cad" e' insieme familiare e negata: sono
+        # due domande diverse, e comprimerle in `stato` perdeva l'una o l'altra.
+        testo = "Familiarita negativa per CAD."
+        inizio = testo.index("CAD")
+        self.assertIsNotNone(soggetto_familiare(testo, inizio, inizio + 3))
+
+    def test_l_elenco_separato_da_virgole_resta_nell_ambito(self):
+        testo = "Familiarita positiva per diabete mellito (madre), cardiopatia ischemica (padre)."
+        inizio = testo.index("cardiopatia")
+        self.assertIsNotNone(soggetto_familiare(testo, inizio, inizio + 11))
+
+    def test_una_nuova_affermazione_in_maiuscola_chiude_l_ambito(self):
+        # Nel corpus i referti incollano affermazioni senza punteggiatura. Senza
+        # questo terminatore "Ex fumatore" diventerebbe un'abitudine del padre.
+        testo = ("Familiarita per cardiopatia ischemica ed ipertensione arteriosa "
+                 "Ex fumatore, 4-5 sigarette die")
+        inizio = testo.index("Ex fumatore")
+        self.assertIsNone(soggetto_familiare(testo, inizio, inizio + 11))
+
+    def test_gli_acronimi_non_chiudono_l_ambito(self):
+        # CAD, IMA, MCV, HCM sono ovunque nel corpus: un terminatore che si
+        # attivasse su ogni maiuscola li spezzerebbe tutti.
+        testo = "Familiarita per CAD (padre, fratello IMA)."
+        inizio = testo.index("IMA")
+        self.assertIsNotNone(soggetto_familiare(testo, inizio, inizio + 3))
+
+    def test_il_taglio_non_avviene_dentro_una_parentesi(self):
+        testo = "Familiarita per diabete mellito (padre, affetto da Parkinson, madre ETP)"
+        inizio = testo.index("Parkinson")
+        self.assertIsNotNone(soggetto_familiare(testo, inizio, inizio + 9))
+
+    def test_una_menzione_non_ancorata_non_riceve_soggetto(self):
+        # Le citazioni che il modello non ha copiato alla lettera non hanno
+        # offset: senza posizione la regola di prossimita' non e' applicabile.
+        self.assertIsNone(soggetto_familiare("Familiarita per CAD.", None, None))
+
+    def test_una_frase_senza_marcatori_non_apre_ambiti(self):
+        self.assertEqual(ambiti_familiarita("Nega diabete e ipertensione."), [])
 
 
 if __name__ == "__main__":

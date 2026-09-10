@@ -3,7 +3,14 @@
 Documento vivo, aggiornato **a ogni step**. Dà la visione d'insieme di come i
 componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
-**Ultimo step completato: 3 — Pipeline A deterministica.** 1 000 stati paziente estratti in 19 s.
+**Ultimo step completato: 5 — Pipeline C (NER + entity linking).** Le tre
+pipeline sono complete e misurate; lo step 6 le confronta.
+
+La pipeline B ha concluso la sua corsa definitiva: **198 record in 14 h 41 m**
+con `qwen3:4b` in locale. Il confronto della negazione con la pipeline A ha
+fatto emergere un asse mancante nello schema — l'*experiencer* di ConText — che
+è stato aggiunto (schema **1.1.0**) prima di procedere al confronto, perché
+altrimenti lo step 6 avrebbe misurato una differenza che non esiste.
 
 ## Indice dei documenti
 
@@ -85,7 +92,7 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `src/extract_icd10.py` | `pdftotext` (poppler), PDF ICD-10 | step 3 (gazetteer condizioni), step 5 (entity linking) | 2 |
 | `src/normalize_drugs.py` | `schema`, vocabolario, fonti AIFA | step 7 (KG), step 8 (filtro), step 11 (metrica ATC) | 2 |
 | `src/gazetteer.py` | `spacy`, vocabolari chiusi | step 3, step 5 (candidati per l'EL) | 3 |
-| `src/context_it.py` | nessuna (solo stdlib) | step 3, step 5 | 3 |
+| `src/context_it.py` | nessuna (solo stdlib) | step 3, step 5, **tutte le pipeline** (asse experiencer) | 3 |
 | `src/extract_a.py` | tutti i precedenti | step 5 (etichette silver), step 6, step 8 | 3 |
 | `src/risolutori.py` | `schema`, mappatura ATC, terminologia ICD | **tutte** le pipeline: la normalizzazione dev'essere identica | 4 |
 | `src/llm_backend.py` | solo stdlib (`urllib`, `hashlib`) | step 4, step 9 (LLMRanker), step 10 | 4 |
@@ -95,12 +102,13 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 | `src/ner_train.py` | `torch`, `transformers`, bioBIT | produce il modello in `data/processed/ner_it/` | 5 |
 | `src/ner_infer.py` | il modello addestrato | `extract_c` | 5 |
 | `src/extract_c.py` | `ner_infer`, `entity_linking`, `extract_a` (parti condivise) | step 6 (confronto) | 5 |
+| `src/migra_soggetto.py` | `data_loading`, `risolutori`, `schema` | migrazione una-tantum dello schema 1.0.0 → 1.1.0 | 5 |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
 | `tests/test_pipeline_c.py` | `silver_labels`, `ner_train`, `entity_linking` | — | 5 |
 
-I test sono 179 in tutto e **nessuno usa la rete**: la pipeline B e' provata
+I test sono 198 in tutto e **nessuno usa la rete**: la pipeline B e' provata
 con un backend fittizio, perche' una suite dipendente dall'API sarebbe lenta,
 costosa e verde o rossa a seconda del carico dei server.
 
@@ -119,7 +127,7 @@ costosa e verde o rossa a seconda del carico dei server.
 | `data/interim/terminologia_icd10.json` | 10 803 codici + indice di 13 642 termini italiani | `src/extract_icd10.py` |
 | `data/interim/mappatura_atc.json` | 1 329 voci con ATC, metodo di risoluzione, fonte ed evidenza | `src/normalize_drugs.py` |
 | `data/processed/pipeline_a/*.json` | uno `StatoPaziente` per record (1 000) | `src/extract_a.py` |
-| `data/processed/pipeline_b/*.json` | uno `StatoPaziente` per record elaborato dall'LLM | `src/extract_b.py` |
+| `data/processed/pipeline_b/*.json` | uno `StatoPaziente` per record elaborato dall'LLM, più `_corsa.json` (registro con l'impronta della configurazione, che rende la corsa riprendibile) e `_riepilogo.json` (produzione misurata) | `src/extract_b.py` |
 | `data/interim/cache_llm/*.json` | risposte del modello indicizzate per impronta: rendono ripetibile la valutazione | `src/llm_backend.py` |
 | `data/interim/silver_ner/*.json` | etichette BIO divise per ricovero (700/150/150) | `src/silver_labels.py` |
 | `data/processed/ner_it/` | modello NER addestrato e sue misure su sviluppo | `src/ner_train.py` |
@@ -130,7 +138,7 @@ costosa e verde o rossa a seconda del carico dei server.
 
 ## Test
 
-`python3 -m unittest discover -s tests -v` — 96 test.
+`python3 -m unittest discover -s tests -v` — 198 test.
 
 I test usano dati **sintetici** costruiti nel test stesso, mai il file clinico:
 il dataset non è versionato, quindi chi clona il repository deve poter eseguire

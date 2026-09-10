@@ -389,6 +389,321 @@ record**. Sul listino AI Studio:
 
 ---
 
+## 7bis. La corsa definitiva: 200 record sul modello locale
+
+Le misure della sezione precedente venivano da quattordici record su Gemini. Qui
+ci sono quelle vere.
+
+### Come si e' scelto il modello
+
+Prima di impegnare quindici ore di calcolo si sono misurati i due candidati che
+l'hardware regge, sugli stessi sei record:
+
+| | `qwen3:4b` | `qwen3.5:4b` |
+|---|---|---|
+| secondi per record | **159** | 195 |
+| token al secondo | **11,0** | 8,1 |
+| citazioni ritrovate nel referto | **90,6%** | 60,0% |
+| richiamo sulle condizioni | 73,9% | **82,6%** |
+| richiamo sui farmaci in prosa | 25,0% | **75,0%** |
+| negazioni corrette | **2/4** | 0/4 |
+
+`qwen3.5:4b` estrae di piu', e su un progetto diverso avrebbe vinto. Qui no: il
+40% delle sue citazioni non si ritrova alla lettera nel referto, e su centocinquanta
+menzioni non e' rumore statistico. Le citazioni non ritrovate sono quelle che
+mandano a vuoto sia il rilevatore di allucinazioni sia gli offset di provenienza,
+cioe' le due garanzie su cui poggia tutto il progetto. Un modello che estrae di
+piu' ma non si lascia verificare vale meno di uno che estrae meno e si lascia
+verificare, quindi la scelta e' caduta su **`qwen3:4b`**.
+
+### Un difetto trovato dalla verifica su due record
+
+La verifica pre-corsa su due soli record ha mostrato **14 farmaci su 14 senza
+codice ATC**. Il campo della terapia all'ingresso ha la forma `Medrol: 4 mg cpr.
+/die (ore 8)` e il modello cita la riga intera, mentre il vocabolario contiene la
+voce `Medrol`: la scomposizione delle menzioni composte gestiva solo il formato
+di dimissione, che separa con la parentesi, e non quello d'ingresso, che separa
+con i due punti. Corretto il difetto, la copertura di quei due record e' passata
+**da 0% a 100%**. Nove ore di calcolo su un difetto del genere sarebbero state
+buttate.
+
+### La corsa riprendibile
+
+Una corsa di quindici ore su un portatile viene interrotta: il coperchio si
+chiude, il sistema sospende, la memoria finisce. Il meccanismo di ripresa e'
+quindi parte del componente, non un accessorio.
+
+Ogni record produce il suo file appena e' pronto, e un registro `_corsa.json` si
+aggiorna ogni cinque. Rilanciare lo stesso comando salta i record che hanno gia'
+un file. Il registro contiene pero' anche l'**impronta della configurazione** —
+motore, modello, ragionamento, seme, hash del prompt e hash dello schema — e se
+la ripresa avviene con una configurazione diversa il programma si ferma
+elencando cosa e' cambiato. Mescolare in una cartella meta' risultati di un
+modello e meta' di un altro produrrebbe un insieme che nessuno puo' piu'
+interpretare, e il registro lo rende impossibile per costruzione.
+
+Il meccanismo e' servito subito: due record sono andati in timeout dopo tre
+tentativi, e il rilancio dello stesso comando ha ripreso esattamente quei due
+(`ripresa: 198 gia' completati, 2 da fare`).
+
+### Produzione misurata
+
+**198 record in 881 minuti** (14 h 41 m), 421 110 token in ingresso e 430 955 in
+uscita, 8,2 token al secondo. Il costo reale e' risultato **267 secondi per
+record** contro i 159 stimati dal banco di prova: il banco misurava referti di
+lunghezza media, la corsa ha incontrato anche i lunghi.
+
+| | | |
+|---|---|---|
+| condizioni | 5 017 (**4 222 distinte**, vedi § 7quinquies) | **1 959 con codice ICD (39,0%)**, 176 ambigue |
+| farmaci | 1 504 | **1 326 con codice ATC (88,2%)** |
+| allergie | 251 | |
+| stato clinico | affermato 4 641 · negato 275 · incerto 101 | |
+| momento della terapia | ingresso 1 086 · dimissione 376 · narrativo 42 | |
+| menzioni non ancorate | **772 su 6 772 (11,4%)** | |
+
+L'11,4% di citazioni non ritrovate e' il numero piu' importante della tabella,
+perche' e' la misura di quanto il modello si scosta dal testo. Sono parafrasi:
+il referto dice `Nega angor` e il modello scrive `negazione di angor`. Restano
+tutte nel file, marcate, con offset `null`: nessuna e' stata cancellata, cosi'
+che il difetto sia contabile e non invisibile.
+
+---
+
+## 7ter. La negazione, misurata sul serio
+
+Le quattro negazioni del banco di prova non bastavano a dire niente. Sui 198
+record si puo' invece confrontare pipeline B con pipeline A, che la negazione la
+decide con ConText deterministico.
+
+Due menzioni sono considerate la stessa quando cadono nello stesso campo e i loro
+intervalli di caratteri si sovrappongono: e' l'unico criterio che non dipende da
+come le due pipeline hanno scelto i confini. Le 692 menzioni non ancorate sono
+escluse d'ufficio, perche' senza offset non c'e' niente da sovrapporre.
+
+**Su 688 menzioni confrontabili l'accordo e' del 92,0%**, con 55 disaccordi.
+
+E il disaccordo ha una causa dominante che non e' un errore di negazione.
+
+---
+
+## 7quater. L'asse mancante: chi ha la malattia
+
+Ventuno dei 55 disaccordi hanno tutti la stessa forma:
+
+```
+A = affermato    B = negato    «Familiarita per cardiopatia ischemica (padre, 56 aa)»
+```
+
+**Hanno torto tutte e due.** La frase non dice che il paziente ha la cardiopatia,
+e non dice nemmeno che non ce l'ha: dice che ce l'ha suo padre. Nello schema
+c'era un solo campo, `stato`, che misura la polarita' di un'affermazione, e la
+familiarita' non e' una questione di polarita' — e' una questione di **soggetto**.
+Costrette a scegliere, le due pipeline hanno scelto in modo diverso, e nessuna
+delle due scelte era rappresentabile correttamente.
+
+ConText ha quattro assi, non tre. Il quarto e' l'**experiencer**, e nella prima
+versione dello schema mancava.
+
+### La correzione
+
+Lo schema sale a **1.1.0** con un campo nuovo su ogni condizione:
+
+```python
+class Soggetto(str, Enum):
+    PAZIENTE = "paziente"
+    FAMILIARE = "familiare"
+```
+
+I due assi restano indipendenti, e il corpus dimostra che devono esserlo:
+`familiarita negativa per CAD` e' **insieme** `soggetto=familiare` e
+`stato=negato`. Comprimerli in un campo solo perdeva sempre una delle due
+informazioni.
+
+### I marcatori vengono dal corpus, non dall'intuizione
+
+Contati sul file grezzo, come tutti gli altri marcatori del progetto:
+
+| espressione | occorrenze |
+|---|---|
+| `familiarita` (tutte le forme) | **508** |
+| di cui `familiarita per` | 431 |
+| `familiarita positiva` | 27 |
+| `familiarita negativa` | 18 |
+| `anamnesi familiare` | 28 |
+| `storia familiare` | 2 |
+
+`padre`, `madre`, `fratello` **non sono marcatori**, benche' frequenti (118, 108,
+50): nel corpus compaiono quasi sempre come precisazione fra parentesi *dentro*
+un ambito gia' aperto da `familiarita`, e promuoverli aprirebbe ambiti su frasi
+che parlano del paziente.
+
+### Un terminatore che il corpus ha imposto
+
+I referti incollano piu' affermazioni senza punteggiatura, segnalando l'inizio
+della successiva con la maiuscola:
+
+```
+Familiarita per cardiopatia ischemica ed ipertensione arteriosa Ex fumatore, 4-5 sigarette die
+```
+
+Senza un terminatore, `Ex fumatore` diventerebbe un'abitudine del padre. La
+maiuscola pero' deve essere seguita da una minuscola, altrimenti l'ambito si
+spezzerebbe su ogni acronimo — `CAD`, `IMA`, `MCV`, `HCM` sono ovunque. E il
+taglio non si applica dentro una parentesi, perche' le precisazioni sui parenti
+ne sono piene: `diabete mellito (padre, affetto da Parkinson, madre ETP)`.
+
+Sui 538 ambiti trovati nel corpus la regola ne accorcia 11, e l'ispezione dice
+che 8 sono accorciamenti corretti. Il compromesso e' voluto: un ambito troppo
+corto perde una marcatura familiare, uno troppo lungo toglie al paziente una
+condizione che ha davvero — e il secondo errore e' quello che il filtro di
+sicurezza pagherebbe caro.
+
+### Una sola implementazione per tre pipeline
+
+La regola lavora su **offset di carattere**, non sui token di spaCy, e vive in
+`risolutori.py` accanto alle altre normalizzazioni condivise. E' una scelta
+deliberata: la pipeline B non costruisce un documento spaCy — ha solo il testo
+del campo e gli offset della citazione — e due implementazioni della stessa
+regola divergerebbero, facendo misurare allo step 6 anche quella differenza
+invece del solo riconoscimento delle menzioni.
+
+### Verifica della correzione
+
+Rifatta girare, la pipeline A produce **zero differenze su 1 000 record** oltre
+al nuovo campo: la modifica e' additiva, non ha spostato nulla di quanto c'era.
+Trova 325 condizioni familiari su 5 237.
+
+La pipeline B non e' stata rifatta girare — sarebbero altre quindici ore per un
+campo che non viene dal modello. I 198 file sono stati migrati da
+`src/migra_soggetto.py`, che applica la stessa funzione agli stessi ingressi. Che
+questo dia per costruzione lo stesso risultato e' stato **provato e non
+assunto**: la migrazione applicata alla vecchia uscita della pipeline A riproduce
+esattamente la nuova, su tutti e 1 000 i record.
+
+### Cosa resta aperto
+
+La Regola 3 del prompt dice al modello di **non elencare** la familiarita'. Il
+modello la elenca comunque, marcandola `negato` — che era la cosa piu' sensata
+che potesse fare quando nello schema non c'era un posto per lei. Ora c'e', e la
+regola va riscritta: *elencale, il soggetto lo calcola la pipeline*. Non e' stato
+fatto adesso di proposito, perche' cambiare il prompt cambia l'impronta della
+configurazione e renderebbe i 198 record non piu' riprendibili ne' confrontabili.
+Va fatto insieme alla prossima corsa completa.
+
+---
+
+## 7quinquies. Chi ha ragione, quando le due pipeline non concordano
+
+Con l'asse `soggetto` in funzione, l'accordo sullo stato clinico passa da 92,0%
+a **94,9%**: 612 menzioni concordi su 645 confrontabili, contando solo quelle
+che entrambe attribuiscono al paziente. L'asse `soggetto` concorda su 688 casi
+su 688 — un risultato debole ma non nullo, perche' A e B hanno confini di
+menzione diversi e la regola avrebbe potuto rispondere diversamente sui due
+intervalli.
+
+Restano 33 disaccordi, ed e' stato lo sforzo piu' utile dello step: sono stati
+letti tutti e trentatre nel referto originale, uno per uno.
+
+| chi ha ragione | casi |
+|---|---|
+| pipeline A (ConText deterministico) | **23** |
+| pipeline B (`qwen3:4b`) | **9** |
+| nessuna delle due | 1 |
+
+**Dove vince A.** Il modello ignora marcatori che ha sotto gli occhi e che a
+volte cita lui stesso: *«Si ricovera per dispnea in verosimile scompenso
+cardiaco acuto»* -> B risponde `affermato`; *«in assenza di embolia polmonare»*,
+*«Non versamento pericardico»*, *«nega iperuricemia, gotta»* -> B risponde
+`affermato` su tutte. Sono negazioni e incertezze esplicite, con il marcatore
+immediatamente prima della menzione. Un modello da quattro miliardi di parametri
+le sbaglia dove una regola di prossimita' di cinquanta righe le prende.
+
+**Dove vince B**, e sono i casi che spiegano perche' la pipeline esiste:
+
+* *«**Asintomatico per** dolore toracico o equivalenti anginosi»* — A dice
+  `affermato` perche' `asintomatico per` non e' nella lista dei marcatori. Non e'
+  un difetto correggibile in generale: si puo' aggiungere questa espressione, ma
+  la successiva sara' un'altra.
+* *«Dall'ultimo ricovero **non riferiti** episodi sincopali o dispnea»* — stesso
+  problema.
+* *«episodi di cardiopalmo pregressi nel 2008 **dubbi** per tachicardia»* — la
+  lista ha `dubbio` e `dubbia`, non `dubbi`.
+* *«BPCO stadio GOLD **non** noto, artrite gottosa polso e mano dx nel 2023»* —
+  il `non` appartiene a `non noto`, ma l'ambito di A scavalca la virgola e nega
+  anche l'artrite. E' il prezzo diretto della scelta di **non** far chiudere
+  l'ambito dalla virgola, presa perche' gli elenchi negati sono la norma
+  (*«nega diabete, ipertensione e dislipidemia»*). Il modello, che legge la
+  frase invece di contare i token, qui non si sbaglia.
+* *«terapia con sacubitril/valsartan, **non** tollerata per ipotensione
+  sintomatica»* — il `non` e' di `non tollerata`; il paziente l'ipotensione ce
+  l'ha davvero.
+* *«Si ricovera **nel sospetto di** ipertensione polmonare in artrite psoriasica»*
+  — il sospetto riguarda l'ipertensione polmonare, l'artrite il paziente ce l'ha.
+
+Il quadro e' quindi: **la regola deterministica sbaglia in modo sistematico e
+prevedibile** (marcatori che non ha, ambiti che scavalcano), **il modello sbaglia
+in modo sparso e sorprendente** (ignora marcatori espliciti). Sono due profili di
+errore diversi, ed e' esattamente il tipo di complementarita' che lo step 6 deve
+quantificare.
+
+**Il caso che nessuna delle due prende:** *«ricoverata per FA tachifrequente con
+sospetto di embolia polmonare (escluso con angioTC)»*. L'embolia e' stata
+**esclusa**; A dice `incerto`, B dice `affermato`, e la risposta giusta e'
+`negato`. La parentesi che rovescia l'affermazione e' fuori dalla portata di
+entrambe.
+
+**Un limite dell'asse nuovo, trovato negli stessi 33 casi:** *«secondo figlio
+deceduto a 5 mesi per probabile cardiopatia congenita»* resta marcato
+`soggetto=paziente` da tutte e due, perche' `figlio` non e' un marcatore. E' la
+conseguenza diretta della scelta di non promuovere i termini di parentela, ed e'
+un compromesso, non una svista: promuoverli catturerebbe questo caso e ne
+romperebbe molti altri.
+
+---
+
+## 7sexies. Il difetto piu' grave: la generazione degenere
+
+Il confronto ha fatto emergere un problema che nessuna misura precedente vedeva.
+
+**795 delle 5 017 condizioni (15,8%) sono duplicati esatti** — stesso campo,
+stessa citazione, stesso concetto. Nella pipeline A i duplicati sono **zero**,
+per costruzione: il gazetteer trova ogni intervallo una volta sola.
+
+E non sono distribuiti. Sono concentrati:
+
+| | |
+|---|---|
+| record con almeno un duplicato | 41 su 198 |
+| record con una condizione ripetuta 10+ volte | **6** |
+| duplicati concentrati in quei 6 record | **529 su 795** |
+
+In sei record il modello e' entrato in un **ciclo di generazione degenere**, e ha
+ripetuto la stessa condizione fino a 102 volte di fila (`necrosi miocardica
+inferolaterale` ×77, in un altro record una singola condizione ×102). E' il
+comportamento noto dei modelli piccoli in decodifica vincolata da uno schema: il
+decodificatore garantisce che l'uscita sia JSON valido e conforme, e infatti lo
+e' — un array di oggetti tutti uguali e' perfettamente valido. **La validita'
+strutturale non e' validita' semantica**, ed e' il limite preciso della garanzia
+che lo schema offre.
+
+Sono anche, con ogni probabilita', la causa dei due timeout: un modello che
+ripete all'infinito consuma i trenta minuti di tempo massimo senza mai chiudere
+l'array.
+
+**Conseguenza sul conteggio.** Il numero di condizioni della pipeline B non e'
+5 017 ma **4 222 distinte**, ed e' quello che va usato nel confronto dello step 6:
+usare il numero grezzo attribuirebbe alla pipeline B un richiamo che non ha.
+
+**Cosa non e' stato fatto, e perche'.** I duplicati non sono stati rimossi dai
+file. Sono un difetto reale del componente e vanno visti; cancellarli
+renderebbe la pipeline migliore di quanto sia. La deduplicazione va fatta al
+momento del confronto, dove e' esplicita e misurabile, oppure a monte con
+`repeat_penalty` e un tetto al numero di elementi nella prossima corsa — non
+nascondendo il dato.
+
+---
+
 ## 8. Limiti noti
 
 * **La quota gratuita è il vincolo dominante**: 20 richieste al giorno per
@@ -401,12 +716,17 @@ record**. Sul listino AI Studio:
   (`parossistica` I48.0, `persistente` I48.1, `cronica` I48.2) e la categoria
   `I48`. È il problema di *entity linking* che lo step 5 deve affrontare, e qui è
   volutamente lasciato aperto invece di essere tappato con una regola inventata.
-* **Il modello riceve una regola che la pipeline A non ha**: non attribuire al
-  paziente ciò che il referto riferisce a un familiare. È clinicamente corretto,
-  ma introduce un'asimmetria di cui lo step 6 deve tenere conto.
+* ~~**Il modello riceve una regola che la pipeline A non ha**: non attribuire al
+  paziente ciò che il referto riferisce a un familiare.~~ **Risolto** dall'asse
+  `soggetto` (§ 7quater): la familiarità ora si calcola con la stessa regola in
+  tutte e tre le pipeline, e l'asimmetria che avrebbe falsato lo step 6 non c'è
+  più.
 * **Un solo campione, piccolo.** Quattordici record dicono che la pipeline
   funziona; non dicono quanto sia brava. Ogni numero qui va riletto sulla corsa
   definitiva.
+* **La generazione degenere non e' sotto controllo** (§ 7sexies): il 15,8% delle
+  condizioni sono duplicati, concentrati in sei record su 198. Serve un
+  `repeat_penalty` e un tetto agli elementi dell'array nella prossima corsa.
 * **Nessuna verifica di correttezza clinica.** L'assenza di allucinazioni è
   provata solo nel senso letterale: le citazioni esistono nel testo. Che
   l'interpretazione dello stato sia giusta lo dirà il confronto dello step 6.

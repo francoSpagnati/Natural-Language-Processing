@@ -63,6 +63,7 @@ from entity_linking import CollegatoreICD
 from risolutori import (  # RisolutoreATC ri-esportato: gia' usato come extract_a.RisolutoreATC
     RisolutoreATC,
     RisolutoreICD,
+    soggetto_della_menzione,
 )
 
 RADICE = Path(__file__).resolve().parent.parent
@@ -179,13 +180,17 @@ def _entita_dalla_prosa(
 
     for menzione in gazetteer.trova(documento):
         attributi = attributi_per_entita(ambiti, menzione.inizio_token, menzione.fine_token)
+        soggetto, nota_soggetto = soggetto_della_menzione(
+            testo, menzione.inizio, menzione.fine
+        )
+        regola = regola_provenienza(attributi, f"gazetteer:{menzione.forma_vocabolario}")
         provenienza = Provenienza(
             pipeline=Pipeline.A_DETERMINISTICA,
             campo_sorgente=CAMPO_ANAMNESI,
             testo_originale=menzione.testo,
             inizio=menzione.inizio,
             fine=menzione.fine,
-            regola=regola_provenienza(attributi, f"gazetteer:{menzione.forma_vocabolario}"),
+            regola=f"{regola} {nota_soggetto}" if nota_soggetto else regola,
         )
 
         if menzione.etichetta == ETICHETTA_CONDIZIONE:
@@ -204,6 +209,7 @@ def _entita_dalla_prosa(
                     sistema_codifica="ICD-10" if codice else None,
                     stato_normalizzazione=stato_norm,
                     stato=stato_da_attributi(attributi),
+                    soggetto=soggetto,
                     provenienza=provenienza,
                 )
             )

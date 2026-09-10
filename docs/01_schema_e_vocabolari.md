@@ -49,6 +49,25 @@ davvero formulazioni dubitative (`sospetta`, `verosimile`).
 Collassare negato e ignoto in un booleano perderebbe esattamente ciò che serve
 al filtro di sicurezza dello step 8.
 
+### 3.1bis Il soggetto, separato dallo stato *(aggiunto in 1.1.0)*
+
+`StatoConoscenza` misura la **polarità** di un'affermazione, e nella prima
+versione dello schema era l'unico asse disponibile. Il confronto fra pipeline A
+e B su 198 record ha mostrato cosa mancava: davanti a *«Familiarità per
+cardiopatia ischemica (padre)»* la pipeline A rispondeva `affermato` e la
+pipeline B `negato`, e **nessuna delle due aveva ragione**. La frase non parla
+della polarità: parla del **soggetto**. Il paziente non ha quella cardiopatia,
+ma non è nemmeno vero che il referto la neghi — la attribuisce a suo padre.
+
+È l'asse *experiencer* dell'algoritmo ConText, che ne ha quattro e di cui lo
+schema ne rappresentava tre. Il campo `soggetto` (`paziente` / `familiare`) lo
+aggiunge, e resta **indipendente** da `stato`: il corpus contiene *«familiarità
+negativa per CAD»*, che è insieme familiare e negata. Comprimere i due assi in
+un campo solo perdeva sempre una delle due informazioni.
+
+Il dettaglio della regola, dei marcatori contati sul corpus e della migrazione
+dei dati già prodotti sta in [`04_pipeline_estrazione_B.md`](04_pipeline_estrazione_B.md) § 7quater.
+
 ### 3.2 `stato_sezione_allergie`, separato dalla lista delle allergie
 
 Corollario diretto del punto precedente, ed emerso dai dati: nello step 0 si è

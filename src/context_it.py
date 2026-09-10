@@ -247,3 +247,115 @@ def attributi_per_entita(
             if precedente is None:
                 risultato[ambito.marcatore.attributo] = ambito.marcatore
     return risultato
+
+
+# ---------------------------------------------------------------------------
+# L'asse dell'*experiencer*: di chi si sta parlando
+# ---------------------------------------------------------------------------
+# ConText ha quattro assi, non tre. Oltre a negazione, incertezza e storicita'
+# c'e' l'**experiencer**: se l'affermazione riguardi il paziente o qualcun
+# altro. Nella prima versione dello schema mancava, e il confronto fra pipeline
+# A e B su 198 record ne ha mostrato il costo: 21 dei 55 disaccordi sullo stato
+# clinico erano frasi di familiarita', dove A leggeva `affermato` e B `negato`
+# e **nessuna delle due aveva ragione**, perche' la frase non dice che il
+# paziente ha la malattia ne' che non ce l'ha: dice che ce l'ha un parente.
+#
+# I marcatori vengono dal conteggio sul corpus grezzo (1000 ricoveri):
+# "familiarita" 508 occorrenze, di cui "familiarita per" 431, "familiarita
+# positiva" 27, "familiarita negativa" 18; "anamnesi familiare" 28; "storia
+# familiare" 2. Espressioni come "padre" o "madre" NON sono marcatori: nel
+# corpus compaiono quasi sempre come precisazione fra parentesi *dentro* un
+# ambito gia' aperto da "familiarita", e usarle da sole aprirebbe ambiti su
+# frasi che parlano del paziente.
+#
+# L'asse e' indipendente dagli altri tre, e il corpus lo dimostra:
+# "familiarita negativa per cad" e' insieme familiare e negata.
+
+# `familiarita;` con il punto e virgola compare davvero nel corpus (un refuso),
+# quindi fra il sostantivo e "per" si tollera qualche carattere non alfabetico.
+PATTERN_SOGGETTO_FAMILIARE = re.compile(
+    r"familiarit[aà]\W{0,3}(?:positiva|negativa)?\W{0,3}per\b"
+    r"|familiarit[aà]\b"
+    r"|anamnesi\s+familiare\b"
+    r"|storia\s+familiare\b",
+    re.IGNORECASE,
+)
+
+# Un ambito di familiarita' si chiude a fine frase. La virgola non lo chiude,
+# per la stessa ragione della negazione: gli elenchi sono la norma
+# ("familiarita positiva per diabete mellito (madre), cardiopatia ischemica").
+PATTERN_FINE_FRASE = re.compile(r"[.;:\n]|\bma\b|\btuttavia\b|\bnega\b|\briferisce\b")
+
+# I referti incollano piu' affermazioni senza punteggiatura, segnalando l'inizio
+# della successiva con la maiuscola: "familiarita per cardiopatia ischemica ed
+# ipertensione arteriosa Ex fumatore". Senza questo terminatore l'ambito
+# assorbirebbe abitudini e patologie che sono del paziente. La maiuscola deve
+# essere seguita da una minuscola, altrimenti si spezzerebbe su ogni acronimo
+# (CAD, MCV, IMA, HCM), che nel corpus sono frequentissimi.
+PATTERN_NUOVA_AFFERMAZIONE = re.compile(r"(?<=[a-zà-ù]) (?=[A-Z][a-zà-ù])")
+
+# Oltre questa distanza l'ambito non si propaga: nel corpus le frasi di
+# familiarita' sono brevi, e un tetto evita che una frase senza punteggiatura
+# finale trascini con se' meta' anamnesi.
+MASSIMA_AMPIEZZA_SOGGETTO = 160
+
+
+@dataclass(frozen=True)
+class AmbitoSoggetto:
+    """Un tratto di testo in cui si sta parlando di un familiare, non del paziente."""
+
+    inizio: int
+    fine: int
+    espressione: str
+
+
+def ambiti_familiarita(testo: str) -> list[AmbitoSoggetto]:
+    """Trova i tratti di testo governati da un marcatore di familiarita'.
+
+    Lavora su offset di carattere e non su token di spaCy, di proposito: e' la
+    sola forma che tutte e tre le pipeline possono usare senza modifiche. La
+    pipeline B non costruisce un documento spaCy — ha solo il testo del campo e
+    gli offset della citazione del modello — e avere due implementazioni della
+    stessa regola le farebbe divergere.
+    """
+    ambiti: list[AmbitoSoggetto] = []
+    for trovato in PATTERN_SOGGETTO_FAMILIARE.finditer(testo):
+        inizio = trovato.end()
+        limite = min(len(testo), inizio + MASSIMA_AMPIEZZA_SOGGETTO)
+        chiusura = PATTERN_FINE_FRASE.search(testo, inizio, limite)
+        fine = chiusura.start() if chiusura else limite
+        fine = _taglia_su_nuova_affermazione(testo, inizio, fine)
+        ambiti.append(AmbitoSoggetto(inizio, fine, trovato.group(0).strip()))
+    return ambiti
+
+
+def _taglia_su_nuova_affermazione(testo: str, inizio: int, fine: int) -> int:
+    """Accorcia l'ambito dove ricomincia una nuova affermazione senza punteggiatura.
+
+    Il taglio non si applica dentro una parentesi: le precisazioni sui parenti
+    ne sono piene ("diabete mellito (padre, affetto da Parkinson, madre ETP)") e
+    spezzarle toglierebbe la marcatura a condizioni che sono davvero familiari.
+    """
+    for candidato in PATTERN_NUOVA_AFFERMAZIONE.finditer(testo, inizio, fine):
+        tratto = testo[inizio:candidato.start()]
+        if tratto.count("(") > tratto.count(")"):
+            continue  # parentesi ancora aperta: non e' una nuova affermazione
+        return candidato.start()
+    return fine
+
+
+def soggetto_familiare(
+    testo: str, inizio: int | None, fine: int | None
+) -> AmbitoSoggetto | None:
+    """L'ambito di familiarita' che governa una menzione, se ce n'e' uno.
+
+    Restituisce l'ambito invece di un booleano perche' l'espressione che lo ha
+    aperto va registrata nella regola di `Provenienza`: chi rilegge il dato deve
+    poter risalire alla parola che ha deciso.
+    """
+    if inizio is None or fine is None:
+        return None  # menzione non ancorata: senza offset la regola non si applica
+    for ambito in ambiti_familiarita(testo):
+        if ambito.inizio < fine and inizio < ambito.fine:
+            return ambito
+    return None

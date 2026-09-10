@@ -23,7 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from explore_dataset import radice_nome_commerciale
-from schema import StatoNormalizzazione
+from context_it import soggetto_familiare
+from schema import Soggetto, StatoNormalizzazione
 
 RADICE = Path(__file__).resolve().parent.parent
 PERCORSO_MAPPATURA_ATC = RADICE / "data" / "interim" / "mappatura_atc.json"
@@ -313,3 +314,22 @@ class RisolutoreICD:
             )
 
         return EsitoICD(None, StatoNormalizzazione.NIL, None, (), "non_risolto")
+
+
+def soggetto_della_menzione(
+    testo_campo: str, inizio: int | None, fine: int | None
+) -> tuple[Soggetto, str | None]:
+    """Decide se una menzione riguardi il paziente o un suo familiare.
+
+    Vive qui, accanto alle altre normalizzazioni condivise, perche' tutte e tre
+    le pipeline devono applicare *la stessa* regola: se A la calcolasse sui token
+    di spaCy e B sugli offset del modello, il confronto dello step 6 misurerebbe
+    anche quella differenza invece del solo riconoscimento.
+
+    Restituisce anche la nota da aggiungere alla regola di provenienza, cosi'
+    l'espressione che ha deciso resta ispezionabile nel dato finale.
+    """
+    ambito = soggetto_familiare(testo_campo, inizio, fine)
+    if ambito is None:
+        return Soggetto.PAZIENTE, None
+    return Soggetto.FAMILIARE, f"experiencer:{ambito.espressione.lower()}"
