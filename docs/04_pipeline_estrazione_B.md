@@ -805,56 +805,57 @@ step 6 le attribuirebbe un richiamo che non ha.
 
 ---
 
-## 7octies. Perche' due record non si estraggono: due difetti, nessuno dei quali era quello ipotizzato
+## 7octies. Perche' due record non si estraggono, e una diagnosi che ho dovuto ritirare
 
 Il rilancio della corsa ha ripreso correttamente i due record mancanti e li ha
 persi di nuovo: **tre ore, sei tentativi da trenta minuti, zero record**. La
-temperatura e' 0, quindi stesso modello, stesso testo, stesso prompt, stesso
-esito — rilanciare identico non era una scommessa ragionevole, e il registro
-non poteva saperlo.
+temperatura e' 0 — stesso modello, stesso testo, stesso prompt, stesso esito.
+Rilanciare identico non era una scommessa ragionevole, e il registro non poteva
+saperlo: la ripresa sa quali record mancano, non perche' manchino.
 
-Per capirne la causa serviva vedere cosa il modello produce *mentre* lo produce,
-non aspettare trenta minuti per un errore. Una sonda che chiama ollama in
-**streaming** e legge i pezzi man mano ha dato la risposta in quattro minuti.
+Per capirne la causa serviva vedere l'uscita **mentre si forma**, non aspettare
+trenta minuti per un errore. Una sonda che chiama ollama in streaming l'ha data
+in quattro minuti.
 
-### Le due ipotesi sbagliate
+### Una diagnosi sbagliata, e come e' caduta
 
-| ipotesi | come e' caduta |
-|---|---|
-| generazione degenere: il modello ripete e non chiude l'array | l'uscita parziale ha 95 oggetti di cui **82 distinti**. Non ripete. |
-| i record sono troppo lunghi | **13 record riusciti** hanno un prompt piu' lungo del piu' corto dei due falliti, e il piu' lungo fra i riusciti (20 189 caratteri) e' quasi il doppio del peggior fallito (10 862). I sei record col ciclo degenere stanno fra 4 902 e 9 445, cioe' intorno alla mediana. Fallimento e lunghezza sono **scorrelati**. |
+La prima sonda sembrava aver trovato qualcosa di grosso: con `think: "low"` il
+modello scriveva la risposta JSON **dentro il blocco di ragionamento** senza mai
+chiuderlo, e la richiesta non si concludeva. Sembrava spiegare tutto, compreso il
+costo della corsa.
 
-### Primo difetto: la risposta finisce nel canale del ragionamento
+Era un artefatto della sonda. `BackendOllama` ha `ragionamento: bool = False` e
+`extract_b` lo costruisce passando **solo il modello**: la corsa vera girava gia'
+senza ragionamento, ed ero io ad averlo acceso nella sonda. La prova definitiva
+sta nella cache: **su tutte e 222 le risposte salvate, `token_ragionamento` e'
+zero**.
 
-Con `think: "low"`, dopo cinque minuti la sonda aveva ricevuto **8 603 caratteri
-di ragionamento e zero di uscita**. Ma quel "ragionamento" non e' ragionamento:
+Con lo stesso errore era caduta anche la stima secondo cui meta' dei token in
+uscita andasse sprecata. Misurata sulle risposte vere, la produzione e' di
+**2,42 caratteri di JSON per token in uscita**, che per un JSON fitto di
+punteggiatura e' del tutto normale: **tutti** i token generati sono finiti nel
+risultato. Il calcolo precedente confrontava i token misurati con una mia stima
+grossolana della dimensione del JSON, e la stima era sbagliata, non il modello.
 
-```
-{ "condizioni": [ { "testo_grezzo": "Obesita si", "concetto": "obesita", "campo": ...
-```
+La lezione e' che una sonda deve riprodurre la configurazione della corsa, non
+una configurazione plausibile; e che i dati gia' in cache valevano piu' di
+qualunque sonda nuova.
 
-E' **la risposta**, conforme allo schema. Il modello apre il blocco di
-ragionamento, ci scrive dentro la risposta e non lo chiude mai, quindi la
-richiesta non si conclude e trenta minuti dopo scatta il timeout.
+### Un difetto vero, trovato per la stessa strada
 
-Il corollario e' piu' grave del sintomo: **la decodifica vincolata dallo schema
-governa il canale della risposta, non quello del ragionamento**. Dentro il blocco
-di ragionamento il modello e' libero, e la garanzia strutturale su cui poggia
-tutta la pipeline B li' non vale.
+Il flag `--ragionamento` **non raggiunge il motore locale**. Alimenta
+`Richiesta.livello_ragionamento`, che serve a Gemini; `BackendOllama._corpo` usa
+invece `self.ragionamento`, che nessuno imposta. Il registro dei 198 record dice
+quindi `"ragionamento": "low"` mentre la corsa e' avvenuta **senza**
+ragionamento: l'impronta della configurazione registrava l'intenzione della riga
+di comando invece di cio' che ha davvero raggiunto il modello, ed e' esattamente
+il tipo di scarto che l'impronta esiste per impedire.
 
-E non riguarda solo i due record falliti. Sui 198 riusciti la corsa ha misurato
-**2 177 token in uscita per record** contro circa **1 106 stimati di JSON utile**:
-grosso modo meta' dei token in uscita non e' finita nel risultato, coerente con
-un modello che scrive la risposta due volte. Disattivare il ragionamento
-**dovrebbe quasi dimezzare** il tempo della corsa, da ~15 ore a ~8.
+### La causa vera: la lunghezza dell'uscita
 
-### Secondo difetto: la sovra-estrazione sulle anamnesi narrative
-
-Con `think: false` il canale si sistema — 0 caratteri di ragionamento, uscita
-dove deve stare — ma **il record non finisce lo stesso**: dopo dieci minuti sono
-16 236 caratteri, 95 oggetti, e sta ancora scrivendo.
-
-Non ripete: sovra-estrae. Guardando cosa estrae si capisce perche':
+Con la sonda configurata come la corsa (`think: false`) il record `10190890`
+produce **16 236 caratteri in dieci minuti e non ha finito**. Non ripete — 95
+oggetti di cui **82 distinti** — sovra-estrae. Basta guardare cosa:
 
 ```
 "testo_grezzo": "con lenta risoluzione"        -> concetto "risoluzione lenta"
@@ -862,27 +863,45 @@ Non ripete: sovra-estrae. Guardando cosa estrae si capisce perche':
                                                 -> concetto "ossigeno incrementato"
 ```
 
-Non sono condizioni cliniche: sono **frammenti di narrazione**. Su un'anamnesi
+Non sono condizioni cliniche, sono **frammenti di narrazione**. Su un'anamnesi
 lunga e discorsiva il modello trasforma quasi ogni proposizione in una
-"condizione", e l'uscita cresce senza un limite naturale. La mediana dei record
-riusciti e' 25 condizioni; qui siamo a 95 e la generazione non e' finita.
+"condizione", e l'uscita cresce senza un limite naturale.
 
-### Le tre correzioni, e perche' vanno insieme
+I numeri della cache chiudono il caso:
 
-1. **`think: false`** invece di `"low"`, che rimette la risposta nel canale
-   vincolato dallo schema e dimezza il costo.
-2. **`maxItems` sugli array dello schema.** E' il rimedio strutturale al secondo
-   difetto: non un'istruzione che il modello puo' ignorare, ma un vincolo che il
+| | token in uscita |
+|---|---|
+| mediana | 1 812 |
+| 95° percentile | 5 241 |
+| **massimo riuscito** | **9 762** = 19,8 minuti di generazione a 8,2 token/s |
+| tetto pratico imposto dal timeout di 1 800 s | ~14 800 |
+
+La risposta piu' lunga andata a buon fine ha occupato venti dei trenta minuti
+disponibili. I due record falliti chiedevano piu' del tetto. E la correlazione
+fra token in ingresso e token in uscita e' **r = 0,52**: la lunghezza del referto
+influenza quella della risposta ma non la determina, ed e' per questo che i
+fallimenti non si spiegano guardando solo il prompt.
+
+### Le correzioni
+
+1. **`maxItems` sugli array dello schema.** E' il rimedio strutturale: non
+   un'istruzione che il modello puo' ignorare, ma un vincolo che il
    decodificatore stesso applica, costringendo l'array a chiudersi. Un tetto
    generoso — sessanta elementi contro una mediana di venticinque — lascia
    intatti i record sani e limita per costruzione la durata dei patologici.
-3. **Il prompt**, perche' `con lenta risoluzione` non deve essere estratto
-   affatto: va detto che una condizione clinica non e' un frammento di frase.
+2. **Il prompt**, perche' `con lenta risoluzione` non deve essere estratto
+   affatto: va detto che una condizione non e' un frammento di frase.
+3. **Il flag `--ragionamento` va collegato al motore locale**, o l'impronta
+   continuera' a registrare un valore che non corrisponde alla corsa.
 
-Tutte e tre cambiano l'impronta della configurazione, e devono quindi andare
-**nella stessa corsa**. Il registro rifiutera' giustamente di mescolarle con i
-198 record attuali: quei due record restano mancanti, e il totale della corsa
-resta 198 su 200.
+Le prime due cambiano l'impronta della configurazione e devono andare **nella
+stessa corsa**. Il registro rifiutera' giustamente di mescolarle con i 198
+record attuali: quei due record restano mancanti, e il totale resta **198 su
+200**.
+
+Cade invece la previsione che disattivare il ragionamento dimezzasse la corsa:
+era gia' disattivato, e le quindici ore sono il costo reale di `qwen3:4b` su
+questa macchina.
 
 ---
 

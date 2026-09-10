@@ -393,7 +393,7 @@ class BackendOllama(BackendLLM):
         attesa_iniziale: float = 2.0,
         timeout: float = 1800.0,
         contesto: int = 8192,
-        ragionamento: bool = False,
+        ragionamento: bool | str = False,
     ) -> None:
         self.modello = modello
         self.host = host.rstrip("/")
@@ -405,6 +405,14 @@ class BackendOllama(BackendLLM):
         # I modelli a ragionamento ibrido (qwen3) altrimenti spendono la maggior
         # parte dei token generati a pensare. Su CPU e' il costo che decide se
         # una corsa sul dataset dura ore o giorni.
+        #
+        # Accetta anche le stringhe della riga di comando ("no", "low", "high")
+        # perche' prima le ignorava in silenzio: il registro di una corsa
+        # dichiarava `ragionamento: "low"` mentre il modello girava senza, e
+        # l'impronta della configurazione registrava l'intenzione invece di cio'
+        # che ha raggiunto il modello.
+        if isinstance(ragionamento, str):
+            ragionamento = False if ragionamento in ("no", "") else ragionamento
         self.ragionamento = ragionamento
 
     def _corpo(self, richiesta: Richiesta) -> dict:

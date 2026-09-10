@@ -476,9 +476,29 @@ class AllergiaLLM(BaseModel):
     """Allergia o intolleranza individuata dal modello."""
 
     allergene: str = Field(description="La sostanza, copiata alla lettera dal referto.")
+    # Senza questo campo la pipeline attribuiva d'ufficio ogni allergia
+    # all'anamnesi, e quando il modello citava correttamente un altro campo
+    # l'ancoraggio falliva per costruzione: 59 delle 111 allergie non ancorate
+    # della prima corsa erano testo che nel record esisteva, altrove.
+    campo: CampoReferto = Field(description="Campo del referto da cui viene la citazione.")
     categoria: str = Field(
         description="'principi attivi', 'alimenti', 'altro' o la categoria indicata nel referto."
     )
+
+
+# Tetto al numero di elementi per array. Non e' una preferenza stilistica: e'
+# l'unico rimedio strutturale alla sovra-estrazione. Su un'anamnesi lunga e
+# discorsiva qwen3:4b trasforma quasi ogni proposizione in una "condizione"
+# ("con lenta risoluzione" -> concetto "risoluzione lenta") e l'uscita cresce
+# senza un limite naturale: due record su 200 hanno esaurito trenta minuti di
+# generazione senza mai chiudere l'array.
+#
+# Un'istruzione nel prompt il modello puo' ignorarla; `maxItems` no, perche' lo
+# applica il decodificatore vincolato, che a quel punto e' obbligato a chiudere
+# l'array. Il tetto e' volutamente generoso — la mediana misurata e' 25
+# condizioni per record e il 95esimo percentile sta sotto la meta' del tetto —
+# cosi' i record sani non vengono toccati e solo quelli patologici si fermano.
+MASSIMI_ELEMENTI = 60
 
 
 class EstrazioneLLM(BaseModel):
@@ -489,9 +509,13 @@ class EstrazioneLLM(BaseModel):
     sperata dal prompt.
     """
 
-    condizioni: list[CondizioneLLM] = Field(default_factory=list)
-    farmaci: list[FarmacoLLM] = Field(default_factory=list)
-    allergie: list[AllergiaLLM] = Field(default_factory=list)
+    condizioni: list[CondizioneLLM] = Field(
+        default_factory=list, max_length=MASSIMI_ELEMENTI
+    )
+    farmaci: list[FarmacoLLM] = Field(default_factory=list, max_length=MASSIMI_ELEMENTI)
+    allergie: list[AllergiaLLM] = Field(
+        default_factory=list, max_length=MASSIMI_ELEMENTI
+    )
     stato_sezione_allergie: StatoConoscenza = Field(
         default=StatoConoscenza.IGNOTO,
         description="AFFERMATO se il referto elenca allergie, NEGATO se dichiara che non "

@@ -32,6 +32,7 @@ della configurazione.
 
 | Step | Documento | Stato |
 |---|---|---|
+| 0 | [`notebooks/01_analisi_esplorativa.ipynb`](../notebooks/01_analisi_esplorativa.ipynb) | ✅ analisi esplorativa eseguita |
 | 0 | [`00_esplorazione_dati.md`](00_esplorazione_dati.md) | ✅ completato |
 | 1 | [`01_schema_e_vocabolari.md`](01_schema_e_vocabolari.md) | ✅ completato, da validare |
 | 2 | [`02_terminologia_icd10.md`](02_terminologia_icd10.md) | ✅ terminologia ICD-10 estratta |
@@ -123,8 +124,9 @@ della configurazione.
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
 | `tests/test_pipeline_c.py` | `silver_labels`, `ner_train`, `entity_linking` | — | 5 |
+| `notebooks/01_analisi_esplorativa.ipynb` | `data_loading` | analisi esplorativa: conteggi, distribuzioni, regex commentate | 0 |
 
-I test sono 198 in tutto e **nessuno usa la rete**: la pipeline B e' provata
+I test sono 203 in tutto e **nessuno usa la rete**: la pipeline B e' provata
 con un backend fittizio, perche' una suite dipendente dall'API sarebbe lenta,
 costosa e verde o rossa a seconda del carico dei server.
 
@@ -154,7 +156,7 @@ costosa e verde o rossa a seconda del carico dei server.
 
 ## Test
 
-`python3 -m unittest discover -s tests -v` — 198 test.
+`python3 -m unittest discover -s tests -v` — 203 test.
 
 I test usano dati **sintetici** costruiti nel test stesso, mai il file clinico:
 il dataset non è versionato, quindi chi clona il repository deve poter eseguire

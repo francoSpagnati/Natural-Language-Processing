@@ -104,7 +104,9 @@ Una negazione copre tutto l'elenco che la segue: in "Nega diabete, ipertensione
 e dislipidemia" sono negate tutte e tre.
 
 REGOLA 2 - COSA E' UNA CONDIZIONE
-Solo diagnosi, patologie e fattori di rischio del paziente.
+Solo diagnosi, patologie e fattori di rischio del paziente. Una condizione ha un
+nome: se non sapresti dirlo a un altro medico in due parole, non e' una
+condizione.
 
   SI:  ipertensione arteriosa, fibrillazione atriale, BPCO, diabete, obesita',
        fumo, stenosi aortica, insufficienza renale cronica
@@ -112,15 +114,36 @@ Solo diagnosi, patologie e fattori di rischio del paziente.
        esami e referti strumentali ("ecocardiogramma normale", "coro-CT"),
        ricoveri e visite, terapie, "asintomatico", "alvo regolare"
 
-REGOLA 3 - NIENTE FAMILIARITA'
-Cio' che il referto attribuisce a un familiare non e' una condizione del
-paziente. "Familiarita' per ipertensione" e "il padre e' cardiopatico" non
-vanno elencati.
+NON spezzare la narrazione in condizioni. Un frammento di frase non e' una
+diagnosi, anche se descrive qualcosa di clinico.
+
+  SBAGLIATO: "con lenta risoluzione" con concetto "risoluzione lenta"
+  SBAGLIATO: "Dimessa con flusso di ossigeno incrementato ad 1 L/min"
+             con concetto "ossigeno incrementato"
+  SBAGLIATO: "Gennaio 2024 accesso al PS di Empoli con riscontro di
+             insufficienza respiratoria acuta"
+  GIUSTO:    da quella stessa frase, "insufficienza respiratoria acuta"
+
+Un referto lungo non contiene piu' diagnosi di uno corto: contiene piu' racconto.
+Un'anamnesi tipica ha fra le cinque e le venticinque condizioni. Se ne stai
+elencando molte di piu', stai estraendo narrazione.
+
+REGOLA 3 - FAMILIARITA'
+Elenca anche le condizioni che il referto attribuisce a un familiare
+("Familiarita' per ipertensione"): a distinguere il paziente dai suoi parenti ci
+pensa la pipeline, che lo calcola sul testo. Metti in `testo_grezzo` la
+citazione completa, marcatore compreso.
+
+  GIUSTO: testo_grezzo "Familiarita' per cardiopatia ischemica (padre)"
+          concetto "cardiopatia ischemica", stato "affermato"
+
+Lo `stato` descrive l'affermazione cosi' com'e': "familiarita' per X" e'
+affermata, "familiarita' negativa per X" e' negata.
 
 REGOLA 4 - UNA VOLTA SOLA
 Se la stessa condizione compare piu' volte nel referto, elencala una volta
 sola. "Ipertensione arteriosa essenziale" e "ipertensione da 15 aa" sono la
-stessa condizione.
+stessa condizione. Non ripetere mai due volte lo stesso oggetto identico.
 
 REGOLA 5 - CITAZIONE ALLA LETTERA
 `testo_grezzo` (per le allergie `allergene`) e' una porzione del referto
@@ -148,6 +171,26 @@ REGOLA 8 - NON DEDURRE
 Non aggiungere il farmaco che tratterebbe una condizione presente, ne' la
 condizione che giustificherebbe un farmaco. Solo cio' che e' scritto. Se un
 campo non contiene entita', lascia la lista vuota.
+
+REGOLA 9 - ALLERGIE: SOLO SE IL REFERTO LE NOMINA
+Un'allergia va elencata **solo** se il referto dice che il paziente e' allergico
+o intollerante a qualcosa. Cerca le parole: "allergia", "allergico",
+"intolleranza", "reazione a", "anafilassi".
+
+I farmaci elencati nella terapia sono farmaci che il paziente **assume**. Non
+sono allergie: sono l'esatto contrario.
+
+  SBAGLIATO: allergene "Bisoprololo (Congescor cp.riv. 2.5 mg)" preso dalla
+             terapia all'ingresso di un referto che di allergie non parla
+  GIUSTO:    da "riferita allergia a mdc (eruzioni pomfoidi)",
+             allergene "mdc", categoria "altro"
+
+Se il referto non nomina allergie, lascia la lista **vuota** e metti
+`stato_sezione_allergie` a "ignoto". Non metterla ad "affermato" per una lista
+che hai costruito da altro.
+
+In `categoria` va una fra "principi attivi", "alimenti", "altro": non il nome
+della sostanza e non il nome del campo.
 """
 
 
@@ -300,7 +343,7 @@ def converti(
     allergie: list[AllergiaEstratta] = []
     for voce in estrazione.allergie:
         provenienza, ancorata = _provenienza(
-            record, CampoReferto.ANAMNESI, voce.allergene, regola
+            record, voce.campo, voce.allergene, regola
         )
         non_ancorate += not ancorata
         codice, stato_norm, _ = risolutore_atc.risolvi(voce.allergene)
@@ -368,6 +411,14 @@ def scegli_record(record: list[RecordPaziente], quanti: int | None, seme: int):
     return sorted(generatore.sample(record, quanti), key=lambda r: r.enc_oid)
 
 
+def _ragionamento_effettivo(backend, opzioni) -> str:
+    """Il livello di ragionamento che arriva davvero al modello."""
+    valore = getattr(backend, "ragionamento", None)
+    if valore is None:  # backend remoto: il livello viaggia nella richiesta
+        return opzioni.ragionamento
+    return valore if isinstance(valore, str) else ("no" if not valore else "low")
+
+
 def impronta_configurazione(backend, opzioni, schema: dict) -> dict:
     """Tutto cio' che, cambiando, renderebbe i risultati non confrontabili.
 
@@ -382,7 +433,9 @@ def impronta_configurazione(backend, opzioni, schema: dict) -> dict:
     return {
         "motore": opzioni.motore,
         "modello": backend.modello,
-        "ragionamento": opzioni.ragionamento,
+        # Si legge dal backend, non dalle opzioni: e' cio' che raggiunge davvero
+        # il modello, e l'impronta deve descrivere la corsa, non l'intenzione.
+        "ragionamento": _ragionamento_effettivo(backend, opzioni),
         "seme": opzioni.seme,
         "record_richiesti": opzioni.record,
         "impronta_istruzioni": breve(ISTRUZIONI),
@@ -489,7 +542,10 @@ def main() -> None:
     )
     argomenti.add_argument("--seme", type=int, default=20260904, help="Seme del campionamento.")
     argomenti.add_argument(
-        "--ragionamento", default="low", choices=["low", "high"], help="Livello di ragionamento."
+        "--ragionamento",
+        default="no",
+        choices=["no", "low", "high"],
+        help="Livello di ragionamento ('no' lo disattiva).",
     )
     argomenti.add_argument(
         "--parallele",
@@ -514,7 +570,12 @@ def main() -> None:
     parallele = opzioni.parallele or (1 if opzioni.motore == "locale" else 8)
 
     classe = BackendOllama if opzioni.motore == "locale" else BackendGemini
-    backend = classe(**({"modello": opzioni.modello} if opzioni.modello else {}))
+    argomenti_backend: dict = {}
+    if opzioni.modello:
+        argomenti_backend["modello"] = opzioni.modello
+    if opzioni.motore == "locale":
+        argomenti_backend["ragionamento"] = opzioni.ragionamento
+    backend = classe(**argomenti_backend)
     risolutore_atc = RisolutoreATC()
     # Stesso gazetteer della pipeline A: la normalizzazione deve essere
     # identica nelle due pipeline, altrimenti il confronto dello step 6

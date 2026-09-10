@@ -23,6 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import extract_b  # noqa: E402
+import schema  # noqa: E402
 from data_loading import RecordPaziente, Referto  # noqa: E402
 from llm_backend import (  # noqa: E402
     BackendFittizio,
@@ -42,6 +43,7 @@ from schema import (  # noqa: E402
     StatoNormalizzazione,
     schema_estrazione_llm,
 )
+from pydantic import ValidationError  # noqa: E402
 
 
 def record_di_prova(anamnesi="", ingresso="", dimissione=None) -> RecordPaziente:
@@ -906,7 +908,7 @@ class TestMisuraProduzione(unittest.TestCase):
                     {
                         "allergie": [
                             # Non compare nel referto: e' una menzione inventata.
-                            {"allergene": "Penicillina", "categoria": "principi attivi"}
+                            {"allergene": "Penicillina", "categoria": "principi attivi", "campo": "Anamnesi"}
                         ]
                     }
                 ),
@@ -919,6 +921,69 @@ class TestMisuraProduzione(unittest.TestCase):
             m = extract_b.misura_produzione(percorso)
             self.assertEqual(m["allergie"], 1)
             self.assertEqual(m["menzioni_non_ancorate"], 1)
+
+
+class TestTettoElementi(unittest.TestCase):
+    """Il tetto agli elementi degli array e' un vincolo, non un consiglio.
+
+    Due record su 200 hanno esaurito trenta minuti di generazione perche' il
+    modello trasformava ogni proposizione della narrazione in una "condizione" e
+    l'array non si chiudeva mai. Un'istruzione nel prompt il modello puo'
+    ignorarla; `maxItems` lo applica il decodificatore vincolato.
+    """
+
+    def test_lo_schema_dichiara_il_tetto_al_decodificatore(self):
+        grezzo = schema_estrazione_llm()
+        for elenco in ("condizioni", "farmaci", "allergie"):
+            self.assertEqual(
+                grezzo["properties"][elenco]["maxItems"], schema.MASSIMI_ELEMENTI
+            )
+
+    def test_il_tetto_e_generoso_rispetto_alla_produzione_reale(self):
+        # Mediana misurata sulla corsa: 25 condizioni per record. Un tetto
+        # troppo stretto taglierebbe i record sani invece dei patologici.
+        self.assertGreaterEqual(schema.MASSIMI_ELEMENTI, 50)
+
+    def test_oltre_il_tetto_la_validazione_rifiuta(self):
+        troppe = [
+            {"testo_grezzo": f"c{i}", "concetto": f"c{i}", "campo": "Anamnesi",
+             "stato": "affermato"}
+            for i in range(schema.MASSIMI_ELEMENTI + 1)
+        ]
+        with self.assertRaises(ValidationError):
+            EstrazioneLLM.model_validate({"condizioni": troppe})
+
+
+class TestCampoDelleAllergie(unittest.TestCase):
+    """Le allergie devono dichiarare da quale campo vengono, come le altre entita'.
+
+    Prima la pipeline le attribuiva d'ufficio all'anamnesi: quando il modello
+    citava correttamente un altro campo l'ancoraggio falliva per costruzione, e
+    59 delle 111 allergie non ancorate della prima corsa erano testo che nel
+    record esisteva davvero, altrove.
+    """
+
+    def test_un_allergia_citata_dalla_terapia_si_ancora(self):
+        stato = extract_b.converti(
+            record_di_prova(anamnesi="Nessuna nota.", ingresso="Amoxicillina 1 g"),
+            EstrazioneLLM.model_validate(
+                {
+                    "allergie": [
+                        {
+                            "allergene": "Amoxicillina",
+                            "categoria": "principi attivi",
+                            "campo": "Terapia medica all'ingresso",
+                        }
+                    ]
+                }
+            ),
+            "m",
+            RisolutoreATCFinto(),
+            RisolutoreICDFinto(),
+        )
+        provenienza = stato.allergie[0].provenienza
+        self.assertEqual(provenienza.campo_sorgente, "Terapia medica all'ingresso")
+        self.assertIsNotNone(provenienza.inizio)
 
 
 if __name__ == "__main__":
