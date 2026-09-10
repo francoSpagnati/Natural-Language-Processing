@@ -3,8 +3,16 @@
 Documento vivo, aggiornato **a ogni step**. Dà la visione d'insieme di come i
 componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
-**Ultimo step completato: 5 — Pipeline C (NER + entity linking).** Le tre
-pipeline sono complete e misurate; lo step 6 le confronta.
+**Ultimo step completato: 6 — Confronto fra le tre pipeline.**
+
+Il risultato che conta non è quale pipeline vinca — nessuna vince — ma che i tre
+**profili di errore** sono qualitativamente diversi: sul campione aggiudicato a
+mano, **tutti gli errori esclusivi della pipeline A portano con sé un codice ICD
+assegnato con sicurezza (12 su 12), nessuno di quelli di B e C ce l'ha**. Il
+gazetteer riconosce e codifica in un solo passo, quindi un match sbagliato è già
+codificato; le altre due riconoscono prima e collegano dopo, e un riconoscimento
+sbagliato resta visibile come irrisolto. È la distinzione che il filtro di
+sicurezza dello step 8 deve tenere presente.
 
 La pipeline B ha concluso la sua corsa definitiva: **198 record in 14 h 41 m**
 con `qwen3:4b` in locale. Il confronto della negazione con la pipeline A ha
@@ -33,6 +41,7 @@ della configurazione.
 | Step | Documento | Stato |
 |---|---|---|
 | 0 | [`notebooks/01_analisi_esplorativa.ipynb`](../notebooks/01_analisi_esplorativa.ipynb) | ✅ analisi esplorativa eseguita |
+| 6 | [`notebooks/02_confronto_pipeline.ipynb`](../notebooks/02_confronto_pipeline.ipynb) | ✅ confronto con aggiudicazione manuale |
 | 0 | [`00_esplorazione_dati.md`](00_esplorazione_dati.md) | ✅ completato |
 | 1 | [`01_schema_e_vocabolari.md`](01_schema_e_vocabolari.md) | ✅ completato, da validare |
 | 2 | [`02_terminologia_icd10.md`](02_terminologia_icd10.md) | ✅ terminologia ICD-10 estratta |
@@ -40,7 +49,7 @@ della configurazione.
 | 3 | [`03_pipeline_estrazione_A.md`](03_pipeline_estrazione_A.md) | ✅ completato |
 | 4 | [`04_pipeline_estrazione_B.md`](04_pipeline_estrazione_B.md) | ✅ completato |
 | 5 | [`05_pipeline_estrazione_C.md`](05_pipeline_estrazione_C.md) | ✅ completato |
-| 6 | `06_confronto_pipeline.md` | ⬜ da fare |
+| 6 | [`06_confronto_pipeline.md`](06_confronto_pipeline.md) | ✅ completato |
 | 7 | `07_knowledge_graph.md` | ⬜ da fare |
 | 8 | `08_motore_fase1_filtro.md` | ⬜ da fare |
 | 9 | `09_motore_fase2_ranker.md` | ⬜ da fare |
@@ -78,7 +87,7 @@ della configurazione.
                                       │
                                       ▼
                     StatoPaziente (src/schema.py)             ← definito allo step 1 ✅
-                                      │              confronto pipeline: step 6 ⬜
+                                      │              confronto pipeline: step 6 ✅
                                       ▼
                     ┌───── motore di raccomandazione ─────┐
                     │  Fase 1 — filtro simbolico (step 8) │ ← mai LLM, mai dataset
@@ -125,8 +134,10 @@ della configurazione.
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
 | `tests/test_pipeline_c.py` | `silver_labels`, `ner_train`, `entity_linking` | — | 5 |
 | `notebooks/01_analisi_esplorativa.ipynb` | `data_loading` | analisi esplorativa: conteggi, distribuzioni, regex commentate | 0 |
+| `src/confronto.py` | `risolutori`, uscite delle tre pipeline | step 6; il knowledge graph dello step 7 ne eredita le conclusioni | 6 |
+| `notebooks/02_confronto_pipeline.ipynb` | `confronto` | il confronto con i grafici e l'aggiudicazione manuale | 6 |
 
-I test sono 203 in tutto e **nessuno usa la rete**: la pipeline B e' provata
+I test sono 219 in tutto e **nessuno usa la rete**: la pipeline B e' provata
 con un backend fittizio, perche' una suite dipendente dall'API sarebbe lenta,
 costosa e verde o rossa a seconda del carico dei server.
 
@@ -156,7 +167,7 @@ costosa e verde o rossa a seconda del carico dei server.
 
 ## Test
 
-`python3 -m unittest discover -s tests -v` — 203 test.
+`python3 -m unittest discover -s tests -v` — 219 test.
 
 I test usano dati **sintetici** costruiti nel test stesso, mai il file clinico:
 il dataset non è versionato, quindi chi clona il repository deve poter eseguire
