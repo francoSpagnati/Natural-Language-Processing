@@ -128,6 +128,22 @@ Un referto lungo non contiene piu' diagnosi di uno corto: contiene piu' racconto
 Un'anamnesi tipica ha fra le cinque e le venticinque condizioni. Se ne stai
 elencando molte di piu', stai estraendo narrazione.
 
+CRITERIO OPERATIVO: `testo_grezzo` di una condizione e' quasi sempre di UNA-CINQUE
+PAROLE. Se stai per scrivere una frase con un verbo, una data o un valore
+numerico, non e' una condizione.
+
+  SBAGLIATO: "durante la degenza FA cardiovertita con amiodarone"
+  GIUSTO:    "FA"
+
+  SBAGLIATO: "eseguito SEF: tempo di recupero nodo del seno nella norma"
+  GIUSTO:    niente, e' il risultato di un esame
+
+  SBAGLIATO: "dimessa senza NOAC rimandando la decisione a rivalutazione"
+  GIUSTO:    niente, e' una decisione terapeutica
+
+  SBAGLIATO: "RM encefalo 23/1: multiple aree di alterato segnale da gliosi"
+  GIUSTO:    "gliosi"
+
 REGOLA 3 - FAMILIARITA'
 Elenca anche le condizioni che il referto attribuisce a un familiare
 ("Familiarita' per ipertensione"): a distinguere il paziente dai suoi parenti ci
@@ -162,9 +178,29 @@ acronimi sciolti:
 
 Se il referto usa gia' la forma estesa, ripetila identica.
 
-REGOLA 7 - FARMACI
-Elenca ogni farmaco separatamente, anche dentro un elenco di terapia. In
-`posologia` riporta dose e frequenza come sono scritte. Le condizioni pregresse
+REGOLA 7 - FARMACI: TUTTE LE SEZIONI, NON UNA SOLA
+Il referto ha fino a TRE sezioni, marcate da "###". Le due sezioni di terapia
+sono **elenchi diversi di farmaci diversi** e vanno estratte ENTRAMBE:
+"Terapia medica all'ingresso" e' quello che il paziente prendeva a casa,
+"Terapia alla Dimissione" e' quello che gli viene prescritto adesso. Nessuna
+delle due sostituisce l'altra e nessuna delle due e' piu' importante.
+
+  SBAGLIATO: estrarre solo la terapia d'ingresso e fermarsi
+  SBAGLIATO: estrarre solo la terapia di dimissione e fermarsi
+  GIUSTO:    ogni farmaco di ogni sezione presente, ciascuno con il suo `campo`
+
+Ogni sezione e' un ELENCO: una voce per farmaco, non una per la sezione. Se una
+sezione contiene otto farmaci, in `farmaci` devono comparire otto voci con quel
+`campo`.
+
+  Riga:    "Ramipril (Ramipril doc cps. rigide 2,5 mg): da assumere 2,5 mg (ore 21)"
+  Voce:    testo_grezzo "Ramipril (Ramipril doc cps. rigide 2,5 mg)"
+           campo "Terapia alla Dimissione", posologia "2,5 mg (ore 21)"
+
+Prima di concludere conta: per OGNI sezione "###" di terapia presente nel
+referto, in `farmaci` c'e' almeno una voce con quel `campo`?
+
+In `posologia` riporta dose e frequenza come sono scritte. Le condizioni pregresse
 o risolte restano "affermato": fanno parte della storia clinica.
 
 REGOLA 8 - NON DEDURRE
@@ -188,6 +224,11 @@ sono allergie: sono l'esatto contrario.
 Se il referto non nomina allergie, lascia la lista **vuota** e metti
 `stato_sezione_allergie` a "ignoto". Non metterla ad "affermato" per una lista
 che hai costruito da altro.
+
+`allergene` deve essere una stringa che TU HAI LETTO nel referto. Se non riesci a
+indicare il punto esatto in cui compare, quell'allergia non va elencata. Le
+allergie tipiche di un cardiopatico — mezzo di contrasto, ASA, statine — non
+vanno aggiunte perche' sono plausibili.
 
 In `categoria` va una fra "principi attivi", "alimenti", "altro": non il nome
 della sostanza e non il nome del campo.
@@ -687,7 +728,14 @@ def main() -> None:
         json.dumps(riepilogo, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     stampa_riepilogo(riepilogo)
-    print(f"\nRisultati in {cartella.relative_to(RADICE)}/  ·  riepilogo in {NOME_RIEPILOGO}")
+    # `relative_to` solleva se la cartella e' fuori dalla radice o e' stata data
+    # come percorso relativo dalla riga di comando: e' successo con --uscita, e
+    # il programma moriva dopo aver fatto tutto il lavoro e scritto i risultati.
+    try:
+        dove = cartella.resolve().relative_to(RADICE)
+    except ValueError:
+        dove = cartella.resolve()
+    print(f"\nRisultati in {dove}/  ·  riepilogo in {NOME_RIEPILOGO}")
 
 
 def misura_produzione(cartella) -> dict:
