@@ -19,6 +19,15 @@ condizioni** (507 voci) e **allergie inventate** su referti che di allergie non
 parlano (25,9%, nel caso peggiore la lista dei farmaci che il paziente assume).
 Il numero di condizioni utilizzabili è **3 406**, non 5 017.
 
+Il recupero dei due record falliti è stato tentato e **non è riuscito** (tre ore,
+sei tentativi). Una sonda in streaming ne ha trovato la causa, che non era
+quella ipotizzata: con `think: "low"` il modello **scrive la risposta dentro il
+blocco di ragionamento** e non lo chiude mai — e la decodifica vincolata dallo
+schema governa il canale della risposta, non quello del ragionamento. La corsa
+resta **198 su 200**; le correzioni (`think: false`, `maxItems` sugli array,
+prompt) vanno tutte nella prossima corsa completa perché cambiano l'impronta
+della configurazione.
+
 ## Indice dei documenti
 
 | Step | Documento | Stato |

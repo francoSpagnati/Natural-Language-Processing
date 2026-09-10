@@ -687,9 +687,8 @@ e' — un array di oggetti tutti uguali e' perfettamente valido. **La validita'
 strutturale non e' validita' semantica**, ed e' il limite preciso della garanzia
 che lo schema offre.
 
-Sono anche, con ogni probabilita', la causa dei due timeout: un modello che
-ripete all'infinito consuma i trenta minuti di tempo massimo senza mai chiudere
-l'array.
+Avevo attribuito a questo ciclo anche i due timeout. **Era sbagliato**, e la
+diagnosi vera e' nel paragrafo seguente.
 
 **Conseguenza sul conteggio.** Il numero di condizioni della pipeline B non e'
 5 017 ma **4 222 distinte**, ed e' quello che va usato nel confronto dello step 6:
@@ -803,6 +802,87 @@ step 6 le attribuirebbe un richiamo che non ha.
 * La pipeline A rifatta girare da **zero differenze su 1 000 record** oltre al
   campo nuovo.
 * 199 test, tutti verdi, incluso quello che fissa il conteggio delle allergie.
+
+---
+
+## 7octies. Perche' due record non si estraggono: due difetti, nessuno dei quali era quello ipotizzato
+
+Il rilancio della corsa ha ripreso correttamente i due record mancanti e li ha
+persi di nuovo: **tre ore, sei tentativi da trenta minuti, zero record**. La
+temperatura e' 0, quindi stesso modello, stesso testo, stesso prompt, stesso
+esito — rilanciare identico non era una scommessa ragionevole, e il registro
+non poteva saperlo.
+
+Per capirne la causa serviva vedere cosa il modello produce *mentre* lo produce,
+non aspettare trenta minuti per un errore. Una sonda che chiama ollama in
+**streaming** e legge i pezzi man mano ha dato la risposta in quattro minuti.
+
+### Le due ipotesi sbagliate
+
+| ipotesi | come e' caduta |
+|---|---|
+| generazione degenere: il modello ripete e non chiude l'array | l'uscita parziale ha 95 oggetti di cui **82 distinti**. Non ripete. |
+| i record sono troppo lunghi | **13 record riusciti** hanno un prompt piu' lungo del piu' corto dei due falliti, e il piu' lungo fra i riusciti (20 189 caratteri) e' quasi il doppio del peggior fallito (10 862). I sei record col ciclo degenere stanno fra 4 902 e 9 445, cioe' intorno alla mediana. Fallimento e lunghezza sono **scorrelati**. |
+
+### Primo difetto: la risposta finisce nel canale del ragionamento
+
+Con `think: "low"`, dopo cinque minuti la sonda aveva ricevuto **8 603 caratteri
+di ragionamento e zero di uscita**. Ma quel "ragionamento" non e' ragionamento:
+
+```
+{ "condizioni": [ { "testo_grezzo": "Obesita si", "concetto": "obesita", "campo": ...
+```
+
+E' **la risposta**, conforme allo schema. Il modello apre il blocco di
+ragionamento, ci scrive dentro la risposta e non lo chiude mai, quindi la
+richiesta non si conclude e trenta minuti dopo scatta il timeout.
+
+Il corollario e' piu' grave del sintomo: **la decodifica vincolata dallo schema
+governa il canale della risposta, non quello del ragionamento**. Dentro il blocco
+di ragionamento il modello e' libero, e la garanzia strutturale su cui poggia
+tutta la pipeline B li' non vale.
+
+E non riguarda solo i due record falliti. Sui 198 riusciti la corsa ha misurato
+**2 177 token in uscita per record** contro circa **1 106 stimati di JSON utile**:
+grosso modo meta' dei token in uscita non e' finita nel risultato, coerente con
+un modello che scrive la risposta due volte. Disattivare il ragionamento
+**dovrebbe quasi dimezzare** il tempo della corsa, da ~15 ore a ~8.
+
+### Secondo difetto: la sovra-estrazione sulle anamnesi narrative
+
+Con `think: false` il canale si sistema — 0 caratteri di ragionamento, uscita
+dove deve stare — ma **il record non finisce lo stesso**: dopo dieci minuti sono
+16 236 caratteri, 95 oggetti, e sta ancora scrivendo.
+
+Non ripete: sovra-estrae. Guardando cosa estrae si capisce perche':
+
+```
+"testo_grezzo": "con lenta risoluzione"        -> concetto "risoluzione lenta"
+"testo_grezzo": "Dimessa con flusso di ossigeno incrementato ad 1 L/min"
+                                                -> concetto "ossigeno incrementato"
+```
+
+Non sono condizioni cliniche: sono **frammenti di narrazione**. Su un'anamnesi
+lunga e discorsiva il modello trasforma quasi ogni proposizione in una
+"condizione", e l'uscita cresce senza un limite naturale. La mediana dei record
+riusciti e' 25 condizioni; qui siamo a 95 e la generazione non e' finita.
+
+### Le tre correzioni, e perche' vanno insieme
+
+1. **`think: false`** invece di `"low"`, che rimette la risposta nel canale
+   vincolato dallo schema e dimezza il costo.
+2. **`maxItems` sugli array dello schema.** E' il rimedio strutturale al secondo
+   difetto: non un'istruzione che il modello puo' ignorare, ma un vincolo che il
+   decodificatore stesso applica, costringendo l'array a chiudersi. Un tetto
+   generoso — sessanta elementi contro una mediana di venticinque — lascia
+   intatti i record sani e limita per costruzione la durata dei patologici.
+3. **Il prompt**, perche' `con lenta risoluzione` non deve essere estratto
+   affatto: va detto che una condizione clinica non e' un frammento di frase.
+
+Tutte e tre cambiano l'impronta della configurazione, e devono quindi andare
+**nella stessa corsa**. Il registro rifiutera' giustamente di mescolarle con i
+198 record attuali: quei due record restano mancanti, e il totale della corsa
+resta 198 su 200.
 
 ---
 
