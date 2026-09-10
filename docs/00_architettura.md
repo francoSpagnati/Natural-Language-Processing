@@ -12,6 +12,13 @@ fatto emergere un asse mancante nello schema — l'*experiencer* di ConText — 
 è stato aggiunto (schema **1.1.0**) prima di procedere al confronto, perché
 altrimenti lo step 6 avrebbe misurato una differenza che non esiste.
 
+La verifica dei numeri dichiarati (`04` § 7septies) ha poi trovato tre difetti
+della pipeline B che il confronto dello step 6 deve tenere presenti: **duplicati
+da generazione degenere** (15,8% delle condizioni), **farmaci elencati come
+condizioni** (507 voci) e **allergie inventate** su referti che di allergie non
+parlano (25,9%, nel caso peggiore la lista dei farmaci che il paziente assume).
+Il numero di condizioni utilizzabili è **3 406**, non 5 017.
+
 ## Indice dei documenti
 
 | Step | Documento | Stato |

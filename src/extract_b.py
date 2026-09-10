@@ -666,7 +666,14 @@ def misura_produzione(cartella) -> dict:
             misure["per_momento"][chiave] = misure["per_momento"].get(chiave, 0) + 1
             if farmaco["provenienza"]["inizio"] is None:
                 misure["menzioni_non_ancorate"] += 1
-        misure["allergie"] += len(stato["allergie"])
+        for allergia in stato["allergie"]:
+            # Le allergie erano contate solo nel totale e mai controllate per
+            # l'ancoraggio, mentre il denominatore le comprendeva: il tasso di
+            # menzioni non ritrovate risultava piu' basso del vero. Sono anzi il
+            # tipo di menzione che il modello parafrasa piu' spesso.
+            misure["allergie"] += 1
+            if allergia["provenienza"]["inizio"] is None:
+                misure["menzioni_non_ancorate"] += 1
     return misure
 
 

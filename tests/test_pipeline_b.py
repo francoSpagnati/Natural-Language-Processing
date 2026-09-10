@@ -889,6 +889,37 @@ class TestMisuraProduzione(unittest.TestCase):
             self.assertEqual(m["farmaci"], 1)
             self.assertEqual(m["per_stato"]["affermato"], 1)
 
+    def test_conta_anche_le_allergie_non_ancorate(self):
+        """Le allergie contavano nel denominatore ma non nel numeratore.
+
+        Il tasso di menzioni non ritrovate risultava piu' basso del vero, e su
+        200 record ha nascosto il difetto piu' grave della pipeline: allergie a
+        farmaci che il paziente sta assumendo, inventate su referti che di
+        allergie non parlano. Sono anzi il tipo di menzione che il modello
+        parafrasa piu' spesso.
+        """
+        with tempfile.TemporaryDirectory() as cartella:
+            percorso = Path(cartella)
+            stato = extract_b.converti(
+                record_di_prova(anamnesi="Nessuna nota.", dimissione="x"),
+                EstrazioneLLM.model_validate(
+                    {
+                        "allergie": [
+                            # Non compare nel referto: e' una menzione inventata.
+                            {"allergene": "Penicillina", "categoria": "principi attivi"}
+                        ]
+                    }
+                ),
+                "m",
+                RisolutoreATCFinto(),
+                RisolutoreICDFinto(),
+            )
+            (percorso / "1.json").write_text(stato.model_dump_json(), encoding="utf-8")
+
+            m = extract_b.misura_produzione(percorso)
+            self.assertEqual(m["allergie"], 1)
+            self.assertEqual(m["menzioni_non_ancorate"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

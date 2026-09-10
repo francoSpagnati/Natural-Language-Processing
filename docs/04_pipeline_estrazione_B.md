@@ -460,7 +460,7 @@ lunghezza media, la corsa ha incontrato anche i lunghi.
 | allergie | 251 | |
 | stato clinico | affermato 4 641 · negato 275 · incerto 101 | |
 | momento della terapia | ingresso 1 086 · dimissione 376 · narrativo 42 | |
-| menzioni non ancorate | **772 su 6 772 (11,4%)** | |
+| menzioni non ancorate | **883 su 6 772 (13,0%)** | il numero stampato in corsa, 11,4%, era sbagliato: vedi § 7septies |
 
 L'11,4% di citazioni non ritrovate e' il numero piu' importante della tabella,
 perche' e' la misura di quanto il modello si scosta dal testo. Sono parafrasi:
@@ -704,6 +704,108 @@ nascondendo il dato.
 
 ---
 
+## 7septies. La verifica dei numeri, e cosa ha trovato
+
+Ogni cifra dichiarata sopra e' stata ricalcolata dai file su disco con codice
+indipendente da quello della pipeline. Condizioni, farmaci, codici, stati e
+duplicati coincidono. Due voci no, e valeva la pena guardarle.
+
+### Un errore mio
+
+Il primo ricalcolo dava 1 333 duplicati invece di 795, perche' contava come
+duplicate anche menzioni identiche in **record diversi** — che duplicati non
+sono. Il numero giusto e' 795, come dichiarato.
+
+### Un difetto vero, che nascondeva il difetto peggiore della pipeline
+
+`misura_produzione` contava le menzioni non ancorate per condizioni e farmaci ma
+**non per le allergie**, mentre nel denominatore le allergie c'erano. Il tasso
+riportato in corsa, 11,4%, era quindi sottostimato: il valore vero e' **13,0%**
+(883 su 6 772).
+
+La differenza non e' aritmetica. Le allergie sono **il tipo di menzione che il
+modello sbaglia di piu'**: 111 su 251, il **44,2%**, non si ritrovano nel referto,
+contro il 13,8% delle condizioni e il 5,3% dei farmaci. Un difetto di conteggio
+di una riga teneva invisibile il problema piu' grave della pipeline.
+
+### Il problema piu' grave
+
+Su 24 record dei 198, **l'anamnesi non nomina mai le allergie** — nessuna
+occorrenza di `allerg`, `intolleran`, `anafila` — e la pipeline B ne estrae
+comunque. Sono **65 allergie su 251, il 25,9%**, e in diversi casi con
+`stato_sezione_allergie = affermato`, cioe' dichiarando che il clinico le ha
+confermate.
+
+Il caso peggiore, il record `10066482`: l'anamnesi non parla di allergie, e il
+modello ne produce dieci, che sono **la lista dei farmaci che il paziente
+assume**, copiata dal campo della terapia all'ingresso:
+
+```
+allergene: "Acido acetilsalicilico (Acido acetils eg cpr.gastr. 100 mg)"
+allergene: "Bisoprololo (Congescor cp.riv. 2.5 mg)"
+allergene: "Rosuvastatina (Rosuvastatina ari cp.riv. 20 mg)"
+```
+
+Per un sistema che deve **raccomandare una terapia**, questo e' l'errore
+peggiore possibile: un'allergia inventata al farmaco che il paziente sta gia'
+prendendo bloccherebbe la terapia corretta. Non e' un errore di richiamo, e'
+un'inversione di significato.
+
+Nello stesso gruppo, il record `10161552` ha allergie vere nel referto
+(`Trimetoprim/sulfametoxazolo, Ciclosporina, Amoxicillina/acido clavulanico`) ma
+la pipeline ne estrae 45, con `Ciprofloxacin` ripetuto decine di volte: e' di
+nuovo la generazione degenere del § 7sexies, e la grafia inglese invece di
+`Ciprofloxacina` e' anche il motivo per cui non si ancora.
+
+### Un difetto della pipeline, non del modello
+
+Delle 883 menzioni non ancorate, **138 sono testo che nel record esiste davvero,
+ma in un altro campo**. Per le allergie sono 59 su 111, e la colpa qui non e' del
+modello: `AllergiaLLM` **non ha un campo `campo`**, e la pipeline attribuisce
+d'ufficio ogni allergia all'anamnesi. Quando il modello cita correttamente il
+campo della terapia, l'ancoraggio fallisce per costruzione.
+
+Vanno corrette due cose distinte, e vanno tenute distinte: dare alle allergie il
+campo di provenienza come ce l'hanno condizioni e farmaci (difetto della
+pipeline), e impedire al modello di scambiare la lista dei farmaci per una lista
+di allergie (difetto del prompt).
+
+### Un terzo difetto: farmaci elencati come condizioni
+
+Il risolutore ATC riconosce **507 delle condizioni distinte di pipeline B come
+farmaci** — `bisoprololo`, `levetiracetam`, `furosemide`, `pantoprazolo`. Il
+modello li ha messi nell'elenco sbagliato.
+
+### Il conteggio onesto
+
+Mettendo insieme i tre difetti, il numero di condizioni che la pipeline B produce
+e che sono utilizzabili nel confronto e':
+
+| | |
+|---|---|
+| condizioni grezze | 5 017 |
+| − duplicati nello stesso record | −795 |
+| − farmaci elencati come condizioni | −507 |
+| − citazioni non ritrovate nel referto | −309 |
+| **= condizioni utilizzabili** | **3 406** (67,9% del grezzo) |
+
+Sugli stessi 198 record la pipeline A ne produce **1 075** e la pipeline C
+**1 112**. Il vantaggio di richiamo della pipeline B resta quindi reale e grande
+— circa il triplo — ma e' **3 406 contro 5 017**, e usare il numero grezzo nello
+step 6 le attribuirebbe un richiamo che non ha.
+
+### Verifiche di regressione
+
+* Le impronte di configurazione (schema e istruzioni) sono **invariate** dopo
+  tutte le modifiche: la corsa resta riprendibile.
+* La migrazione dello schema non ha alterato **nessuno** dei 198 file oltre al
+  campo nuovo, confronto fatto contro una copia presa prima di migrare.
+* La pipeline A rifatta girare da **zero differenze su 1 000 record** oltre al
+  campo nuovo.
+* 199 test, tutti verdi, incluso quello che fissa il conteggio delle allergie.
+
+---
+
 ## 8. Limiti noti
 
 * **La quota gratuita è il vincolo dominante**: 20 richieste al giorno per
@@ -727,6 +829,10 @@ nascondendo il dato.
 * **La generazione degenere non e' sotto controllo** (§ 7sexies): il 15,8% delle
   condizioni sono duplicati, concentrati in sei record su 198. Serve un
   `repeat_penalty` e un tetto agli elementi dell'array nella prossima corsa.
+* **Le allergie sono il punto piu' fragile** (§ 7septies): il 25,9% viene da
+  referti che di allergie non parlano, e in un caso sono i farmaci che il
+  paziente assume. Finche' non e' corretto, l'uscita allergie della pipeline B
+  non e' utilizzabile dal filtro di sicurezza dello step 8.
 * **Nessuna verifica di correttezza clinica.** L'assenza di allucinazioni è
   provata solo nel senso letterale: le citazioni esistono nel testo. Che
   l'interpretazione dello stato sia giusta lo dirà il confronto dello step 6.
