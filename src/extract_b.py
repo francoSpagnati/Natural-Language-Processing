@@ -45,6 +45,7 @@ from data_loading import RecordPaziente, carica_dataset
 from gazetteer import GazetteerClinico
 from llm_backend import (
     BackendGemini,
+    BackendOpenRouter,
     BackendLLM,
     BackendOllama,
     ErroreLLM,
@@ -575,10 +576,11 @@ def main() -> None:
     argomenti.add_argument(
         "--motore",
         default="locale",
-        choices=["locale", "gemini"],
+        choices=["locale", "gemini", "openrouter"],
         help="Dove gira il modello. 'locale' usa Ollama sulla macchina; 'gemini' "
         "usa Google AI Studio, che sul piano gratuito concede 20 richieste al "
-        "giorno per modello.",
+        "giorno per modello; 'openrouter' usa OpenRouter a consumo, con la "
+        "decodifica vincolata allo schema (richiede OPENROUTER_API_KEY).",
     )
     argomenti.add_argument(
         "--modello", default=None, help="Modello da usare, se diverso dal predefinito del motore."
@@ -615,11 +617,17 @@ def main() -> None:
     selezione = scegli_record(record, opzioni.record, opzioni.seme)
     parallele = opzioni.parallele or (1 if opzioni.motore == "locale" else 8)
 
-    classe = BackendOllama if opzioni.motore == "locale" else BackendGemini
+    classe = {
+        "locale": BackendOllama,
+        "gemini": BackendGemini,
+        "openrouter": BackendOpenRouter,
+    }[opzioni.motore]
     argomenti_backend: dict = {}
     if opzioni.modello:
         argomenti_backend["modello"] = opzioni.modello
-    if opzioni.motore == "locale":
+    # Gemini riceve il livello di ragionamento dentro la Richiesta; gli altri due
+    # lo tengono sul backend, ed e' da li' che l'impronta della corsa lo rilegge.
+    if opzioni.motore in ("locale", "openrouter"):
         argomenti_backend["ragionamento"] = opzioni.ragionamento
     backend = classe(**argomenti_backend)
     risolutore_atc = RisolutoreATC()

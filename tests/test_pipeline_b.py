@@ -29,10 +29,12 @@ from llm_backend import (  # noqa: E402
     BackendFittizio,
     BackendGemini,
     BackendOllama,
+    BackendOpenRouter,
     ErroreLLM,
     ErroreQuotaGiornaliera,
     Richiesta,
     _dettagli_errore,
+    schema_stretto,
 )
 from schema import (  # noqa: E402
     CampoReferto,
@@ -390,6 +392,150 @@ class TestBackendLocale(unittest.TestCase):
             self.BackendFinto.corpi = []
             backend = self.BackendFinto(
                 modello="finto", cartella_cache=Path(cartella)
+            )
+            richiesta = Richiesta(istruzioni="i", testo="t", schema={})
+            prima = backend.genera(richiesta)
+            seconda = backend.genera(richiesta)
+            self.assertEqual(len(self.BackendFinto.corpi), 1)
+            self.assertTrue(seconda.da_cache)
+            self.assertEqual(prima.contenuto, seconda.contenuto)
+
+
+class TestSchemaStretto(unittest.TestCase):
+    """La modalita' strict pretende uno schema di forma precisa.
+
+    Senza `additionalProperties: false` su ogni oggetto la richiesta viene
+    rifiutata con un 400, e lo schema che Pydantic genera non lo mette.
+    """
+
+    def test_aggiunge_additional_properties_a_ogni_oggetto(self):
+        stretto = schema_stretto({
+            "type": "object",
+            "properties": {
+                "voci": {
+                    "type": "array",
+                    "items": {"type": "object", "properties": {"a": {"type": "string"}}},
+                }
+            },
+        })
+        self.assertFalse(stretto["additionalProperties"])
+        self.assertFalse(stretto["properties"]["voci"]["items"]["additionalProperties"])
+
+    def test_ogni_proprieta_diventa_obbligatoria(self):
+        stretto = schema_stretto(
+            {"type": "object", "properties": {"a": {"type": "string"}, "b": {"type": "string"}}}
+        )
+        self.assertEqual(sorted(stretto["required"]), ["a", "b"])
+
+    def test_non_tocca_lo_schema_originale(self):
+        originale = {"type": "object", "properties": {"a": {"type": "string"}}}
+        schema_stretto(originale)
+        self.assertNotIn("additionalProperties", originale)
+
+    def test_conserva_maxitems(self):
+        """Il tetto di 60 elementi e' una delle correzioni che hanno eliminato i
+        timeout: toglierlo in silenzio perderebbe la protezione senza dirlo."""
+        stretto = schema_stretto(
+            {"type": "object", "properties": {"v": {"type": "array", "maxItems": 60}}}
+        )
+        self.assertEqual(stretto["properties"]["v"]["maxItems"], 60)
+
+    def test_lo_schema_vero_della_pipeline_resta_valido(self):
+        stretto = schema_stretto(schema_estrazione_llm())
+        self.assertFalse(stretto["additionalProperties"])
+        for nome in ("condizioni", "farmaci", "allergie"):
+            voce = stretto["properties"][nome]
+            self.assertEqual(voce["maxItems"], 60)
+            self.assertFalse(voce["items"]["additionalProperties"])
+
+
+class TestBackendOpenRouter(unittest.TestCase):
+    """Stesso contratto degli altri due backend, piu' il vincolo di instradamento."""
+
+    class BackendFinto(BackendOpenRouter):
+        risposte: list = []
+        corpi: list = []
+
+        def _invia(self, corpo):
+            type(self).corpi.append(corpo)
+            return type(self).risposte.pop(0)
+
+    def _backend(self, risposte, **kw):
+        self.BackendFinto.risposte = list(risposte)
+        self.BackendFinto.corpi = []
+        return self.BackendFinto(
+            modello="finto", chiave="x", cartella_cache=None, **kw
+        )
+
+    @staticmethod
+    def _ok(contenuto='{"ok": true}', **uso):
+        return {
+            "choices": [{"finish_reason": "stop", "message": {"content": contenuto}}],
+            "usage": uso,
+        }
+
+    def test_lo_schema_viaggia_in_modalita_strict(self):
+        backend = self._backend([self._ok()])
+        backend.genera(Richiesta(
+            istruzioni="i", testo="t",
+            schema={"type": "object", "properties": {"ok": {"type": "boolean"}}},
+        ))
+        formato = self.BackendFinto.corpi[0]["response_format"]
+        self.assertEqual(formato["type"], "json_schema")
+        self.assertTrue(formato["json_schema"]["strict"])
+        self.assertFalse(formato["json_schema"]["schema"]["additionalProperties"])
+
+    def test_instrada_solo_verso_chi_applica_i_parametri(self):
+        """Il test che conta piu' di tutti gli altri.
+
+        OpenRouter puo' servire la stessa richiesta da fornitori diversi, e non
+        tutti applicano `response_format`. Uno che lo ignora restituisce
+        comunque un JSON plausibile, generato senza vincolo, e nulla nella
+        pipeline se ne accorgerebbe: la garanzia strutturale diventerebbe una
+        speranza, in silenzio. `require_parameters` lo impedisce.
+        """
+        backend = self._backend([self._ok()])
+        backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+        self.assertTrue(self.BackendFinto.corpi[0]["provider"]["require_parameters"])
+
+    def test_ragionamento_disattivato_per_impostazione(self):
+        """Con `response_format` attivo piu' modelli applicano il vincolo dello
+        schema al canale di ragionamento e restituiscono `content` vuoto."""
+        backend = self._backend([self._ok()])
+        backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+        self.assertFalse(self.BackendFinto.corpi[0]["reasoning"]["enabled"])
+
+    def test_conta_token_e_costo(self):
+        backend = self._backend([self._ok(
+            prompt_tokens=2700, completion_tokens=2100, cost=0.0014,
+            completion_tokens_details={"reasoning_tokens": 0},
+        )])
+        r = backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+        self.assertEqual(r.token_ingresso, 2700)
+        self.assertEqual(r.token_uscita, 2100)
+        self.assertAlmostEqual(r.costo, 0.0014)
+
+    def test_un_errore_dentro_una_risposta_200_e_un_errore(self):
+        """OpenRouter riporta gli errori del fornitore dentro una 200."""
+        backend = self._backend([{"error": {"message": "no capacity", "code": 503}}])
+        with self.assertRaises(ErroreLLM):
+            backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+
+    def test_generazione_troncata_e_un_errore(self):
+        """`length` produce JSON troncato: propagarlo darebbe un'estrazione
+        parziale indistinguibile da una completa."""
+        backend = self._backend([
+            {"choices": [{"finish_reason": "length", "message": {"content": "{"}}]}
+        ])
+        with self.assertRaises(ErroreLLM):
+            backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+
+    def test_condivide_la_cache_con_gli_altri_motori(self):
+        with tempfile.TemporaryDirectory() as cartella:
+            self.BackendFinto.risposte = [self._ok('{"a": 1}')]
+            self.BackendFinto.corpi = []
+            backend = self.BackendFinto(
+                modello="finto", chiave="x", cartella_cache=Path(cartella)
             )
             richiesta = Richiesta(istruzioni="i", testo="t", schema={})
             prima = backend.genera(richiesta)
