@@ -213,22 +213,27 @@ Un'allergia va elencata **solo** se il referto dice che il paziente e' allergico
 o intollerante a qualcosa. Cerca le parole: "allergia", "allergico",
 "intolleranza", "reazione a", "anafilassi".
 
+Trovata una di quelle parole, guarda che cosa la segue, perche' la parola da
+sola non basta:
+  - se il referto nomina la sostanza, copiala in `allergene` **esattamente come
+    e' scritta nel referto**, senza abbreviarla e senza espanderla;
+  - se il referto dice che le allergie non sono note, o che non ne sono
+    riferite, la lista va **vuota**. La parola c'e', l'allergia no.
+
 I farmaci elencati nella terapia sono farmaci che il paziente **assume**. Non
 sono allergie: sono l'esatto contrario.
 
   SBAGLIATO: allergene "Bisoprololo (Congescor cp.riv. 2.5 mg)" preso dalla
              terapia all'ingresso di un referto che di allergie non parla
-  GIUSTO:    da "riferita allergia a mdc (eruzioni pomfoidi)",
-             allergene "mdc", categoria "altro"
 
 Se il referto non nomina allergie, lascia la lista **vuota** e metti
 `stato_sezione_allergie` a "ignoto". Non metterla ad "affermato" per una lista
 che hai costruito da altro.
 
 `allergene` deve essere una stringa che TU HAI LETTO nel referto. Se non riesci a
-indicare il punto esatto in cui compare, quell'allergia non va elencata. Le
-allergie tipiche di un cardiopatico — mezzo di contrasto, ASA, statine — non
-vanno aggiunte perche' sono plausibili.
+indicare il punto esatto in cui compare, quell'allergia non va elencata. Non
+aggiungere le allergie tipiche di un cardiopatico perche' sono plausibili: una
+sostanza che questo referto non nomina non va scritta, per quanto sia attesa.
 
 In `categoria` va una fra "principi attivi", "alimenti", "altro": non il nome
 della sostanza e non il nome del campo.
