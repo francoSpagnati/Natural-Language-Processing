@@ -5,36 +5,47 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
 **Ultimo step completato: 6 — Confronto fra le tre pipeline.**
 
-Il risultato che conta non è quale pipeline vinca — nessuna vince — ma che i tre
-**profili di errore** sono qualitativamente diversi: sul campione aggiudicato a
-mano, **tutti gli errori esclusivi della pipeline A portano con sé un codice ICD
-assegnato con sicurezza (12 su 12), nessuno di quelli di B e C ce l'ha**. Il
+Il risultato che conta non è quale pipeline vinca — nessuna vince, e le tre
+precisioni distano fra loro meno dell'errore standard del campione. Conta che i
+tre **profili di errore** sono qualitativamente diversi: **tutti gli errori
+esclusivi della pipeline A portano con sé un codice ICD assegnato con sicurezza
+(9 su 9)**, contro uno solo fra quelli di B e nessuno fra quelli di C. Il
 gazetteer riconosce e codifica in un solo passo, quindi un match sbagliato è già
 codificato; le altre due riconoscono prima e collegano dopo, e un riconoscimento
 sbagliato resta visibile come irrisolto. È la distinzione che il filtro di
 sicurezza dello step 8 deve tenere presente.
 
-La pipeline B ha concluso la sua corsa definitiva: **198 record in 14 h 41 m**
-con `qwen3:4b` in locale. Il confronto della negazione con la pipeline A ha
-fatto emergere un asse mancante nello schema — l'*experiencer* di ConText — che
-è stato aggiunto (schema **1.1.0**) prima di procedere al confronto, perché
-altrimenti lo step 6 avrebbe misurato una differenza che non esiste.
+**La pipeline B è stata rieseguita** dopo le correzioni, e `src/rianalizza.py`
+affianca le due corse segnando riga per riga l'esito su bersagli dichiarati
+*prima* del rilancio. **199 record su 200** (erano 198), sette bersagli su otto
+migliorati: i record oltre il tetto di 60 elementi passano da 14 a **zero**, la
+terapia di dimissione recuperata da 376 a **756 voci** (dal 32,3% al 50,5%), le
+menzioni non ancorate dal 13,0% al **9,5%**.
 
-La verifica dei numeri dichiarati (`04` § 7septies) ha poi trovato tre difetti
-della pipeline B che il confronto dello step 6 deve tenere presenti: **duplicati
-da generazione degenere** (15,8% delle condizioni), **farmaci elencati come
-condizioni** (507 voci) e **allergie inventate** su referti che di allergie non
-parlano (25,9%, nel caso peggiore la lista dei farmaci che il paziente assume).
-Il numero di condizioni utilizzabili è **3 406**, non 5 017.
+L'unica riga peggiorata è la più istruttiva. Le allergie non ancorate salgono al
+65,2%, e sono **il mio esempio nel prompt che il modello ricopia**: la stringa
+`mdc` compare 105 volte fra le allergie e 45 volte, per intero, fra le
+condizioni, senza esistere in nessuno di quei referti. Su 64 record che dichiarano
+«allergie non note», 56 (88%) hanno comunque un'allergia estratta. L'esempio
+*negativo* accanto non è mai trapelato: **un esempio positivo offre un modello da
+ricopiare, e il divieto scritto sotto non lo neutralizza**. Corretto in
+`04` § 7nonies; l'impronta delle istruzioni è cambiata, quindi la prossima corsa
+non si mescola con questa.
 
-Il recupero dei due record falliti è stato tentato e **non è riuscito** (tre ore,
-sei tentativi). Una sonda in streaming ne ha trovato la causa, che non era
-quella ipotizzata: con `think: "low"` il modello **scrive la risposta dentro il
-blocco di ragionamento** e non lo chiude mai — e la decodifica vincolata dallo
-schema governa il canale della risposta, non quello del ragionamento. La corsa
-resta **198 su 200**; le correzioni (`think: false`, `maxItems` sugli array,
-prompt) vanno tutte nella prossima corsa completa perché cambiano l'impronta
-della configurazione.
+L'aggiudicazione ha trovato anche un **buco vero nell'asse experiencer**: «Zia e
+nonna fibrillanti» viene attribuito al paziente con codice `I48`, perché il
+lessico riconosce `familiarità per` e `anamnesi familiare` ma non i nomi di
+parentela diretti. È il tipo di errore peggiore per lo step 8 — condizione
+giusta, codice giusto, persona sbagliata — e va chiuso prima del filtro.
+
+**È stato aggiunto un terzo backend, `BackendOpenRouter`**, dietro la stessa
+interfaccia e la stessa cache degli altri due. Il collo di bottiglia non è mai
+stato il denaro ma il tempo: 235 secondi per record significano 65 ore per il
+corpus intero, mentre sui token misurati lo stesso corpus su un modello a consumo
+costa poco più di un dollaro. Il campo che rende il backend sicuro è
+`provider.require_parameters`: senza di esso OpenRouter può instradare verso un
+fornitore che ignora `response_format`, e la garanzia strutturale della pipeline B
+diventerebbe una speranza senza che nulla lo segnali.
 
 ## Indice dei documenti
 
@@ -129,10 +140,13 @@ della configurazione.
 | `src/ner_infer.py` | il modello addestrato | `extract_c` | 5 |
 | `src/extract_c.py` | `ner_infer`, `entity_linking`, `extract_a` (parti condivise) | step 6 (confronto) | 5 |
 | `src/migra_soggetto.py` | `data_loading`, `risolutori`, `schema` | migrazione una-tantum dello schema 1.0.0 → 1.1.0 | 5 |
+| `src/confronto.py` | `risolutori`, uscite delle tre pipeline | step 6 (confronto), notebook 02 | 6 |
+| `src/rianalizza.py` | `data_loading`, uscite di B | rimisura dopo ogni corsa nuova di B | 6 |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
 | `tests/test_pipeline_c.py` | `silver_labels`, `ner_train`, `entity_linking` | — | 5 |
+| `tests/test_confronto.py` | `confronto` | — | 6 |
 | `notebooks/01_analisi_esplorativa.ipynb` | `data_loading` | analisi esplorativa: conteggi, distribuzioni, regex commentate | 0 |
 | `src/confronto.py` | `risolutori`, uscite delle tre pipeline | step 6; il knowledge graph dello step 7 ne eredita le conclusioni | 6 |
 | `notebooks/02_confronto_pipeline.ipynb` | `confronto` | il confronto con i grafici e l'aggiudicazione manuale | 6 |

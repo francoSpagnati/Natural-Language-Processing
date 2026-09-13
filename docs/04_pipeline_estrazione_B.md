@@ -905,6 +905,164 @@ questa macchina.
 
 ---
 
+## 7nonies. La seconda corsa: sette bersagli su otto, e un esempio che il modello copiava
+
+Le correzioni dello step precedente avevano quattro bersagli dichiarati **prima**
+di rilanciare, ciascuno misurabile. `src/rianalizza.py` affianca le due corse e
+segna riga per riga l'esito, così il giudizio non viene deciso a posteriori
+guardando i numeri che sono usciti meglio.
+
+| | prima (198 rec) | dopo (199 rec) | esito |
+|---|---|---|---|
+| condizioni per record | 25,3 | 24,3 | migliorato |
+| duplicati fra le condizioni | 15,8% | 13,2% | migliorato |
+| record oltre il tetto di 60 | 14 | **0** | migliorato |
+| farmaci dalla dimissione | 376 | **756** | migliorato |
+| allergie su referti che non le nominano | 65 | 58 | migliorato |
+| menzioni non ancorate | 13,0% | **9,5%** | migliorato |
+| allergie non ancorate | 44,2% | **65,2%** | **PEGGIORATO** |
+
+Il `maxItems` ha eliminato del tutto i record oltre il tetto, e con essi i due
+record che nella prima corsa non concludevano: **199 su 200, un solo fallimento
+contro due**. La terapia di dimissione raddoppia. Le menzioni non ancorate
+scendono di un quarto.
+
+### L'unica riga peggiorata, e perché è la più istruttiva
+
+Le allergie non ancorate salgono dal 44,2% al 65,2%. Guardando che cosa sono:
+
+```
+105 su 131   testo_originale = 'mdc'
+```
+
+`mdc` non compare in quei referti. Compariva nel **prompt**, nell'esempio
+positivo della REGOLA 9:
+
+```
+GIUSTO:  da "riferita allergia a mdc (eruzioni pomfoidi)",
+         allergene "mdc", categoria "altro"
+```
+
+Il modello lo ha copiato 105 volte fra le allergie. E, cercando la stessa stringa
+fra le condizioni, altre **45 volte la frase d'esempio per intero**. Centocinquanta
+menzioni fabbricate da una riga sola del prompt.
+
+Su **64 record il referto dice testualmente che le allergie non sono note**, e
+**56 di quelli (88%) hanno comunque un'allergia estratta**. La regola scritta
+tre righe sotto l'esempio dice «se il referto non nomina allergie, lascia la
+lista vuota». Non è servita.
+
+### Che cosa distingue un esempio che trapela da uno che non trapela
+
+Due controlli, che portano a una regola pratica:
+
+* **L'esempio `SBAGLIATO:` accanto non è mai trapelato.** Zero occorrenze di
+  «Bisoprololo» fra le allergie estratte. Un esempio negativo insegna un
+  confine; uno positivo offre un modello da ricopiare, e il divieto scritto
+  sotto non lo neutralizza.
+* **Gli esempi delle regole sulle condizioni trapelano molto meno** — 21 casi su
+  367 condizioni non ancorate, contro 105 su 131 per le allergie. La differenza
+  non è nel prompt ma nei dati: una condizione da citare il referto ce l'ha quasi
+  sempre, un'allergia quasi mai. **Quando il modello non trova materiale nel
+  testo, prende quello che gli è stato messo davanti.**
+
+Che è, in fondo, il senso della REGOLA 8: un modello non lascia volentieri un
+campo vuoto. Se non gli si toglie l'alternativa, la riempie.
+
+### Il difetto è stato trovato dall'ancoraggio, non dal sospetto
+
+Nessuno cercava questo errore. Le 105 menzioni `mdc` sono clinicamente
+plausibili — l'allergia al mezzo di contrasto è comune in cardiologia, e in un
+riepilogo per il clinico non avrebbero fatto alzare un sopracciglio. Sono state
+trovate perché **non esistono alla lettera nel referto**, e il confronto verbatim
+non ha opinioni sulla plausibilità.
+
+È la terza volta in questo progetto che quel meccanismo trova qualcosa che
+nessuna revisione a vista avrebbe trovato, e la seconda volta che quel qualcosa
+è un difetto del prompt e non del modello.
+
+### La correzione
+
+Tolto l'esempio positivo. Tolto anche l'elenco «mezzo di contrasto, ASA,
+statine», che pur essendo formulato come divieto piantava lo stesso prior.
+Aggiunto invece il caso che il modello sbaglia davvero: la parola *allergia*
+presente ma seguita da una negazione.
+
+`impronta_istruzioni` passa da `1bb13e603612a1e3` a `5bd4c6615085c6f5`, così la
+prossima corsa non si mescola con questa.
+
+**La sovra-estrazione resta non risolta.** 24,3 condizioni per record contro le
+5,4 della pipeline A: il miglioramento è di un punto, non di un ordine di
+grandezza, e non ho una leva validata. Né il prompt né un vincolo di lunghezza
+separano il segnale dalla narrazione — vedi § 7sexies, dove `maxLength` è stato
+misurato e scartato **prima** di applicarlo su quattordici ore di corsa.
+
+---
+
+## 7decies. Un terzo backend, e il campo che lo rende sicuro
+
+Il collo di bottiglia della pipeline B non è mai stato il denaro: **235 secondi
+per record** significano 65 ore per il corpus intero, e per questo ogni misura di
+questo documento è su 200 record e non su 1 000.
+
+Misurando i token veri delle 425 risposte in cache — 2 747 in ingresso e 2 145 in
+uscita per record, di cui 1 963 di istruzioni fisse e quindi cacheabili — l'intero
+corpus su un modello a consumo costa **poco più di un dollaro**. È una
+sproporzione che rendeva la scelta obbligata.
+
+`BackendOpenRouter` sta dietro la stessa interfaccia e la stessa cache degli altri
+due, quindi lo step 6 può confrontare modelli diversi a parità di prompt senza che
+il resto della pipeline se ne accorga.
+
+### Il campo che conta più del prezzo
+
+```python
+"provider": {"require_parameters": True}
+```
+
+OpenRouter instrada la stessa richiesta a fornitori diversi, e **non tutti
+applicano `response_format`**. Un fornitore che lo ignora non restituisce un
+errore: restituisce un JSON plausibile, generato senza vincolo. La pipeline lo
+accetterebbe, i test resterebbero verdi, e la garanzia strutturale su cui è
+costruita la pipeline B — *la validità sintattica è garantita dal decodificatore,
+non sperata dal prompt* — diventerebbe una speranza, in silenzio.
+
+`require_parameters` impedisce l'instradamento verso chi non supporta i parametri
+della richiesta. C'è un test apposta, ed è il più importante del gruppo.
+
+### Due scelte spiegate
+
+**`schema_stretto()` non toglie `maxItems`.** La modalità strict pretende
+`additionalProperties: false` su ogni oggetto, e quello viene aggiunto. Ma
+`maxItems` non è fra le parole chiave che il sottoinsieme strict garantisce, e il
+tetto di 60 elementi è la correzione che ha eliminato i timeout. Toglierlo in
+silenzio perderebbe la protezione senza dirlo; lasciarlo fa emergere il problema
+come errore esplicito alla prima richiesta, dove si vede. **Da verificare nel
+pre-volo**, non da dare per buono.
+
+**Il ragionamento è spento**, e non per il costo: su più modelli è documentato che
+con `response_format` attivo il vincolo dello schema finisce applicato al canale
+di ragionamento, lasciando `content` vuoto. È lo stesso sintomo che in § 7octies
+ho attribuito per errore al modello locale — lì non c'era, ma su questi endpoint
+esiste davvero.
+
+### Provenienza della forma della richiesta
+
+Verificata sulla documentazione, non dedotta: `response_format` e
+`provider.require_parameters` da <https://openrouter.ai/docs/features/structured-outputs>,
+il campo `reasoning` da <https://openrouter.ai/docs/use-cases/reasoning-tokens>.
+I parametri che ciascun modello dichiara di supportare sono interrogabili su
+<https://openrouter.ai/api/v1/models>, campo `supported_parameters`: è così che
+si è scelto `deepseek/deepseek-v4.1-flash`, che dichiara `structured_outputs`,
+invece di `qwen/qwen3.7-flash`, che su quell'instradamento **non lo dichiara**
+pur supportandolo sull'API nativa di Alibaba.
+
+La risposta porta ora anche il **costo dichiarato dal fornitore**, messo in cache
+insieme al resto, per non doverlo ristimare dai token con un listino che nel
+frattempo può essere cambiato.
+
+---
+
 ## 8. Limiti noti
 
 * **La quota gratuita è il vincolo dominante**: 20 richieste al giorno per
@@ -946,7 +1104,7 @@ questa macchina.
 | `src/risolutori.py` | `RisolutoreATC` e `RisolutoreICD` condivisi fra le pipeline (estratti da `extract_a.py`) |
 | `src/extract_b.py` | prompt, orchestrazione concorrente, conversione in `StatoPaziente` |
 | `schema.py` → `EstrazioneLLM` | schema di uscita del modello e sua traduzione in JSON Schema |
-| `tests/test_pipeline_b.py` | 38 test, tutti senza rete e senza chiave |
+| `tests/test_pipeline_b.py` | 76 test, tutti senza rete e senza chiave |
 
 I test girano con un backend fittizio: una suite che dipendesse dall'API sarebbe
 lenta, costosa e verde o rossa a seconda del carico dei server, quindi inutile
@@ -960,7 +1118,18 @@ giornaliera esaurita non venga ritentata.
 
 ```bash
 python3 -m spacy download it_core_news_sm      # se non già fatto
-echo 'GEMINI_API_KEY=...' > .env.local
-python3 src/extract_b.py --record 25 --parallele 8
-python3 src/extract_b.py --modello gemini-3-flash-preview   # altro modello
+
+# tre motori dietro la stessa interfaccia e la stessa cache
+python3 src/extract_b.py --motore locale --modello qwen3:4b --record 200
+python3 src/extract_b.py --motore gemini --record 20 --parallele 8
+python3 src/extract_b.py --motore openrouter --record 200 --parallele 8
+
+# le chiavi stanno in .env.local, che git ignora
+echo 'GEMINI_API_KEY=...'     >> .env.local
+echo 'OPENROUTER_API_KEY=...' >> .env.local
+chmod 600 .env.local
+
+# dopo una corsa nuova: rimisura tutto e affianca la corsa precedente
+python3 src/rianalizza.py
+python3 src/confronto.py
 ```
