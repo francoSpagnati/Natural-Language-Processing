@@ -84,6 +84,18 @@ class ErroreLLM(RuntimeError):
     """Chiamata fallita in modo definitivo, dopo aver esaurito i ritentativi."""
 
 
+class ErroreRitentabile(ErroreLLM):
+    """Risposta inutilizzabile per una ragione transitoria del fornitore.
+
+    Va distinta da un errore definitivo: una risposta troncata a meta' di una
+    stringa, o chiusa con `finish_reason=error`, non dice che la richiesta e'
+    sbagliata — dice che quella singola generazione e' andata male. Sulla corsa
+    da 200 record ne sono capitate due, e **rilanciando sono riuscite entrambe
+    al primo colpo**, il che e' la prova che erano transitorie. Prima questo
+    errore usciva dal ciclo dei ritentativi e serviva una mano.
+    """
+
+
 class ErroreQuotaGiornaliera(ErroreLLM):
     """La quota giornaliera del modello e' esaurita.
 
@@ -671,9 +683,13 @@ class BackendOpenRouter(BackendLLM):
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as errore:
                 ultimo_errore = ErroreLLM(f"{type(errore).__name__}: {errore}")
             else:
-                risposta = self._interpreta(grezza, tentativo, time.monotonic() - avvio)
-                self.cache.scrivi(impronta, risposta)
-                return risposta
+                try:
+                    risposta = self._interpreta(grezza, tentativo, time.monotonic() - avvio)
+                except ErroreRitentabile as errore:
+                    ultimo_errore = errore
+                else:
+                    self.cache.scrivi(impronta, risposta)
+                    return risposta
 
             if tentativo < self.tentativi_massimi:
                 attesa = self.attesa_iniziale * (2 ** (tentativo - 1))
@@ -697,17 +713,20 @@ class BackendOpenRouter(BackendLLM):
         scelta = scelte[0]
         motivo = scelta.get("finish_reason")
         if motivo not in (None, "stop"):
-            # `length` produce JSON troncato: meglio fallire qui che propagare
-            # un'estrazione parziale come se fosse completa.
-            raise ErroreLLM(f"Generazione interrotta (finish_reason={motivo}).")
+            # Mai propagare un'estrazione parziale come se fosse completa: sia
+            # `length` (uscita troncata) sia `error` (guasto del fornitore)
+            # danno un JSON monco. Sono pero' transitori, quindi si ritenta.
+            raise ErroreRitentabile(f"Generazione interrotta (finish_reason={motivo}).")
 
         testo = (scelta.get("message") or {}).get("content") or ""
         if not testo.strip():
-            raise ErroreLLM("Risposta con contenuto vuoto.")
+            raise ErroreRitentabile("Risposta con contenuto vuoto.")
         try:
             contenuto = json.loads(testo)
         except json.JSONDecodeError as errore:
-            raise ErroreLLM(f"JSON non valido nella risposta: {errore}") from errore
+            # Con `response_format` attivo un JSON malformato non puo' venire da
+            # un errore del modello: viene da una generazione interrotta a meta'.
+            raise ErroreRitentabile(f"JSON non valido nella risposta: {errore}") from errore
 
         uso = grezza.get("usage") or {}
         dettagli = uso.get("completion_tokens_details") or {}

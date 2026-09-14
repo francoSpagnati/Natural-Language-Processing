@@ -32,6 +32,7 @@ from llm_backend import (  # noqa: E402
     BackendOpenRouter,
     ErroreLLM,
     ErroreQuotaGiornaliera,
+    ErroreRitentabile,
     Richiesta,
     _dettagli_errore,
     schema_stretto,
@@ -521,12 +522,53 @@ class TestBackendOpenRouter(unittest.TestCase):
         with self.assertRaises(ErroreLLM):
             backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
 
-    def test_generazione_troncata_e_un_errore(self):
+    def test_generazione_troncata_non_viene_mai_propagata(self):
         """`length` produce JSON troncato: propagarlo darebbe un'estrazione
-        parziale indistinguibile da una completa."""
+        parziale indistinguibile da una completa. E' pero' transitorio, quindi
+        l'errore e' della classe che il ciclo dei ritentativi riprova."""
         backend = self._backend([
             {"choices": [{"finish_reason": "length", "message": {"content": "{"}}]}
-        ])
+        ], tentativi_massimi=1)
+        with self.assertRaises(ErroreLLM):
+            backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+        with self.assertRaises(ErroreRitentabile):
+            backend._interpreta(
+                {"choices": [{"finish_reason": "length", "message": {"content": "{"}}]}, 1, 0.0
+            )
+
+    def test_una_generazione_interrotta_viene_ritentata(self):
+        """Regressione dalla corsa vera.
+
+        Su 200 record due sono falliti — uno con JSON troncato a meta' di una
+        stringa, uno con `finish_reason=error` — e **rilanciandoli sono riusciti
+        entrambi al primo colpo**. Erano guasti transitori del fornitore, ma
+        uscivano dal ciclo dei ritentativi e richiedevano una mano.
+        """
+        backend = self._backend([
+            {"choices": [{"finish_reason": "error", "message": {"content": ""}}]},
+            self._ok('{"a": 1}'),
+        ], attesa_iniziale=0)
+        risposta = backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
+        self.assertEqual(risposta.contenuto, {"a": 1})
+        self.assertEqual(risposta.tentativi, 2)
+
+    def test_un_json_troncato_viene_ritentato(self):
+        """Con `response_format` attivo un JSON malformato non puo' venire da un
+        errore del modello: viene da una generazione interrotta a meta'."""
+        backend = self._backend([
+            self._ok('{"voci": [{"nome": "iperten'),
+            self._ok('{"a": 1}'),
+        ], attesa_iniziale=0)
+        self.assertEqual(
+            backend.genera(Richiesta(istruzioni="i", testo="t", schema={})).contenuto,
+            {"a": 1},
+        )
+
+    def test_i_ritentativi_non_sono_infiniti(self):
+        backend = self._backend(
+            [{"choices": [{"finish_reason": "error", "message": {"content": ""}}]}] * 3,
+            tentativi_massimi=3, attesa_iniziale=0,
+        )
         with self.assertRaises(ErroreLLM):
             backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
 

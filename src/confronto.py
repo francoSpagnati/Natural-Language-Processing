@@ -50,6 +50,7 @@ COME SI DECIDE CHE DUE MENZIONI SONO LA STESSA
 
 from __future__ import annotations
 
+import argparse
 import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
@@ -105,6 +106,20 @@ def _menzioni_di(stato: dict, sigla: str) -> list[Menzione]:
                     strutturata=provenienza["pipeline"] == PIPELINE_STRUTTURATA,
                 )
             )
+    return fuori
+
+
+def _carica_da(cartella: Path, sigla: str,
+               encs: list[str] | None = None) -> dict[int, list[Menzione]]:
+    """Carica le menzioni da una cartella qualsiasi, con la sigla data."""
+    percorsi = sorted(p for p in cartella.glob("*.json") if not p.stem.startswith("_"))
+    if encs is not None:
+        ammessi = set(encs)
+        percorsi = [p for p in percorsi if p.stem in ammessi]
+    fuori: dict[int, list[Menzione]] = {}
+    for percorso in percorsi:
+        stato = json.loads(percorso.read_text(encoding="utf-8"))
+        fuori[stato["enc_oid"]] = _menzioni_di(stato, sigla)
     return fuori
 
 
@@ -287,16 +302,24 @@ def solo_di(gruppi: list[Gruppo], sigla: str) -> list[Menzione]:
 CAMPI_STRUTTURATI = ("Terapia medica all'ingresso", "Terapia alla Dimissione")
 
 
-def confronta(radice: Path = RADICE) -> dict:
+def confronta(radice: Path = RADICE, cartella_b: Path | None = None) -> dict:
     """Esegue il confronto completo e restituisce tutte le misure.
 
     L'insieme di record e' quello della pipeline B, che ne ha meno delle altre:
     confrontare A e C su mille referti e B su duecento darebbe tre numeri che non
     stanno nella stessa tabella.
+
+    `cartella_b` sceglie **quale** corsa della pipeline B mettere sul banco. Da
+    quando B esiste in piu' varianti — un modello locale da 4 miliardi di
+    parametri e uno remoto molto piu' grande, a parita' di schema e di prompt —
+    il confronto non e' piu' fra tre pipeline ma fra tre metodi, di cui uno
+    parametrizzato dal modello. Le altre misure non cambiano di una riga.
     """
-    cartella_b = radice / "data" / "processed" / CARTELLE["B"]
+    cartella_b = cartella_b or radice / "data" / "processed" / CARTELLE["B"]
     encs = sorted(p.stem for p in cartella_b.glob("*.json") if not p.stem.startswith("_"))
     dati = {sigla: carica(sigla, encs, radice) for sigla in CARTELLE}
+    if cartella_b != radice / "data" / "processed" / CARTELLE["B"]:
+        dati["B"] = _carica_da(cartella_b, "B", encs)
     dati["B"], ripulitura = ripulisci(dati["B"], RisolutoreATC())
 
     fuori: dict = {"record": len(encs), "ripulitura_B": ripulitura, "campi": {}}
@@ -367,11 +390,23 @@ def stampa(misure: dict) -> None:
 
 
 def main() -> None:
-    misure = confronta()
+    argomenti = argparse.ArgumentParser(description="Confronto fra le tre pipeline.")
+    argomenti.add_argument(
+        "--cartella-b", type=Path, default=None,
+        help="Quale corsa della pipeline B mettere sul banco.",
+    )
+    argomenti.add_argument(
+        "--uscita", type=Path, default=RADICE / "data" / "processed" / "confronto_step6.json",
+    )
+    opzioni = argomenti.parse_args()
+    misure = confronta(cartella_b=opzioni.cartella_b)
     stampa(misure)
-    uscita = RADICE / "data" / "processed" / "confronto_step6.json"
+    uscita = opzioni.uscita
     uscita.write_text(json.dumps(misure, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\nMisure complete in {uscita.relative_to(RADICE)}")
+    try:
+        print(f"\nMisure complete in {uscita.relative_to(RADICE)}")
+    except ValueError:
+        print(f"\nMisure complete in {uscita}")
 
 
 if __name__ == "__main__":

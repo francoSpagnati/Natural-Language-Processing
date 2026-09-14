@@ -28,6 +28,7 @@ COSA CONFRONTA CON LA CORSA PRECEDENTE
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -127,27 +128,44 @@ def confronta_corse(prima: dict, dopo: dict) -> None:
         print(f"{etichetta:42} {formato.format(a):>10} {formato.format(b):>10}   {esito}")
     print("\nLe due corse hanno insiemi di record diversi solo se una e' incompleta:")
     print("il seme di campionamento e il numero di record richiesti sono gli stessi.")
+    print("Le colonne dicono 'prima' e 'dopo' ma il confronto non e' per forza")
+    print("temporale: puo' affiancare due modelli diversi sugli stessi record.")
 
 
 def main() -> None:
+    argomenti = argparse.ArgumentParser(
+        description="Rimisura una corsa della pipeline B e la affianca a un'altra."
+    )
+    argomenti.add_argument(
+        "--corsa", type=Path, default=CORRENTE,
+        help="Cartella della corsa da misurare.",
+    )
+    argomenti.add_argument(
+        "--riferimento", type=Path, default=ARCHIVIO,
+        help="Corsa con cui confrontarla. Serve a dire se una modifica ha "
+             "funzionato invece di sperarlo: puo' essere una corsa precedente "
+             "dello stesso modello o un modello diverso sugli stessi record.",
+    )
+    opzioni = argomenti.parse_args()
+
     record, _ = carica_dataset(RADICE / "data" / "raw" / "anamnesiterapie.txt")
     anamnesi = {r.enc_oid: (r.testo_anamnesi or "") for r in record}
 
-    dopo = misura(CORRENTE, anamnesi)
+    dopo = misura(opzioni.corsa, anamnesi)
     if not dopo:
-        sys.exit(f"Nessun risultato in {CORRENTE}: la corsa non e' ancora partita.")
+        sys.exit(f"Nessun risultato in {opzioni.corsa}: la corsa non e' ancora partita.")
 
-    print(f"CORSA CORRENTE — {dopo['record']} record")
+    print(f"CORSA {opzioni.corsa.name} — {dopo['record']} record")
     for etichetta, chiave, formato, _ in RIGHE:
         if chiave in dopo:
             print(f"  {etichetta:42} {formato.format(dopo[chiave]):>10}")
 
-    prima = misura(ARCHIVIO, anamnesi)
+    prima = misura(opzioni.riferimento, anamnesi)
     if prima:
-        print(f"\n{'=' * 74}\nCONFRONTO CON LA CORSA PRECEDENTE ({prima['record']} record)")
+        print(f"\n{'=' * 74}\nCONFRONTO CON {opzioni.riferimento.name} ({prima['record']} record)")
         confronta_corse(prima, dopo)
     else:
-        print(f"\n(nessuna corsa archiviata in {ARCHIVIO.name}: niente da confrontare)")
+        print(f"\n(nessuna corsa in {opzioni.riferimento.name}: niente da confrontare)")
 
 
 if __name__ == "__main__":
