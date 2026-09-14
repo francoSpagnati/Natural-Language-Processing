@@ -46,11 +46,22 @@ spacy>=3.7
 transformers>=4.40
 torch>=2.0
 
+# --- Step 7: knowledge graph RDF ---------------------------------------------
+# Il grafo tiene tre descrizioni parziali dello stesso paziente con la
+# provenienza di ciascuna, e le domande dello step 8 si pongono in SPARQL invece
+# di essere ricalcolate in Python: se la risposta si ottiene interrogando, la
+# struttura e' quella giusta. rdflib fornisce il grafo in memoria, il parser e il
+# serializzatore Turtle e il motore SPARQL 1.1, e non richiede un triple store
+# esterno, il che tiene il progetto eseguibile senza servizi da installare.
+#   I vocabolari usati sono standard, non inventati: PROV-O (W3C Rec. 2013) per
+#   la provenienza, SKOS (W3C Rec. 2009) per ATC e ICD-10, DCMI Metadata Terms
+#   per citare le fonti. Sono tutti forniti da rdflib.namespace.
+rdflib>=7.0
+
 # --- Step successivi (da scommentare quando lo step viene implementato) -------
-# rdflib           # step 7: knowledge graph RDF + query SPARQL
-# networkx         # step 7: conversione dei sottografi per la visualizzazione
-# pyvis            # step 7: resa HTML interattiva dei sottografi
-# matplotlib       # step 7/11: figure statiche e tabelle dei risultati
+# networkx         # step 7bis: conversione dei sottografi per la visualizzazione
+# pyvis            # step 7bis: resa HTML interattiva dei sottografi
+# matplotlib       # step 11: figure statiche e tabelle dei risultati
 # mcp              # step 10: SDK ufficiale, FastMCP
 # scikit-learn     # step 6/11: metriche di accordo e valutazione
 # pandas           # step 11: tabelle dei risultati

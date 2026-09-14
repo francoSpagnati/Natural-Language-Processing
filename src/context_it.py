@@ -319,7 +319,7 @@ PATTERN_SOGGETTO_PARENTE = re.compile(
 
 # Un ambito di familiarita' si chiude a fine frase. La virgola non lo chiude,
 # per la stessa ragione della negazione: gli elenchi sono la norma
-# ("familiarita positiva per diabete mellito (madre), cardiopatia ischemica").
+# ("familiarita positiva per ipotiroidismo (madre), cardiopatia ischemica").
 PATTERN_FINE_FRASE = re.compile(r"[.;:\n]|\bma\b|\btuttavia\b|\bnega\b|\briferisce\b")
 
 # I referti incollano piu' affermazioni senza punteggiatura, segnalando l'inizio
@@ -378,7 +378,7 @@ def _taglia_su_nuova_affermazione(testo: str, inizio: int, fine: int) -> int:
     """Accorcia l'ambito dove ricomincia una nuova affermazione senza punteggiatura.
 
     Il taglio non si applica dentro una parentesi: le precisazioni sui parenti
-    ne sono piene ("diabete mellito (padre, affetto da Parkinson, madre ETP)") e
+    ne sono piene ("ipotiroidismo (padre, in cura per morbo di Parkinson)") e
     spezzarle toglierebbe la marcatura a condizioni che sono davvero familiari.
     """
     for candidato in PATTERN_NUOVA_AFFERMAZIONE.finditer(testo, inizio, fine):

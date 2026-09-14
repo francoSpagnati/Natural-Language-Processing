@@ -327,7 +327,7 @@ def sonda_eco_questionario(testo: str) -> list[tuple[str, str]]:
 # (sezione 3.4), quindi vanno censite fin da subito. Nell'anamnesi narrativa
 # compaiono in una sezione dedicata, a sua volta semi-strutturata in
 # sottocategorie:
-#   "Allergie e intolleranze: Allergie: Principi attivi (Diclofenac) Note (FANS)"
+#   "Allergie e intolleranze: Allergie: Principi attivi (<sostanza>) Note (<classe>)"
 # Solo la sottocategoria "Principi attivi" e' clinicamente rilevante per noi:
 # le allergie ad alimenti o pollini non vincolano la scelta del farmaco.
 PATTERN_SEZIONE_ALLERGIE = re.compile(

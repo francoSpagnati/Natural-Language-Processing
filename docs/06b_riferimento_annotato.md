@@ -214,12 +214,18 @@ realtà clinica.
 | B | 60 | **0** | 0 | 0 | 60 | **0,0%** | **0,0%** | **0,0%** |
 | C | 60 | 44 | 42 | 2 | 18 | 95,5% | **70,0%** | **80,8%** |
 
-Il quadro si **ribalta esattamente**. La pipeline B non trova **nemmeno un**
-farmaco citato nella prosa: si concentra sui campi di terapia, dove arriva al
+Il quadro si **ribalta esattamente**: la pipeline B non trova nessuno dei 60
+farmaci citati nella prosa. Si concentra sui campi di terapia, dove arriva al
 99,6%, e nell'anamnesi non ne segnala. Sono farmaci che raccontano la storia
 terapeutica — sospensioni, riduzioni, intolleranze — e che i campi strutturati
 non contengono per definizione, perché quelli elencano ciò che il paziente assume
 *ora*.
+
+> **Questo zero è stato messo in dubbio, indagato, e si è rivelato causato da una
+> mia istruzione.** La causa e la correzione stanno nel § 8; questa sezione
+> conserva la misura come è stata prodotta, perché è quella che ha portato alla
+> scoperta. Il numero da citare per la pipeline B sui farmaci narrati **non è
+> questo zero**: è l'86,7% del § 8.
 
 I vocabolari di farmaci, a differenza di quelli di condizioni, funzionano: sono
 liste chiuse di nomi commerciali e principi attivi, e un nome di farmaco è un
@@ -234,12 +240,23 @@ complementari su assi diversi.
 | | condizioni | farmaci nella prosa |
 |---|---|---|
 | A e C | F1 ≈ 31% | F1 ≈ 79% |
-| B | F1 = 81% | F1 = 0% |
+| B, come misurata qui | F1 = 81% | F1 = 0% |
+| B, dopo la correzione del § 8 | F1 = 80% | F1 = 87% |
+
+Sulle **condizioni** la complementarità resta il fatto centrale, e non dipende da
+nulla che sia stato corretto dopo: A e C mancano quattro condizioni su cinque
+perché il loro vocabolario è la loro definizione di realtà clinica, e nessuna
+correzione di prompt cambia questo.
+
+Sui **farmaci narrati** la conclusione è cambiata. Si legga il § 8: la
+complementarità che questa tabella mostrava era in parte un difetto delle mie
+istruzioni, non una proprietà dei metodi.
 
 La decisione dello step 7 — costruire il knowledge graph da **tutte e tre le
-pipeline, con la provenienza** — non è più una scelta di prudenza: è l'unica che
-non butti via metà dell'informazione. Usare una pipeline sola significherebbe
-perdere l'80% delle condizioni oppure il 100% dei farmaci narrati.
+pipeline, con la provenienza** — resta giustificata, ma da un argomento più
+solido di quello che avevo scritto qui: non «una pipeline copre ciò che l'altra
+non vede», che era in parte un artefatto, ma **le condizioni**, dove il divario
+fra 70% e 20% di richiamo è strutturale e misurato due volte.
 
 ### Un controllo indipendente che torna
 
@@ -303,3 +320,175 @@ misura del loro accordo, e un terzo che scioglie i disaccordi. Questo ne ha uno.
 * **Il riferimento non è una verità**, è un giudizio dichiarato. Ogni numero di
   questo documento va letto come «rispetto a come *io* ho letto questi 25
   referti».
+
+---
+
+## 8. Lo zero sui farmaci non era del modello: era mio
+
+Il § 6 riportava che la pipeline B non trovava **nessuno** dei 60 farmaci citati
+nella prosa. Uno zero secco è la cifra che un lettore attento mette in dubbio per
+prima, e messo in dubbio si è sciolto. Questa sezione racconta l'indagine per
+intero, perché il metodo conta più del numero.
+
+### 8.1 Lo zero non era una cecità: era un campionamento
+
+La prima cosa da fare davanti a uno zero non è spiegarlo, è **cercare il fenomeno
+altrove**. Nei risultati grezzi della corsa da 1 000 record la pipeline B produce
+62 farmaci con `campo_sorgente` uguale ad `Anamnesi`, in **20 referti su 1 000**,
+tutti ancorati al testo, e sono corretti: nomi commerciali, principi attivi, un
+refuso del referto conservato come tale, uno marcato `negato`.
+
+Quindi il tasso non era nullo, era **0,062 farmaci narrati per referto**. Con un
+tasso del 2% di referti coinvolti, la probabilità di vederne zero su 25 è
+`0,98²⁵ = 60%`. **Lo zero misurato era l'esito più probabile del campione**, non
+una proprietà del metodo. Detto in termini di intervallo: zero successi su 60
+osservazioni dà un limite superiore al 95% del **6,0%**, e il tasso misurato sul
+corpus intero pone il tetto vero a circa **2,6%** del richiamo. La conclusione
+corretta era «richiamo nei bassi singoli punti percentuali», non «zero».
+
+### 8.2 La causa era nelle mie istruzioni
+
+La REGOLA 7 del prompt si intitolava *«FARMACI: TUTTE LE SEZIONI, NON UNA SOLA»* e
+definiva i farmaci come il contenuto delle **due sezioni di terapia**. Il suo
+esempio era una riga di terapia; la sua lista di controllo finale chiedeva al
+modello di verificare che per ogni sezione `###` di terapia ci fosse almeno una
+voce. Da nessuna parte diceva che la prosa dell'anamnesi contiene farmaci.
+
+Il modello faceva **esattamente ciò che gli era stato chiesto**. Il 2% di referti
+in cui trovava farmaci narrati era il modello che deviava dalle istruzioni, non
+che le seguiva.
+
+È la **seconda volta** nel progetto che un difetto attribuito al modello si è
+rivelato un difetto del prompt, e le due volte sono opposte e simmetriche:
+
+| | difetto | causa |
+|---|---|---|
+| `mdc` (§ 7nonies di `docs/04`) | il modello **inventava** un'allergia 150 volte | un esempio positivo nel prompt, copiato come contenuto |
+| farmaci narrati (qui) | il modello **ometteva** un'intera categoria | una regola che definiva la categoria in modo troppo stretto |
+
+La lezione comune: **il prompt è codice, e le sue omissioni sono bug quanto le sue
+affermazioni.** Un esempio positivo è un modello da copiare; una definizione
+ristretta è un filtro che esclude.
+
+### 8.3 La correzione, e la sua verifica
+
+Ho aggiunto una **REGOLA 7bis** che dice che i farmaci nominati nella prosa
+dell'anamnesi vanno estratti con `campo` `Anamnesi`, che un farmaco sospeso o
+rifiutato si estrae comunque e la differenza va in `stato`, e che un farmaco
+nominato come allergene appartiene a entrambe le liste. Applicando la lezione di
+`mdc`, la regola **non contiene alcun esempio positivo con una sostanza vera**:
+solo tre casi `SBAGLIATO`, che nella prima vicenda non hanno mai perso contenuto
+nell'uscita.
+
+Rifare il corpus intero sarebbe costato circa 3 dollari. Rifare i **soli 25
+referti del riferimento** è costato **0,079 dollari** e risponde alla stessa
+domanda, così ho aggiunto a `extract_b.py` l'opzione `--solo`, che elabora una
+lista di identificativi invece di campionare.
+
+La corsa è stata fatta **due volte**, perché fra la prima e la seconda ho dovuto
+ripulire il prompt da sette esempi che citavano testo clinico verbatim (§ 8.8).
+Entrambe sono riportate: la seconda è quella prodotta dal prompt che il
+repository contiene davvero.
+
+| farmaci nella prosa | attese | trovate | VP | FP | FN | precisione | **richiamo** | F1 |
+|---|---|---|---|---|---|---|---|---|
+| A | 60 | 41 | 39 | 2 | 21 | 95,1% | 65,0% | 77,2% |
+| B, senza la 7bis | 60 | 0 | 0 | 0 | 60 | 0,0% | 0,0% | 0,0% |
+| B, con la 7bis, prima corsa | 60 | 59 | 52 | 7 | 8 | 88,1% | 86,7% | 87,4% |
+| **B, con la 7bis, prompt committato** | 60 | 55 | 50 | 5 | 10 | 90,9% | **83,3%** | **87,0%** |
+| C | 60 | 44 | 42 | 2 | 18 | 95,5% | 70,0% | 80,8% |
+
+Da 0,0% a circa **85%** di richiamo, con una regola di prompt, e le due corse
+concordano entro tre punti. Ed è il miglior F1 delle tre pipeline anche sui
+farmaci, non solo sulle condizioni.
+
+### 8.4 Perché questo numero è ottimistico, e il controllo che lo sostiene
+
+**L'86,7% è misurato sugli stessi 25 referti che hanno rivelato il problema.** È
+la definizione di misurare sull'insieme su cui si è aggiustato, e va detto prima
+di qualunque altra cosa. La regola non contiene nulla di specifico a quei 25
+referti, ma la scelta di scriverla viene da loro.
+
+Il controllo possibile senza annotare altro: **30 referti diversi**, scelti fra
+quelli della corsa da 1 000 esclusi i 25 del riferimento, con seme dichiarato
+(`20260914`), a 0,088 dollari.
+
+| sugli stessi 30 referti | farmaci narrati | per referto | referti coinvolti | non ancorati |
+|---|---|---|---|---|
+| corsa senza la 7bis | 0 | 0,00 | 0/30 | 0 |
+| corsa con la 7bis | 90 | 3,00 | 19/30 | 0 |
+| *atteso dal riferimento* | | *2,40* | | |
+
+Il comportamento generalizza: su referti che non hanno avuto parte nella diagnosi
+il tasso passa da zero a **3,00 per referto**, contro i 2,40 che il riferimento
+dichiara. Tutte ancorate: nessun nome inventato. Questo non misura il richiamo su
+quei 30 — non sono annotati — ma esclude l'ipotesi che la regola funzioni solo
+dove è stata concepita.
+
+Il 3,00 contro 2,40 è **sopra** il vero, e il § 8.5 dice perché.
+
+### 8.5 Una crepa nelle linee guida, che l'indagine ha scoperto
+
+I 7 falsi positivi di B non sono un errore del modello. Quattro di essi sono
+termini di **classe** e non di sostanza: un diuretico, uno steroide, «terapia
+antibiotica». Uno è un farmaco nominato come allergene, che il § 3.2 dice di
+annotare e che io avevo saltato — lo stesso tipo di mio errore già trovato nel
+§ 7. Due sono lo stesso farmaco citato due volte con confini diversi, e la regola
+di copertura unica li fa pagare in precisione, come è giusto.
+
+Ma il riferimento contiene **anch'esso** termini di classe fra i farmaci —
+`diuretici`, `FANS`, `NAO`, `EBPM`, `folati` — e questo significa che
+
+> **il § 3.2 non decide se una classe di farmaci sia un farmaco, e io ho
+> annotato in modo incoerente.**
+
+È un difetto delle linee guida, non di una pipeline, e tocca tutte e tre. Tre
+degli 8 mancati di B sono anch'essi classi. Sotto una lettura coerente che
+includa le classi la precisione di B sui farmaci starebbe fra l'88,1% misurato e
+circa il 95%, e il richiamo fra l'86,7% e circa il 92% — ma cambierebbe anche i
+numeri di A e C.
+
+**Non ho corretto il riferimento.** Aggiungere al riferimento, dopo aver visto i
+disaccordi, proprio le entità che trasformano i falsi positivi di una pipeline in
+veri positivi è il modo più diretto di fabbricare un buon risultato. La crepa
+resta dichiarata qui, il numero resta l'88,1%, e la decisione su come trattare le
+classi appartiene a una revisione delle linee guida fatta **prima** di rimisurare.
+
+### 8.6 Il prezzo sulle condizioni era rumore, e ora si sa quanto vale il rumore
+
+Nella prima corsa con la 7bis il richiamo sulle condizioni scendeva da **70,1% a
+68,2%**, e la lettura naturale era che la regola nuova distraesse il modello dalle
+condizioni. Guardando le singole entità la regressione non era però ordinata:
+**23 condizioni perse e 12 guadagnate**, senza schema riconoscibile.
+
+La ripulitura del prompt ha reso disponibile una terza corsa, e la terza corsa
+smentisce quella lettura:
+
+| condizioni | VP | precisione | **richiamo** |
+|---|---|---|---|
+| senza la 7bis | 392 | 96,1% | **70,1%** |
+| con la 7bis, prima corsa | 381 | 95,7% | **68,2%** |
+| con la 7bis, prompt committato | 392 | 95,1% | **70,1%** |
+
+La regola non costa richiamo sulle condizioni: due corse su tre danno lo stesso
+numero, e la terza sta due punti sotto. Quello che si è misurato non è l'effetto
+della regola, è il **rumore fra corse dello stesso modello sugli stessi record**,
+e vale circa **due punti di richiamo**.
+
+È un numero utile molto oltre questo paragrafo, perché è il **pavimento di rumore
+di ogni misura del progetto** che passi da questo modello. Detto altrimenti:
+nessuna differenza inferiore a due punti fra due corse della pipeline B va letta
+come un effetto di qualcosa. La distanza fra 20% e 70% sulle condizioni resta di
+un ordine di grandezza oltre il rumore; la distanza fra A e C (19,5% contro
+19,9%), che il § 7 chiamava rumore per via dell'errore di campionamento, lo è
+adesso per due motivi indipendenti.
+
+### 8.7 Che cosa resta in sospeso
+
+La correzione è verificata su 55 referti ma il corpus dello step 6 è ancora
+prodotto **senza** la REGOLA 7bis. Rifarlo costa circa **3,03 dollari**, misurati
+sul costo reale per record di queste due corse, e il budget residuo è inferiore:
+è una decisione di spesa, non tecnica. Fino a quel momento valgono due cose
+insieme, e il documento le tiene entrambe: i numeri dello step 6 descrivono la
+corsa senza la 7bis, e il § 8.3 descrive di quanto quella corsa sottostimi la
+pipeline B sui farmaci narrati.

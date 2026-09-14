@@ -215,20 +215,20 @@ class TestSondaAllergie(unittest.TestCase):
         """'Non sappiamo' e 'sappiamo che non ce ne sono' non vanno confusi."""
         self.assertEqual(sonda_allergie("Anamnesi Remota: nulla.")["stato"], "sezione_assente")
         self.assertEqual(
-            sonda_allergie("Allergie e intolleranze: Allergie e intolleranze non note Anamnesi Remota: x")["stato"],
+            sonda_allergie("Allergie e intolleranze: Allergie e intolleranze non note Anamnesi Remota: y")["stato"],
             "assenza_dichiarata",
         )
         self.assertEqual(
-            sonda_allergie("Allergie e intolleranze: Allergie: Principi attivi (Diclofenac) Anamnesi Remota: x")["stato"],
+            sonda_allergie("Allergie e intolleranze: Allergie: Principi attivi (Xantolide) Anamnesi Remota: x")["stato"],
             "allergie_presenti",
         )
 
     def test_estrae_il_principio_attivo_allergenico(self):
         esito = sonda_allergie(
-            "Allergie e intolleranze: Allergie: Principi attivi (Diclofenac) Note (FANS) Anamnesi Remota: x"
+            "Allergie e intolleranze: Allergie: Principi attivi (Xantolide) Note (FANS) Anamnesi Remota: x"
         )
 
-        self.assertEqual(esito["categorie"]["principi attivi"], ["Diclofenac"])
+        self.assertEqual(esito["categorie"]["principi attivi"], ["Xantolide"])
 
 
 class TestEcoQuestionario(unittest.TestCase):

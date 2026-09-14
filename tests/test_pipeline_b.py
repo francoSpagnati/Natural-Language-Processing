@@ -844,7 +844,7 @@ class TestMenzioniComposte(unittest.TestCase):
 class TestGeneralizzazioneICD(unittest.TestCase):
     """Il lessico clinico e quello del volume ICD divergono.
 
-    Il volume elenca "fibrillazione atriale parossistica/persistente/cronica" ma
+    Il volume elenca la fibrillazione atriale nelle sue varie forme ma
     non "fibrillazione atriale" da sola. Quando tutte le forme qualificate
     ricadono in un'unica categoria, quella categoria e' cio' che la menzione
     generica denota, e il suo codice a 3 caratteri e' una codifica ICD-10 valida.

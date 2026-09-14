@@ -3,12 +3,47 @@
 Documento vivo, aggiornato **a ogni step**. Dà la visione d'insieme di come i
 componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
-**Ultimo step completato: 6bis — Un riferimento annotato a mano, che misura per
-la prima volta il richiamo.**
+**Ultimo step completato: 7 — Il knowledge graph RDF, con la provenienza come
+struttura.**
 
-**È il risultato più importante del progetto finora, e ribalta la lettura dello
-step 6.** Su 25 referti annotati a mano (619 entità) le due pipeline simboliche
-**mancano quattro condizioni su cinque**:
+Il grafo tiene le tre descrizioni dello stesso paziente senza fonderle, ciascuna
+con l'indicazione di chi l'ha prodotta. Su 1 000 ricoveri: **68 120 menzioni,
+32 907 asserzioni cliniche, 1 215 906 triple**, più le due terminologie intere
+(7 211 codici ATC, 10 803 voci ICD-10) come schemi di concetti SKOS.
+
+La decisione di modellazione è che **la menzione è un nodo**: le menzioni che si
+sovrappongono nello stesso punto del referto diventano *una* asserzione sostenuta
+da più menzioni, e `ct:numeroPipeline` diventa interrogabile in SPARQL.
+
+**Il numero che decide lo step 8**, ottenuto interrogando il grafo:
+
+| asserzioni che esistono solo perché quella pipeline le ha viste | |
+|---|---|
+| **B** (modello linguistico) | **13 198** |
+| C (riconoscitore neurale) | 325 |
+| A (gazetteer) | 145 |
+
+È lo step 6bis confermato sul corpus intero **con un metodo diverso** — 1 000
+referti, zero annotazioni manuali. Il 41,2% delle asserzioni poggia su una sola
+pipeline, e quella pipeline è quasi sempre B. Una soglia di consenso a due
+pipeline non scarterebbe «le asserzioni dubbie»: scarterebbe quasi per intero il
+contributo esclusivo della sola pipeline con un richiamo alto. È il compromesso
+centrale dello step 8, e ora è un numero invece che un'opinione.
+
+Altri due numeri che lo step 8 dovrà usare: **l'11,6% delle menzioni di
+condizione non è una condizione attuale del paziente** (negata, incerta o di un
+familiare), e le asserzioni codificate **dal solo gazetteer sono 151** — poche,
+ma sono la categoria che lo step 6 ha identificato come la più insidiosa, perché
+sbagliata e già codificata.
+
+Vocabolari standard dove esistono: **PROV-O** per la provenienza, **SKOS** per le
+terminologie, **DCMI** per citare le fonti — il vincolo di provenienza del
+progetto vale anche per l'ontologia. Dettagli in `07`.
+
+### Il richiamo, misurato allo step 6bis
+
+Su 25 referti annotati a mano (619 entità) le due pipeline simboliche **mancano
+quattro condizioni su cinque**:
 
 | condizioni | precisione | **richiamo** | F1 |
 |---|---|---|---|
@@ -23,18 +58,40 @@ delle condizioni non è scritta in forma da nomenclatura — «insufficienza par
 punto di forza, è il sintomo: il suo denominatore è ristretto a un quinto della
 realtà clinica.
 
-**Sui farmaci citati nella prosa il quadro si ribalta esattamente**: A 65,0% e C
-70,0% di richiamo, **B zero su sessanta**. Il modello si concentra sui campi di
-terapia e nell'anamnesi non segnala farmaci, perdendo le sospensioni, le riduzioni
-e le intolleranze che i campi strutturati non contengono per definizione.
+**Sui farmaci citati nella prosa la prima misura diceva B zero su sessanta, ed
+era un mio difetto, non del modello.** La regola del prompt definiva i farmaci
+come il contenuto delle due sezioni di terapia e non diceva mai che la prosa ne
+contiene altri. Aggiunta la regola mancante, il richiamo passa da **0% a circa
+85%**, verificato su 30 referti che non avevano avuto parte nella diagnosi. È la
+seconda volta nel progetto che un difetto attribuito al modello si rivela un
+difetto del prompt, e le due volte sono simmetriche: la prima il modello
+*inventava* per via di un esempio positivo, qui *ometteva* per via di una
+definizione troppo stretta. Racconto completo in `06b` § 8.
 
-Da qui la decisione per lo step 7: il knowledge graph si costruisce da **tutte e
-tre le pipeline, con la provenienza**. Non è prudenza, è l'unica scelta che non
-butti via l'80% delle condizioni oppure il 100% dei farmaci narrati.
+Quella indagine ha prodotto anche il **pavimento di rumore** del progetto: tre
+corse dello stesso modello sugli stessi 25 referti danno 70,1%, 68,2% e 70,1% di
+richiamo sulle condizioni. Nessuna differenza inferiore a **due punti** fra due
+corse della pipeline B va letta come un effetto di qualcosa.
+
+La decisione per lo step 7 — il knowledge graph da **tutte e tre le pipeline, con
+la provenienza** — resta quindi giustificata, ma dall'argomento più solido:
+**le condizioni**, dove il divario fra 20% e 70% di richiamo è strutturale,
+misurato, e di un ordine di grandezza oltre il rumore.
 
 Il riferimento ha **un solo annotatore**, che ha anche scritto le pipeline. I
-limiti — cecità imperfetta e una passata di correzione dopo aver visto i
-disaccordi — sono documentati uno per uno in `06b`, non nascosti.
+limiti — cecità imperfetta, una passata di correzione dopo aver visto i
+disaccordi, e linee guida che non decidono se una classe di farmaci sia un
+farmaco — sono documentati uno per uno in `06b`, non nascosti.
+
+### Una violazione di privacy trovata e corretta
+
+Il controllo che vieta testo clinico verbatim nei file versionati esisteva ma
+**guardava solo i file appena modificati**. Esteso a tutto il repository ha
+trovato **28 frasi** in 8 file, fra cui esempi dentro il prompt della pipeline B.
+Tutte sostituite con equivalenti sintetici. Il controllo è ora un modulo
+versionato, `src/privacy.py`, che scandisce l'intero repository ed esce con
+codice di errore se trova qualcosa, e sa distinguere il vocabolario pubblicato
+(un titolo ICD-10 non è il dato di un paziente) da una frase narrativa.
 
 ---
 
@@ -178,8 +235,8 @@ codice ICD.
                     │   Symbolic / Hybrid / LLM           │
                     └────────────────┬────────────────────┘
                                      │        ▲
-                                     │        └── kb/*.ttl  (rdflib) ← step 7 ⬜
-                                     ▼                (openFDA, Wikidata, ESC)
+                                     │        └── grafo.ttl (rdflib) ← step 7 ✅
+                                     ▼            PROV-O + SKOS, 1,2 M triple
                           Tool MCP (step 10 ⬜)
                                      │
                                      ▼
@@ -210,20 +267,24 @@ codice ICD.
 | `src/ner_infer.py` | il modello addestrato | `extract_c` | 5 |
 | `src/extract_c.py` | `ner_infer`, `entity_linking`, `extract_a` (parti condivise) | step 6 (confronto) | 5 |
 | `src/migra_soggetto.py` | `data_loading`, `risolutori`, `schema` | migrazione una-tantum dello schema 1.0.0 → 1.1.0 | 5 |
-| `src/confronto.py` | `risolutori`, uscite delle tre pipeline | step 6 (confronto), notebook 02 | 6 |
+| `src/confronto.py` | `risolutori`, uscite delle tre pipeline | step 6, notebook 02; lo step 7 ne riusa l'allineamento | 6 |
 | `src/rianalizza.py` | `data_loading`, uscite di B | rimisura e affianca due corse qualsiasi di B | 6 |
 | `src/riferimento.py` | `confronto`, annotazioni a mano | step 6bis, step 11 (valutazione) | 6bis |
+| `src/privacy.py` | `data_loading`, terminologie | controllo che nessun file versionato contenga testo clinico | 6bis |
+| `src/grafo.py` | `rdflib`, `confronto`, `risolutori`, ATC, ICD-10 | step 8 (filtro), step 9 (ranker), step 11 (metrica ATC) | 7 |
+| `src/interroga.py` | `rdflib`, il grafo serializzato | le domande dello step 8, poste in SPARQL | 7 |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
 | `tests/test_pipeline_c.py` | `silver_labels`, `ner_train`, `entity_linking` | — | 5 |
 | `tests/test_confronto.py` | `confronto` | — | 6 |
 | `tests/test_riferimento.py` | `riferimento` | — | 6bis |
+| `tests/test_grafo.py` | `grafo`, `rdflib` | — | 7 |
 | `notebooks/01_analisi_esplorativa.ipynb` | `data_loading` | analisi esplorativa: conteggi, distribuzioni, regex commentate | 0 |
-| `src/confronto.py` | `risolutori`, uscite delle tre pipeline | step 6; il knowledge graph dello step 7 ne eredita le conclusioni | 6 |
 | `notebooks/02_confronto_pipeline.ipynb` | `confronto` | il confronto con i grafici e l'aggiudicazione manuale | 6 |
+| `notebooks/03_knowledge_graph.ipynb` | `grafo`, `rdflib` | il grafo esplorato: costo di ogni soglia di consenso, assi stato/soggetto, gerarchia ATC | 7 |
 
-I test sono 219 in tutto e **nessuno usa la rete**: la pipeline B e' provata
+I test sono 270 in tutto e **nessuno usa la rete**: la pipeline B e' provata
 con un backend fittizio, perche' una suite dipendente dall'API sarebbe lenta,
 costosa e verde o rossa a seconda del carico dei server.
 

@@ -124,8 +124,8 @@ class TestStoricita(BaseConText):
         una in atto portano a terapie diverse.
         """
         attributi = self.attributi(
-            "Pregressa fibrillazione atriale parossistica.",
-            "fibrillazione atriale parossistica",
+            "Pregressa tachicardia sopraventricolare parossistica.",
+            "tachicardia sopraventricolare parossistica",
         )
 
         self.assertIn(Attributo.STORICITA, attributi)
@@ -156,7 +156,7 @@ class TestNessunAttributo(BaseConText):
     def test_affermazione_semplice_resta_pulita(self):
         """Il rischio opposto: marcatori che scattano dove non devono."""
         attributi = self.attributi(
-            "Ipertensione arteriosa in terapia con ramipril.", "Ipertensione arteriosa"
+            "Ipertensione arteriosa ben compensata dai farmaci.", "Ipertensione arteriosa"
         )
 
         self.assertEqual(attributi, {})
@@ -180,15 +180,15 @@ class TestSoggettoFamiliare(unittest.TestCase):
         self.assertEqual(self.ambito(testo), "cardiopatia ischemica (padre)")
 
     def test_la_menzione_dentro_l_ambito_e_di_un_familiare(self):
-        testo = "Familiarita per diabete mellito (madre)."
-        inizio = testo.index("diabete mellito")
-        trovato = soggetto_familiare(testo, inizio, inizio + len("diabete mellito"))
+        testo = "Familiarita per ipotiroidismo (madre)."
+        inizio = testo.index("ipotiroidismo")
+        trovato = soggetto_familiare(testo, inizio, inizio + len("ipotiroidismo"))
         self.assertIsNotNone(trovato)
         self.assertEqual(trovato.espressione.lower(), "familiarita per")
 
     def test_la_menzione_fuori_dall_ambito_resta_del_paziente(self):
         # Il punto chiude l'ambito: l'ipertensione e' del paziente.
-        testo = "Familiarita per diabete mellito. Ipertensione arteriosa in terapia."
+        testo = "Familiarita per ipotiroidismo. Ipertensione arteriosa in cura."
         inizio = testo.index("Ipertensione")
         self.assertIsNone(soggetto_familiare(testo, inizio, inizio + 12))
 
@@ -200,15 +200,15 @@ class TestSoggettoFamiliare(unittest.TestCase):
         self.assertIsNotNone(soggetto_familiare(testo, inizio, inizio + 3))
 
     def test_l_elenco_separato_da_virgole_resta_nell_ambito(self):
-        testo = "Familiarita positiva per diabete mellito (madre), cardiopatia ischemica (padre)."
+        testo = "Familiarita positiva per ipotiroidismo (madre), cardiopatia ischemica (padre)."
         inizio = testo.index("cardiopatia")
         self.assertIsNotNone(soggetto_familiare(testo, inizio, inizio + 11))
 
     def test_una_nuova_affermazione_in_maiuscola_chiude_l_ambito(self):
         # Nel corpus i referti incollano affermazioni senza punteggiatura. Senza
         # questo terminatore "Ex fumatore" diventerebbe un'abitudine del padre.
-        testo = ("Familiarita per cardiopatia ischemica ed ipertensione arteriosa "
-                 "Ex fumatore, 4-5 sigarette die")
+        testo = ("Familiarita per cardiopatia ischemica ed ipotiroidismo "
+                 "Ex fumatore, poche sigarette al giorno")
         inizio = testo.index("Ex fumatore")
         self.assertIsNone(soggetto_familiare(testo, inizio, inizio + 11))
 
@@ -220,7 +220,7 @@ class TestSoggettoFamiliare(unittest.TestCase):
         self.assertIsNotNone(soggetto_familiare(testo, inizio, inizio + 3))
 
     def test_il_taglio_non_avviene_dentro_una_parentesi(self):
-        testo = "Familiarita per diabete mellito (padre, affetto da Parkinson, madre ETP)"
+        testo = "Familiarita per ipotiroidismo (padre, in cura per Parkinson, madre ETP)"
         inizio = testo.index("Parkinson")
         self.assertIsNotNone(soggetto_familiare(testo, inizio, inizio + 9))
 
@@ -265,10 +265,10 @@ class TestParenteNominatoDirettamente(unittest.TestCase):
         invece che a fine frase, «appendicite» e «alluce valgo» — che sono
         interventi DEL PAZIENTE — finivano marcati come familiari."""
         testo = ("Padre deceduto per IMA a 70 anni. "
-                 "Interventi pregressi: appendicite, alluce valgo.")
+                 "Interventi pregressi: ernia inguinale, alluce valgo.")
         familiari = " ".join(self._familiari(testo))
         self.assertIn("Padre deceduto per IMA", familiari)
-        self.assertNotIn("appendicite", familiari)
+        self.assertNotIn("ernia inguinale", familiari)
         self.assertNotIn("alluce valgo", familiari)
 
 
@@ -287,11 +287,11 @@ class TestParenteNominatoDirettamente(unittest.TestCase):
     def test_il_parente_che_riferisce_non_e_il_malato(self):
         """«La madre riferisce» introduce chi racconta, non chi e' malato:
         l'ipertensione e' del paziente e deve restare sua."""
-        testo = "La madre riferisce tendenza alla cianosi. Ipertensione arteriosa in terapia."
+        testo = "La madre riferisce tendenza alle lipotimie. Ipertensione arteriosa in cura."
         self.assertEqual(self._familiari(testo), [])
 
     def test_un_parente_senza_malattia_non_apre_nulla(self):
-        for testo in ("Vive con il fratello, autonomi. Diabete mellito tipo 2.",
+        for testo in ("Vive con il fratello, autonomi. Ipotiroidismo in cura.",
                       "Due fratelli in buona salute.",
                       "Nato a termine (madre secondigravida)."):
             with self.subTest(testo=testo):

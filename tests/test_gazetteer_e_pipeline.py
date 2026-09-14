@@ -177,7 +177,7 @@ class TestPipelineA(unittest.TestCase):
         from schema import StatoConoscenza
 
         stato = self._stato(
-            "Allergie e intolleranze: Allergie e intolleranze non note Anamnesi Remota: nulla."
+            "Allergie e intolleranze: Allergie e intolleranze non note Anamnesi Remota: --."
         )
 
         self.assertEqual(stato.stato_sezione_allergie, StatoConoscenza.NEGATO)

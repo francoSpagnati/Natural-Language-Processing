@@ -544,14 +544,14 @@ I referti incollano piu' affermazioni senza punteggiatura, segnalando l'inizio
 della successiva con la maiuscola:
 
 ```
-Familiarita per cardiopatia ischemica ed ipertensione arteriosa Ex fumatore, 4-5 sigarette die
+Familiarita per cardiopatia ischemica ed ipotiroidismo Ex fumatore, poche sigarette al giorno
 ```
 
 Senza un terminatore, `Ex fumatore` diventerebbe un'abitudine del padre. La
 maiuscola pero' deve essere seguita da una minuscola, altrimenti l'ambito si
 spezzerebbe su ogni acronimo — `CAD`, `IMA`, `MCV`, `HCM` sono ovunque. E il
 taglio non si applica dentro una parentesi, perche' le precisazioni sui parenti
-ne sono piene: `diabete mellito (padre, affetto da Parkinson, madre ETP)`.
+ne sono piene: `ipotiroidismo (padre, in cura per Parkinson, madre ETP)`.
 
 Sui 538 ambiti trovati nel corpus la regola ne accorcia 11, e l'ispezione dice
 che 8 sono accorciamenti corretti. Il compromesso e' voluto: un ambito troppo
@@ -612,7 +612,7 @@ letti tutti e trentatre nel referto originale, uno per uno.
 | nessuna delle due | 1 |
 
 **Dove vince A.** Il modello ignora marcatori che ha sotto gli occhi e che a
-volte cita lui stesso: *«Si ricovera per dispnea in verosimile scompenso
+volte cita lui stesso: *«Si ricovera per dispnea in sospetto scompenso
 cardiaco acuto»* -> B risponde `affermato`; *«in assenza di embolia polmonare»*,
 *«Non versamento pericardico»*, *«nega iperuricemia, gotta»* -> B risponde
 `affermato` su tutte. Sono negazioni e incertezze esplicite, con il marcatore
@@ -627,9 +627,9 @@ le sbaglia dove una regola di prossimita' di cinquanta righe le prende.
   la successiva sara' un'altra.
 * *«Dall'ultimo ricovero **non riferiti** episodi sincopali o dispnea»* — stesso
   problema.
-* *«episodi di cardiopalmo pregressi nel 2008 **dubbi** per tachicardia»* — la
+* *«episodi di cardiopalmo pregressi **dubbi** per tachicardia»* — la
   lista ha `dubbio` e `dubbia`, non `dubbi`.
-* *«BPCO stadio GOLD **non** noto, artrite gottosa polso e mano dx nel 2023»* —
+* *«BPCO stadio GOLD **non** noto, artrite gottosa della mano destra»* —
   il `non` appartiene a `non noto`, ma l'ambito di A scavalca la virgola e nega
   anche l'artrite. E' il prezzo diretto della scelta di **non** far chiudere
   l'ambito dalla virgola, presa perche' gli elenchi negati sono la norma
@@ -638,7 +638,7 @@ le sbaglia dove una regola di prossimita' di cinquanta righe le prende.
 * *«terapia con sacubitril/valsartan, **non** tollerata per ipotensione
   sintomatica»* — il `non` e' di `non tollerata`; il paziente l'ipotensione ce
   l'ha davvero.
-* *«Si ricovera **nel sospetto di** ipertensione polmonare in artrite psoriasica»*
+* *«Si ricovera **nel sospetto di** ipertensione polmonare su base autoimmune»*
   — il sospetto riguarda l'ipertensione polmonare, l'artrite il paziente ce l'ha.
 
 Il quadro e' quindi: **la regola deterministica sbaglia in modo sistematico e
@@ -648,13 +648,13 @@ errore diversi, ed e' esattamente il tipo di complementarita' che lo step 6 deve
 quantificare.
 
 **Il caso che nessuna delle due prende:** *«ricoverata per FA tachifrequente con
-sospetto di embolia polmonare (escluso con angioTC)»*. L'embolia e' stata
+sospetto di embolia polmonare, poi escluso»*. L'embolia e' stata
 **esclusa**; A dice `incerto`, B dice `affermato`, e la risposta giusta e'
 `negato`. La parentesi che rovescia l'affermazione e' fuori dalla portata di
 entrambe.
 
 **Un limite dell'asse nuovo, trovato negli stessi 33 casi:** *«secondo figlio
-deceduto a 5 mesi per probabile cardiopatia congenita»* resta marcato
+deceduto in eta' neonatale per sospetta cardiopatia congenita»* resta marcato
 `soggetto=paziente` da tutte e due, perche' `figlio` non e' un marcatore. E' la
 conseguenza diretta della scelta di non promuovere i termini di parentela, ed e'
 un compromesso, non una svista: promuoverli catturerebbe questo caso e ne
@@ -751,7 +751,7 @@ prendendo bloccherebbe la terapia corretta. Non e' un errore di richiamo, e'
 un'inversione di significato.
 
 Nello stesso gruppo, il record `10161552` ha allergie vere nel referto
-(`Trimetoprim/sulfametoxazolo, Ciclosporina, Amoxicillina/acido clavulanico`) ma
+(`Trimetoprim/sulfametoxazolo, poi Amoxicillina`) ma
 la pipeline ne estrae 45, con `Ciprofloxacin` ripetuto decine di volte: e' di
 nuovo la generazione degenere del § 7sexies, e la grafia inglese invece di
 `Ciprofloxacina` e' anche il motivo per cui non si ancora.
@@ -859,8 +859,8 @@ oggetti di cui **82 distinti** — sovra-estrae. Basta guardare cosa:
 
 ```
 "testo_grezzo": "con lenta risoluzione"        -> concetto "risoluzione lenta"
-"testo_grezzo": "Dimessa con flusso di ossigeno incrementato ad 1 L/min"
-                                                -> concetto "ossigeno incrementato"
+"testo_grezzo": "dimesso con ossigenoterapia a basso flusso"
+                                                -> concetto "ossigenoterapia"
 ```
 
 Non sono condizioni cliniche, sono **frammenti di narrazione**. Su un'anamnesi

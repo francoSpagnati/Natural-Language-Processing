@@ -109,8 +109,8 @@ Solo diagnosi, patologie e fattori di rischio del paziente. Una condizione ha un
 nome: se non sapresti dirlo a un altro medico in due parole, non e' una
 condizione.
 
-  SI:  ipertensione arteriosa, fibrillazione atriale, BPCO, diabete, obesita',
-       fumo, stenosi aortica, insufficienza renale cronica
+  SI:  diabete, stenosi aortica, ipertensione arteriosa, obesita', BPCO,
+       insufficienza renale cronica, fumo, fibrillazione atriale
   NO:  stato civile, professione, valori di laboratorio ("108 glicemia"),
        esami e referti strumentali ("ecocardiogramma normale", "coro-CT"),
        ricoveri e visite, terapie, "asintomatico", "alvo regolare"
@@ -119,9 +119,9 @@ NON spezzare la narrazione in condizioni. Un frammento di frase non e' una
 diagnosi, anche se descrive qualcosa di clinico.
 
   SBAGLIATO: "con lenta risoluzione" con concetto "risoluzione lenta"
-  SBAGLIATO: "Dimessa con flusso di ossigeno incrementato ad 1 L/min"
-             con concetto "ossigeno incrementato"
-  SBAGLIATO: "Gennaio 2024 accesso al PS di Empoli con riscontro di
+  SBAGLIATO: "dimesso con ossigenoterapia a basso flusso"
+             con concetto "ossigenoterapia a basso flusso"
+  SBAGLIATO: "nel 2024 accesso in pronto soccorso con riscontro di
              insufficienza respiratoria acuta"
   GIUSTO:    da quella stessa frase, "insufficienza respiratoria acuta"
 
@@ -133,16 +133,16 @@ CRITERIO OPERATIVO: `testo_grezzo` di una condizione e' quasi sempre di UNA-CINQ
 PAROLE. Se stai per scrivere una frase con un verbo, una data o un valore
 numerico, non e' una condizione.
 
-  SBAGLIATO: "durante la degenza FA cardiovertita con amiodarone"
+  SBAGLIATO: "in reparto la FA e' stata cardiovertita"
   GIUSTO:    "FA"
 
-  SBAGLIATO: "eseguito SEF: tempo di recupero nodo del seno nella norma"
+  SBAGLIATO: "eseguito studio elettrofisiologico con esito nei limiti"
   GIUSTO:    niente, e' il risultato di un esame
 
-  SBAGLIATO: "dimessa senza NOAC rimandando la decisione a rivalutazione"
+  SBAGLIATO: "anticoagulante non prescritto, da rivalutare al controllo"
   GIUSTO:    niente, e' una decisione terapeutica
 
-  SBAGLIATO: "RM encefalo 23/1: multiple aree di alterato segnale da gliosi"
+  SBAGLIATO: "RM encefalo con aree di alterato segnale da gliosi"
   GIUSTO:    "gliosi"
 
 REGOLA 3 - FAMILIARITA'
@@ -203,6 +203,33 @@ referto, in `farmaci` c'e' almeno una voce con quel `campo`?
 
 In `posologia` riporta dose e frequenza come sono scritte. Le condizioni pregresse
 o risolte restano "affermato": fanno parte della storia clinica.
+
+REGOLA 7bis - FARMACI ANCHE NELL'ANAMNESI, NON SOLO NELLE TERAPIE
+Le due sezioni di terapia non sono le uniche fonti di farmaci. L'anamnesi ne
+nomina altri, e sono clinicamente i piu' informativi proprio perche' NON stanno
+negli elenchi: un farmaco sospeso, uno ridotto, uno mal tollerato, uno assunto
+in passato, uno rifiutato dal paziente. Gli elenchi di terapia dicono che cosa
+il paziente assume ADESSO; l'anamnesi dice che cosa ha assunto, perche' ha
+smesso e che cosa non tollera.
+
+Quando nella prosa dell'anamnesi compare il nome di una sostanza o di un
+prodotto medicinale, va in `farmaci` con `campo` "Anamnesi", esattamente come
+quelli delle terapie.
+
+  SBAGLIATO: leggere l'anamnesi solo in cerca di condizioni, e i farmaci solo
+             nelle sezioni "###" di terapia
+  SBAGLIATO: saltare un farmaco dell'anamnesi perche' compare gia' in una
+             sezione di terapia — sono due menzioni distinte, con `campo`
+             diverso, e servono entrambe
+  SBAGLIATO: saltare un farmaco dell'anamnesi perche' il paziente ha smesso di
+             assumerlo: quello e' `stato`, non un motivo per ometterlo
+
+Copia il nome come e' scritto, refusi compresi, senza correggerlo. Se il
+paziente ha smesso, se il farmaco e' stato sospeso o se e' esplicitamente
+escluso, il nome si estrae comunque e la differenza si registra in `stato`.
+
+Un farmaco nominato come allergene va in `allergie` secondo la REGOLA 9 **e**
+in `farmaci` con `campo` "Anamnesi": e' la stessa sostanza vista da due lati.
 
 REGOLA 8 - NON DEDURRE
 Non aggiungere il farmaco che tratterebbe una condizione presente, ne' la
@@ -450,8 +477,22 @@ def estrai(
 # ---------------------------------------------------------------------------
 
 
-def scegli_record(record: list[RecordPaziente], quanti: int | None, seme: int):
-    """Sottoinsieme casuale ma riproducibile, per contenere il consumo di quota."""
+def scegli_record(record: list[RecordPaziente], quanti: int | None, seme: int,
+                  solo: list[int] | None = None):
+    """Sottoinsieme riproducibile, per contenere il consumo di quota.
+
+    `solo` seleziona record per identificativo invece che a caso. Serve agli
+    esperimenti mirati: provare una modifica del prompt sui 25 referti del
+    riferimento annotato costa qualche centesimo e si misura subito, mentre
+    rifare il corpus intero costa due ordini di grandezza di piu'.
+    """
+    if solo:
+        voluti = set(solo)
+        scelti = [r for r in record if r.enc_oid in voluti]
+        mancanti = voluti - {r.enc_oid for r in scelti}
+        if mancanti:
+            sys.exit(f"Record assenti dal dataset: {sorted(mancanti)}")
+        return sorted(scelti, key=lambda r: r.enc_oid)
     if quanti is None or quanti >= len(record):
         return record
     generatore = random.Random(seme)
@@ -485,6 +526,10 @@ def impronta_configurazione(backend, opzioni, schema: dict) -> dict:
         "ragionamento": _ragionamento_effettivo(backend, opzioni),
         "seme": opzioni.seme,
         "record_richiesti": opzioni.record,
+        # Una corsa mirata non e' confrontabile con una campionata dallo stesso
+        # seme: l'impronta deve dirlo, o riprendere l'una nella cartella
+        # dell'altra passerebbe inosservato.
+        "record_scelti": sorted(opzioni.solo) if getattr(opzioni, "solo", None) else None,
         "impronta_istruzioni": breve(ISTRUZIONI),
         "impronta_schema": breve(json.dumps(schema, sort_keys=True, ensure_ascii=False)),
     }
@@ -590,6 +635,15 @@ def main() -> None:
     )
     argomenti.add_argument("--seme", type=int, default=20260904, help="Seme del campionamento.")
     argomenti.add_argument(
+        "--solo",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Elabora solo questi enc_oid, invece di campionarli. Serve a "
+        "provare una modifica su un insieme noto — per esempio i referti del "
+        "riferimento annotato — senza rifare il corpus.",
+    )
+    argomenti.add_argument(
         "--ragionamento",
         default="no",
         choices=["no", "low", "high"],
@@ -614,7 +668,7 @@ def main() -> None:
     opzioni = argomenti.parse_args()
 
     record, _ = carica_dataset(PERCORSO_DATASET)
-    selezione = scegli_record(record, opzioni.record, opzioni.seme)
+    selezione = scegli_record(record, opzioni.record, opzioni.seme, opzioni.solo)
     parallele = opzioni.parallele or (1 if opzioni.motore == "locale" else 8)
 
     classe = {
