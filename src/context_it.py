@@ -282,7 +282,7 @@ PATTERN_SOGGETTO_FAMILIARE = re.compile(
 )
 
 # Un secondo modo di parlare di un parente, che il marcatore esplicito non copre:
-# nominarlo direttamente. «Madre deceduta ad 80 aa per fibrillazione atriale» non
+# nominarlo direttamente. «Madre deceduta a 76 anni per fibrillazione atriale» non
 # contiene la parola "familiarita", ma la fibrillazione e' della madre.
 #
 # La regola e' stretta di proposito, perche' costruita sul corpus e non
@@ -400,7 +400,15 @@ def soggetto_familiare(
     """
     if inizio is None or fine is None:
         return None  # menzione non ancorata: senza offset la regola non si applica
-    for ambito in ambiti_familiarita(testo):
-        if ambito.inizio < fine and inizio < ambito.fine:
-            return ambito
-    return None
+    sovrapposti = [a for a in ambiti_familiarita(testo)
+                   if a.inizio < fine and inizio < a.fine]
+    if not sovrapposti:
+        return None
+    # Fra piu' ambiti che coprono la menzione vince quello che comincia piu'
+    # tardi, cioe' il piu' vicino. La conclusione non cambia — la menzione e'
+    # familiare in entrambi i casi — ma la regola registrata in `Provenienza`
+    # deve nominare il marcatore giusto: in «Madre deceduta per FA, padre
+    # deceduto per asbestosi» l'asbestosi va attribuita a «padre deceduto», non
+    # a «madre deceduta», altrimenti chi rilegge il dato risale al parente
+    # sbagliato.
+    return max(sovrapposti, key=lambda a: a.inizio)

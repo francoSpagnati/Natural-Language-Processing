@@ -256,8 +256,8 @@ class TestParenteNominatoDirettamente(unittest.TestCase):
         self.assertIn("Zia e nonna fibrillanti", self._familiari(testo))
 
     def test_parente_deceduto_per_una_causa(self):
-        testo = "APF: Madre deceduta ad 80 aa per fibrillazione atriale."
-        self.assertIn("Madre deceduta ad 80 aa per fibrillazione atriale",
+        testo = "APF: Madre deceduta a 76 anni per fibrillazione atriale."
+        self.assertIn("Madre deceduta a 76 anni per fibrillazione atriale",
                       self._familiari(testo))
 
     def test_l_ambito_si_ferma_a_fine_frase(self):
@@ -270,6 +270,19 @@ class TestParenteNominatoDirettamente(unittest.TestCase):
         self.assertIn("Padre deceduto per IMA", familiari)
         self.assertNotIn("appendicite", familiari)
         self.assertNotIn("alluce valgo", familiari)
+
+
+    def test_la_regola_registrata_nomina_il_parente_giusto(self):
+        """La conclusione non cambia (familiare in ogni caso), ma la provenienza
+        deve permettere di risalire al parente giusto. Trovato rileggendo i dati:
+        la silicosi del padre risultava attribuita a «madre deceduta»."""
+        testo = ("APF: Madre deceduta a 76 anni per fibrillazione atriale, "
+                 "padre deceduto per complicanze di silicosi.")
+        inizio = testo.index("silicosi")
+        ambito = soggetto_familiare(testo, inizio, inizio + len("silicosi"))
+        self.assertIsNotNone(ambito)
+        self.assertIn("padre", ambito.espressione.lower())
+        self.assertNotIn("madre", ambito.espressione.lower())
 
     def test_il_parente_che_riferisce_non_e_il_malato(self):
         """«La madre riferisce» introduce chi racconta, non chi e' malato:

@@ -3,7 +3,8 @@
 Documento vivo, aggiornato **a ogni step**. Dà la visione d'insieme di come i
 componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
-**Ultimo step completato: 6 — Confronto fra le tre pipeline.**
+**Ultimo step completato: 6 — Confronto fra le tre pipeline, ora su tutti e
+1 000 i record.**
 
 Il risultato che conta non è quale pipeline vinca — nessuna vince, e le tre
 precisioni distano fra loro meno dell'errore standard del campione. Conta che i
@@ -41,11 +42,45 @@ giusta, codice giusto, persona sbagliata — e va chiuso prima del filtro.
 **È stato aggiunto un terzo backend, `BackendOpenRouter`**, dietro la stessa
 interfaccia e la stessa cache degli altri due. Il collo di bottiglia non è mai
 stato il denaro ma il tempo: 235 secondi per record significano 65 ore per il
-corpus intero, mentre sui token misurati lo stesso corpus su un modello a consumo
-costa poco più di un dollaro. Il campo che rende il backend sicuro è
+corpus intero. Il campo che rende il backend sicuro è
 `provider.require_parameters`: senza di esso OpenRouter può instradare verso un
 fornitore che ignora `response_format`, e la garanzia strutturale della pipeline B
 diventerebbe una speranza senza che nulla lo segnali.
+
+**La pipeline B esiste ora in due versioni, e nessuna sostituisce l'altra:**
+`qwen3:4b` in locale su 199 record (13 ore, gratis) e
+`deepseek/deepseek-v4.1-flash` su **1 000 record (39 minuti, 2,42 $)**. È la
+prima corsa completa del progetto, e rende le tre pipeline confrontabili
+sull'intero corpus.
+
+Tenere entrambe non è ridondanza: è ciò che permette di separare **quanto di una
+differenza sia del metodo e quanto della taglia del modello**. Sugli stessi 199
+record, con le regole di prompt sulle condizioni identiche, la versione remota
+dimezza le condizioni per record (24,3 → 17,2), azzera i duplicati da generazione
+degenere (13,2% → 0,3%) e le menzioni non ancorate (7,9% → 0,5%).
+
+**Una conclusione dello step 6 è stata ritirata.** Avevo scritto che i campi
+strutturati restano al parser perché *«non è un problema di capacità ma di
+affidabilità»*: il modello locale leggeva la terapia di dimissione al 50%, in
+modo bimodale, e non avevo trovato nessuna discriminante fra i record letti e
+quelli saltati. Il modello remoto la legge al **99,6%**. La discriminante non era
+nei record ma nel modello, e cercandola solo fra le proprietà dei dati non potevo
+trovarla. I campi strutturati restano comunque al parser — non più perché il
+modello sbagli, ma perché una regex fa lo stesso lavoro gratis, in 0,02 secondi e
+in modo deterministico.
+
+**L'aggiudicazione è stata rifatta su 60 menzioni** della versione remota: 91,7%
+± 3,6 contro il 66,7% ± 8,6 della locale. È l'unico confronto di precisione del
+progetto in cui gli intervalli **non** si sovrappongono; quelli di A, B-locale e
+C si sovrappongono tutti fra loro e non ordinano nulla.
+
+**Il buco dell'asse experiencer è chiuso.** «Zia e nonna fibrillanti» riceveva
+`I48` attribuito al paziente. La regola nuova è stretta di proposito, costruita
+sul corpus: il 4% delle occorrenze di un termine di parentela è l'*informatore*
+(«la madre riferisce»), e marcarle familiari nasconderebbe al filtro una
+condizione vera del paziente — un errore peggiore, perché in direzione opposta.
+Effetto: 39 condizioni su 16 639 cambiano soggetto, 17 delle quali portavano un
+codice ICD.
 
 ## Indice dei documenti
 
@@ -141,7 +176,7 @@ diventerebbe una speranza senza che nulla lo segnali.
 | `src/extract_c.py` | `ner_infer`, `entity_linking`, `extract_a` (parti condivise) | step 6 (confronto) | 5 |
 | `src/migra_soggetto.py` | `data_loading`, `risolutori`, `schema` | migrazione una-tantum dello schema 1.0.0 → 1.1.0 | 5 |
 | `src/confronto.py` | `risolutori`, uscite delle tre pipeline | step 6 (confronto), notebook 02 | 6 |
-| `src/rianalizza.py` | `data_loading`, uscite di B | rimisura dopo ogni corsa nuova di B | 6 |
+| `src/rianalizza.py` | `data_loading`, uscite di B | rimisura e affianca due corse qualsiasi di B | 6 |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |

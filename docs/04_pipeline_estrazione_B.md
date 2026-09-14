@@ -1063,6 +1063,79 @@ frattempo può essere cambiato.
 
 ---
 
+## 7undecies. La corsa sul corpus intero, e cosa se ne impara
+
+**1 000 record su 1 000, zero falliti, 39 minuti, 2,42 $.** È la prima corsa
+completa del progetto: fino a qui ogni misura era su 200 record, perché 235
+secondi per record in locale significano 65 ore per il corpus.
+
+| | B-locale (`qwen3:4b`) | B-remota (`deepseek-v4.1-flash`) |
+|---|---|---|
+| record | 199 su 200 | **1 000 su 1 000** |
+| tempo | 13 h | 39 min |
+| costo | 0 € | 2,42 $ |
+| menzioni non ancorate | 9,5% | **0,5%** |
+
+### Che cosa è del modello e che cosa del prompt
+
+Fra le due corse è cambiato **anche** il prompt: la REGOLA 9 sulle allergie è
+stata riscritta (§ 7nonies). Attribuire tutto al modello sarebbe scorretto, e la
+separazione si può fare con precisione perché quella riscrittura tocca **solo le
+allergie**: le regole su condizioni e farmaci sono identiche parola per parola.
+
+Sugli stessi 199 record, dove il prompt non è cambiato:
+
+| misura | B-locale | B-remota |
+|---|---|---|
+| condizioni per record | 24,3 | **17,2** |
+| duplicati fra le condizioni | 13,2% | **0,3%** |
+| menzioni non ancorate (escluse allergie) | 7,9% | **0,5%** |
+| farmaci dalla terapia di dimissione | 756 | **1 386** |
+| farmaci elencati come condizioni | 44 | **0** |
+
+Il difetto del § 7sexies — la **generazione degenere**, 555 duplicati da
+rimuovere — praticamente scompare. Non è stato risolto da una correzione: è
+sparito cambiando modello, il che dice che era una proprietà di quel modello e
+non del compito.
+
+Sulle allergie invece **non si può attribuire niente**: le 105 menzioni `mdc`
+erano attese sparire per costruzione, avendo tolto l'esempio dal prompt.
+
+### Il prezzo che si paga
+
+I farmaci che B trova **nella prosa** crollano da 42 a 61 su mille record, contro
+i 2 332 della pipeline A. Il modello remoto si concentra sui campi di terapia,
+dove arriva al 99,6%, e nell'anamnesi quasi non segnala farmaci. I farmaci
+narrati — *«sospesa terapia con rivaroxaban»* — sono clinicamente informativi
+proprio perché non stanno nei campi strutturati, e ora si perdono.
+
+### Due record falliti, e un difetto del backend
+
+Sulla corsa da 200 due record erano falliti: uno con JSON troncato a metà di una
+stringa, uno con `finish_reason=error`. **Rilanciandoli sono riusciti entrambi al
+primo colpo**, il che li qualifica come guasti transitori del fornitore.
+
+Il difetto era mio: `_interpreta` veniva chiamato nel ramo `else` del ciclo, cioè
+fuori dalla portata dell'`except`, quindi un errore sollevato lì usciva dai
+ritentativi. Con `response_format` attivo un JSON malformato **non può** venire
+da un errore del modello — viene da una generazione interrotta — ed era proprio
+il caso da ritentare. Introdotta `ErroreRitentabile`, con i test presi dai due
+casi veri.
+
+La conferma è arrivata subito: sulla corsa da mille record, **4 record recuperati
+dai ritentativi e zero falliti**. Senza la correzione sarebbero stati quattro
+fallimenti da rilanciare a mano.
+
+### La cache si è ripagata
+
+Dopo la correzione dell'asse experiencer tutte e tre le pipeline sono state
+rieseguite per propagare il nuovo soggetto. La pipeline B è costata **zero**:
+1 000 record su 1 000 serviti dalla cache delle risposte, in meno di un minuto.
+È la ragione per cui quella cache esiste, scritta allo step 4 prima di sapere che
+sarebbe servita a questo.
+
+---
+
 ## 8. Limiti noti
 
 * **La quota gratuita è il vincolo dominante**: 20 richieste al giorno per
