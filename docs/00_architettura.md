@@ -3,8 +3,42 @@
 Documento vivo, aggiornato **a ogni step**. Dà la visione d'insieme di come i
 componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
-**Ultimo step completato: 6 — Confronto fra le tre pipeline, ora su tutti e
-1 000 i record.**
+**Ultimo step completato: 6bis — Un riferimento annotato a mano, che misura per
+la prima volta il richiamo.**
+
+**È il risultato più importante del progetto finora, e ribalta la lettura dello
+step 6.** Su 25 referti annotati a mano (619 entità) le due pipeline simboliche
+**mancano quattro condizioni su cinque**:
+
+| condizioni | precisione | **richiamo** | F1 |
+|---|---|---|---|
+| A (gazetteer) | 80,1% | **19,5%** | 31,4% |
+| B (LLM) | 96,1% | **70,1%** | **81,1%** |
+| C (NER) | 81,6% | **19,9%** | 31,9% |
+
+La ragione è strutturale: il vocabolario di A è costruito dai termini ICD-10 e C
+è addestrata sulle etichette che A produce, quindi entrambe trovano **solo ciò
+che la knowledge base già conosce**. Nella prosa cardiologica la maggior parte
+delle condizioni non è scritta in forma da nomenclatura — «insufficienza paraprotesica» — e resta invisibile. La copertura ICD del 99,4% di A, che sembrava un
+punto di forza, è il sintomo: il suo denominatore è ristretto a un quinto della
+realtà clinica.
+
+**Sui farmaci citati nella prosa il quadro si ribalta esattamente**: A 65,0% e C
+70,0% di richiamo, **B zero su sessanta**. Il modello si concentra sui campi di
+terapia e nell'anamnesi non segnala farmaci, perdendo le sospensioni, le riduzioni
+e le intolleranze che i campi strutturati non contengono per definizione.
+
+Da qui la decisione per lo step 7: il knowledge graph si costruisce da **tutte e
+tre le pipeline, con la provenienza**. Non è prudenza, è l'unica scelta che non
+butti via l'80% delle condizioni oppure il 100% dei farmaci narrati.
+
+Il riferimento ha **un solo annotatore**, che ha anche scritto le pipeline. I
+limiti — cecità imperfetta e una passata di correzione dopo aver visto i
+disaccordi — sono documentati uno per uno in `06b`, non nascosti.
+
+---
+
+**Step 6 — Confronto fra le tre pipeline, su tutti e 1 000 i record.**
 
 Il risultato che conta non è quale pipeline vinca — nessuna vince, e le tre
 precisioni distano fra loro meno dell'errore standard del campione. Conta che i
@@ -96,6 +130,7 @@ codice ICD.
 | 4 | [`04_pipeline_estrazione_B.md`](04_pipeline_estrazione_B.md) | ✅ completato |
 | 5 | [`05_pipeline_estrazione_C.md`](05_pipeline_estrazione_C.md) | ✅ completato |
 | 6 | [`06_confronto_pipeline.md`](06_confronto_pipeline.md) | ✅ completato |
+| 6bis | [`06b_riferimento_annotato.md`](06b_riferimento_annotato.md) | ✅ richiamo misurato su 25 referti |
 | 7 | `07_knowledge_graph.md` | ⬜ da fare |
 | 8 | `08_motore_fase1_filtro.md` | ⬜ da fare |
 | 9 | `09_motore_fase2_ranker.md` | ⬜ da fare |
@@ -177,11 +212,13 @@ codice ICD.
 | `src/migra_soggetto.py` | `data_loading`, `risolutori`, `schema` | migrazione una-tantum dello schema 1.0.0 → 1.1.0 | 5 |
 | `src/confronto.py` | `risolutori`, uscite delle tre pipeline | step 6 (confronto), notebook 02 | 6 |
 | `src/rianalizza.py` | `data_loading`, uscite di B | rimisura e affianca due corse qualsiasi di B | 6 |
+| `src/riferimento.py` | `confronto`, annotazioni a mano | step 6bis, step 11 (valutazione) | 6bis |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
 | `tests/test_pipeline_c.py` | `silver_labels`, `ner_train`, `entity_linking` | — | 5 |
 | `tests/test_confronto.py` | `confronto` | — | 6 |
+| `tests/test_riferimento.py` | `riferimento` | — | 6bis |
 | `notebooks/01_analisi_esplorativa.ipynb` | `data_loading` | analisi esplorativa: conteggi, distribuzioni, regex commentate | 0 |
 | `src/confronto.py` | `risolutori`, uscite delle tre pipeline | step 6; il knowledge graph dello step 7 ne eredita le conclusioni | 6 |
 | `notebooks/02_confronto_pipeline.ipynb` | `confronto` | il confronto con i grafici e l'aggiudicazione manuale | 6 |
