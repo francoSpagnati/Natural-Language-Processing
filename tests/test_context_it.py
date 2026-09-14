@@ -233,5 +233,64 @@ class TestSoggettoFamiliare(unittest.TestCase):
         self.assertEqual(ambiti_familiarita("Nega diabete e ipertensione."), [])
 
 
+class TestParenteNominatoDirettamente(unittest.TestCase):
+    """Il secondo modo di parlare di un parente: nominarlo, senza dire
+    "familiarita'".
+
+    Trovato aggiudicando a mano le menzioni dello step 6: «Zia e nonna
+    fibrillanti» riceveva il codice I48 attribuito al PAZIENTE. Condizione
+    giusta, codice giusto, persona sbagliata — il caso peggiore per il filtro
+    di sicurezza.
+
+    La regola e' stretta di proposito. Sulle 436 occorrenze di un termine di
+    parentela nel corpus, il 4% e' l'INFORMATORE e non il malato: marcare
+    quelle come familiari nasconderebbe una condizione vera del paziente, che
+    e' un errore peggiore di quello riparato qui.
+    """
+
+    def _familiari(self, testo):
+        return [testo[a.inizio:a.fine] for a in ambiti_familiarita(testo)]
+
+    def test_il_caso_che_ha_fatto_nascere_la_regola(self):
+        testo = "Nega familiarita per cardiopatia. Zia e nonna fibrillanti. Ex fumatore."
+        self.assertIn("Zia e nonna fibrillanti", self._familiari(testo))
+
+    def test_parente_deceduto_per_una_causa(self):
+        testo = "APF: Madre deceduta ad 80 aa per fibrillazione atriale."
+        self.assertIn("Madre deceduta ad 80 aa per fibrillazione atriale",
+                      self._familiari(testo))
+
+    def test_l_ambito_si_ferma_a_fine_frase(self):
+        """Regressione dalla misura vera: con una finestra a lunghezza fissa
+        invece che a fine frase, «appendicite» e «alluce valgo» — che sono
+        interventi DEL PAZIENTE — finivano marcati come familiari."""
+        testo = ("Padre deceduto per IMA a 70 anni. "
+                 "Interventi pregressi: appendicite, alluce valgo.")
+        familiari = " ".join(self._familiari(testo))
+        self.assertIn("Padre deceduto per IMA", familiari)
+        self.assertNotIn("appendicite", familiari)
+        self.assertNotIn("alluce valgo", familiari)
+
+    def test_il_parente_che_riferisce_non_e_il_malato(self):
+        """«La madre riferisce» introduce chi racconta, non chi e' malato:
+        l'ipertensione e' del paziente e deve restare sua."""
+        testo = "La madre riferisce tendenza alla cianosi. Ipertensione arteriosa in terapia."
+        self.assertEqual(self._familiari(testo), [])
+
+    def test_un_parente_senza_malattia_non_apre_nulla(self):
+        for testo in ("Vive con il fratello, autonomi. Diabete mellito tipo 2.",
+                      "Due fratelli in buona salute.",
+                      "Nato a termine (madre secondigravida)."):
+            with self.subTest(testo=testo):
+                self.assertEqual(self._familiari(testo), [])
+
+    def test_convive_con_il_marcatore_esplicito(self):
+        testo = ("Familiarita per cardiopatia ischemica (padre). "
+                 "Madre affetta da diabete mellito.")
+        familiari = " ".join(self._familiari(testo))
+        self.assertIn("cardiopatia ischemica", familiari)
+        self.assertIn("Madre affetta da diabete mellito", familiari)
+
+
 if __name__ == "__main__":
     unittest.main()

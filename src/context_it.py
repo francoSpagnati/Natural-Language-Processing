@@ -281,6 +281,42 @@ PATTERN_SOGGETTO_FAMILIARE = re.compile(
     re.IGNORECASE,
 )
 
+# Un secondo modo di parlare di un parente, che il marcatore esplicito non copre:
+# nominarlo direttamente. «Madre deceduta ad 80 aa per fibrillazione atriale» non
+# contiene la parola "familiarita", ma la fibrillazione e' della madre.
+#
+# La regola e' stretta di proposito, perche' costruita sul corpus e non
+# sull'intuizione. Sulle 436 occorrenze di un termine di parentela nell'anamnesi:
+#
+#   54%  stanno gia' dentro un ambito di "familiarita' per ..." -> coperte
+#    4%  sono l'INFORMATORE, non il malato («la madre riferisce», «segnalata
+#        dalla figlia»): li' la condizione e' del PAZIENTE, e marcarle familiari
+#        sarebbe un errore peggiore di quello che questa regola ripara, perche'
+#        nasconderebbe al filtro di sicurezza una condizione vera;
+#   42%  restano, e in gran parte non parlano di malattia affatto («vive con il
+#        fratello», «due fratelli in buona salute», «un figlio»).
+#
+# Quindi non basta il termine di parentela: serve che sia **immediatamente
+# seguito** da una parola che dica che quel parente e' il malato. L'elenco viene
+# dalle occorrenze vere, in ordine di frequenza: deceduto 27, affetto 7,
+# sottoposto 6, portatore 2, piu' gli aggettivi di malattia della coda lunga.
+PARENTE = (
+    r"madre|padre|mamma|fratell[oi]|sorell[ae]|nonn[aoi]|zi[aoi]"
+    r"|cugin[ao]|genitori|consanguine[oi]"
+)
+QUALIFICA_PARENTE = r"(?:\s+(?:pater\w+|mater\w+|vivent[ei]|gemell[ao]))?"
+STATO_DEL_PARENTE = (
+    r"decedut[oaie]|affett[oaie]|sottopost[oaie]|portator[ei]"
+    r"|fibrillant[ei]|ipertes[oaie]|cardiopatic[oaie]|diabetic[oaie]"
+    r"|dislipidemic[oaie]|nefropatic[oaie]|obes[oaie]"
+)
+PATTERN_SOGGETTO_PARENTE = re.compile(
+    rf"\b(?:{PARENTE})\b{QUALIFICA_PARENTE}"
+    rf"(?:\s+e\s+(?:{PARENTE})\b{QUALIFICA_PARENTE})?"
+    rf"[,]?\s+(?:{STATO_DEL_PARENTE})\b",
+    re.IGNORECASE,
+)
+
 # Un ambito di familiarita' si chiude a fine frase. La virgola non lo chiude,
 # per la stessa ragione della negazione: gli elenchi sono la norma
 # ("familiarita positiva per diabete mellito (madre), cardiopatia ischemica").
@@ -319,14 +355,23 @@ def ambiti_familiarita(testo: str) -> list[AmbitoSoggetto]:
     stessa regola le farebbe divergere.
     """
     ambiti: list[AmbitoSoggetto] = []
-    for trovato in PATTERN_SOGGETTO_FAMILIARE.finditer(testo):
-        inizio = trovato.end()
-        limite = min(len(testo), inizio + MASSIMA_AMPIEZZA_SOGGETTO)
-        chiusura = PATTERN_FINE_FRASE.search(testo, inizio, limite)
-        fine = chiusura.start() if chiusura else limite
-        fine = _taglia_su_nuova_affermazione(testo, inizio, fine)
-        ambiti.append(AmbitoSoggetto(inizio, fine, trovato.group(0).strip()))
-    return ambiti
+    # Il marcatore esplicito apre l'ambito DOPO di se': in «familiarita per X»
+    # il malato e' X. Il nome del parente invece fa parte dell'affermazione — in
+    # «Madre deceduta per fibrillazione atriale» la menzione estratta comprende
+    # spesso la parola "Madre" — quindi li' l'ambito parte dall'inizio.
+    for pattern, parte_da_inizio in (
+        (PATTERN_SOGGETTO_FAMILIARE, False),
+        (PATTERN_SOGGETTO_PARENTE, True),
+    ):
+        for trovato in pattern.finditer(testo):
+            inizio = trovato.start() if parte_da_inizio else trovato.end()
+            ricerca = trovato.end()
+            limite = min(len(testo), ricerca + MASSIMA_AMPIEZZA_SOGGETTO)
+            chiusura = PATTERN_FINE_FRASE.search(testo, ricerca, limite)
+            fine = chiusura.start() if chiusura else limite
+            fine = _taglia_su_nuova_affermazione(testo, ricerca, fine)
+            ambiti.append(AmbitoSoggetto(inizio, fine, trovato.group(0).strip()))
+    return sorted(ambiti, key=lambda a: a.inizio)
 
 
 def _taglia_su_nuova_affermazione(testo: str, inizio: int, fine: int) -> int:
