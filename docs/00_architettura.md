@@ -3,7 +3,30 @@
 Documento vivo, aggiornato **a ogni step**. Dà la visione d'insieme di come i
 componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
-**Ultimo step completato: 7 — Il knowledge graph RDF, con la provenienza come
+**Ultimo step completato: 8 — Il filtro di sicurezza simbolico.**
+
+Provato contro la terapia che i cardiologi hanno davvero prescritto — la
+verifica più severa disponibile senza dati nuovi: su **5 863 prescrizioni di
+dimissione**, 91,3% ammesse, 8,6% da verificare, **4 vietate** (0,07%), tutte e
+quattro farmaci prescritti a pazienti che il referto dichiara allergici a quella
+stessa sostanza.
+
+La prima versione ne vietava 28. Guardando i 24 di troppo uno per uno è uscito
+**il risultato dello step 8**: lo strato di sicurezza ha bisogno di fatti che
+nessuna pipeline era stata progettata per produrre. In **12 casi su 14** il
+betabloccante bloccato per blocco atrioventricolare era prescritto a un paziente
+con un **pacemaker** — che rende quella terapia sicura. `Z95.0` esiste nella
+terminologia, ma un dispositivo non è una malattia e nessuno lo cerca. Ne segue
+il principio, applicato in codice: *una regola che richiede un fatto che il
+sistema non sa stabilire non può emettere un divieto; può segnalare.*
+
+È la stessa forma di scoperta dello step 6, che rivelò l'asse mancante
+dell'*experiencer*: **un difetto del contratto dati si vede solo quando qualcuno
+prova a consumarlo.** Dettagli in `08`.
+
+---
+
+**Step 7 — Il knowledge graph RDF, con la provenienza come
 struttura.**
 
 > **Disegno dell'estrazione, rivisto.** A ogni campo il metodo più semplice che
@@ -297,6 +320,7 @@ codice ICD.
 | `src/privacy.py` | `data_loading`, terminologie | controllo che nessun file versionato contenga testo clinico | 6bis |
 | `src/grafo.py` | `rdflib`, `confronto`, `risolutori`, ATC, ICD-10 | step 8 (filtro), step 9 (ranker), step 11 (metrica ATC) | 7 |
 | `src/interroga.py` | `rdflib`, il grafo serializzato | le domande dello step 8, poste in SPARQL | 7 |
+| `src/filtro.py` | `schema`, ATC, ICD-10 | step 9 (ranker), step 10 (tool MCP) | 8 |
 | `tests/test_data_loading.py` | `data_loading` | — | 0 |
 | `tests/test_sonde_esplorazione.py` | `explore_dataset` | — | 0 |
 | `tests/test_pipeline_b.py` | `llm_backend`, `extract_b`, `risolutori` | — | 4 |
@@ -304,11 +328,12 @@ codice ICD.
 | `tests/test_confronto.py` | `confronto` | — | 6 |
 | `tests/test_riferimento.py` | `riferimento` | — | 6bis |
 | `tests/test_grafo.py` | `grafo`, `rdflib` | — | 7 |
+| `tests/test_filtro.py` | `filtro` | — | 8 |
 | `notebooks/01_analisi_esplorativa.ipynb` | `data_loading` | analisi esplorativa: conteggi, distribuzioni, regex commentate | 0 |
 | `notebooks/02_confronto_pipeline.ipynb` | `confronto` | il confronto con i grafici e l'aggiudicazione manuale | 6 |
 | `notebooks/03_knowledge_graph.ipynb` | `grafo`, `rdflib` | il grafo esplorato: costo di ogni soglia di consenso, assi stato/soggetto, gerarchia ATC | 7 |
 
-I test sono 270 in tutto e **nessuno usa la rete**: la pipeline B e' provata
+I test sono 301 in tutto e **nessuno usa la rete**: la pipeline B e' provata
 con un backend fittizio, perche' una suite dipendente dall'API sarebbe lenta,
 costosa e verde o rossa a seconda del carico dei server.
 
