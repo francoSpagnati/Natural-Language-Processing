@@ -1206,3 +1206,222 @@ chmod 600 .env.local
 python3 src/rianalizza.py
 python3 src/confronto.py
 ```
+
+---
+
+## §7duodecies — Il modello non legge più i campi di terapia
+
+Fino a questa versione la pipeline B mandava al modello tutte e tre le sezioni
+del referto. Era sbagliato, e la domanda che l'ha smontato è stata posta in
+forma semplice: *i farmaci vanno presi dai campi di terapia, che sono
+strutturati e più affidabili; l'anamnesi serve ad altro.*
+
+### Perché era sbagliato, misurato
+
+I due campi di terapia sono liste con delimitatori — `;` all'ingresso, voci fra
+virgolette alla dimissione. Questo li rende **una verità esatta e gratuita**: si
+contano le voci senza annotare nulla, su tutti e 1 000 i referti, senza
+inferenza e senza costo.
+
+Il progetto aveva annotato a mano 25 referti per misurare il richiamo sulle
+condizioni e non si era accorto che per i farmaci di terapia la verità era già
+nei dati. Confrontati su quella verità, sui 25 referti del riferimento:
+
+| terapia d'ingresso | VP | FP | FN | precisione | richiamo |
+|---|---|---|---|---|---|
+| **parser deterministico** (già in A e C) | 133 | 0 | 0 | **100,0%** | **100,0%** |
+| modello linguistico (a pagamento) | 133 | 1 | 0 | 99,3% | 100,0% |
+
+| terapia alla dimissione | VP | FP | FN | precisione | richiamo |
+|---|---|---|---|---|---|
+| **parser deterministico** | 150 | 0 | 2 | **100,0%** | 98,7% |
+| modello linguistico | 152 | 1 | 0 | 99,3% | 100,0% |
+
+Il modello pagava per fare **peggio di un parser gratuito** su un campo già
+risolto. E quei due campi erano il **28,6% del testo inviato** e il **42,4%
+delle voci prodotte**: circa un terzo del costo di una corsa, speso per rifare
+peggio un lavoro già fatto.
+
+C'era anche un danno che non si vedeva nei totali: il modello talvolta emetteva
+**una voce per somministrazione** invece che per farmaco. `Isoptin: 250 mg
+(ore 20) 240 mg (ore 8)` è **un** farmaco con due dosi, e diventava due. Il
+parser non ha questo problema perché non interpreta: conta i delimitatori.
+
+### Il disegno, campo per campo
+
+| campo | contenuto | metodo | perché |
+|---|---|---|---|
+| Terapia all'ingresso | lista `Nome: posologia ;` | parser deterministico | ha delimitatori: non serve riconoscere, serve dividere |
+| Terapia alla dimissione | lista `"Principio (commerciale): posologia"` | parser deterministico | come sopra |
+| Anamnesi — condizioni | prosa | modello linguistico | richiamo 70% contro il 20% di gazetteer e NER |
+| Anamnesi — allergie | prosa | modello linguistico | nessuna lista le contiene |
+| Anamnesi — familiarità | prosa | ConText + modello | serve l'asse dell'experiencer |
+| Anamnesi — farmaci | prosa | modello linguistico | **solo quelli con un fatto**: § successivo |
+
+**Il principio: a ogni campo il metodo più semplice che lo risolve.** Un campo
+con delimitatori si legge con un parser; il testo libero richiede
+riconoscimento. Mandare un modello linguistico su un campo strutturato non
+aggiunge capacità — aggiunge costo e una sorgente di errore dove non ce n'era.
+
+I farmaci di terapia entrano ora dallo stesso `farmaci_da_campo_strutturato` che
+usano A e C. Il progetto ha **una sola lettura** dei due campi invece di tre che
+potevano divergere, e il confronto dello step 6 misura la differenza di
+estrazione *dalla prosa*, che è l'unica su cui le tre pipeline si distinguono.
+
+### Il parser, migliorato prima di affidargli tutto
+
+Prendendosi l'intera responsabilità dei due campi, il parser andava portato a
+posto. Tre correzioni, ciascuna con il suo test:
+
+| correzione | recupera | perché falliva |
+|---|---|---|
+| parentesi annidata nel commerciale | 12 voci | un farmaco estero porta la provenienza fra parentesi dentro la descrizione, e `[^()]*` non la attraversa |
+| nome seguito dalla dose, senza commerciale | 40 voci | `Rosuvastatina 5 mg (ore 22)`: nessun `:` fra nome e posologia |
+| forma farmaceutica in coda al nome | 2 voci | `Spironolattone cps` veniva respinto dalla guardia |
+
+| copertura | prima | dopo |
+|---|---|---|
+| terapia d'ingresso | 98,02% | **98,77%** |
+| terapia alla dimissione | 99,3% | **99,97%** |
+
+Sulla terza correzione vale la pena essere espliciti: la guardia
+`nome_farmaco_plausibile` rifiuta un nome che contiene una forma farmaceutica,
+perché è il segnale che la posologia non è stata separata. **Non l'ho
+indebolita**: le si ripresenta un nome ripulito. Indebolire una guardia per far
+passare un caso è il modo in cui un vocabolario chiuso si degrada.
+
+### Una regola nuova che stava facendo danno, fermata da un test
+
+La regola «il nome è ciò che precede la prima cifra» sembrava innocua. Su un
+blocco scritto a mano dal clinico — quattro farmaci in un unico segmento,
+separati da virgole — ne estraeva **uno** e perdeva gli altri tre in silenzio.
+Un test che asseriva il vecchio comportamento (scartare il blocco intero) ha
+fermato la modifica.
+
+Dichiarare uno scarto è meglio che estrarre una parte e dare l'illusione della
+copertura. La regola ora non si applica se la voce contiene virgole.
+
+### REGOLA 7 riscritta: il fatto, non il nome
+
+La versione precedente chiedeva **tutti** i farmaci nominati nella prosa, e
+portava il richiamo da 0% a 83%. Ma la domanda giusta non era quella. Misurando
+a che cosa servono quelle menzioni, sui 56 farmaci del riferimento:
+
+| contesto | menzioni | |
+|---|---|---|
+| sospensione o riduzione | 12 | 21% |
+| intolleranza o allergia | 3 | 5% |
+| evento avverso | 3 | 5% |
+| rifiuto o mancata assunzione | 1 | 2% |
+| **con marcatore di sicurezza** | **19** | **34%** |
+| nessun marcatore | 31 | 55% |
+
+Due terzi sono racconto. Un terzo porta informazione che i campi strutturati
+**non possono** contenere per definizione — un farmaco sospeso per emorragia è
+una controindicazione, e nella terapia d'ingresso non c'è perché quella elenca
+ciò che il paziente assume *ora*.
+
+La regola chiede quindi i farmaci a cui l'anamnesi attribuisce un **fatto**:
+sospensione, riduzione, intolleranza, evento avverso, rifiuto, assunzione
+passata. E dice esplicitamente che **la lista vuota è la risposta giusta** nel
+caso più frequente.
+
+Applicando la lezione di `mdc`, la regola non contiene esempi positivi con
+sostanze vere: solo casi `SBAGLIATO`, che in quella vicenda non hanno mai perso
+contenuto nell'uscita.
+
+### Il campo di una menzione del modello è fissato, non dichiarato
+
+Al modello arriva solo l'anamnesi, quindi ogni sua citazione viene da lì. Lo
+schema ammette ancora i tre valori — è condiviso con le altre pipeline — e se il
+modello ne scegliesse un altro la citazione verrebbe cercata nel campo
+sbagliato, **dove potrebbe perfino trovarsi per caso** e produrre un ancoraggio
+falso. `campo_del_modello` lo fissa ad `Anamnesi`: rende quell'errore
+impossibile invece che improbabile.
+
+### Validazione prima di spendere
+
+La corsa doveva essere l'ultima a pagamento, quindi è stata validata su 25
+referti (0,046 dollari) prima di lanciare il corpus. La cache è indicizzata su
+`(modello, istruzioni, testo, schema)`, quindi quei 25 sono stati riusati dalla
+corsa intera senza ripagarli: la validazione è costata zero in più.
+
+| | risultato |
+|---|---|
+| record completati | 25/25, nessun fallimento |
+| terapia d'ingresso | 136 dal parser, 136 nell'uscita — **0 record disallineati** |
+| terapia alla dimissione | 153 dal parser, 153 nell'uscita |
+| provenienza dei farmaci di terapia | tutti `campo_strutturato` |
+| condizioni, richiamo | 68,7% (le tre corse precedenti: 70,1 / 68,2 / 70,1) |
+| farmaci in prosa | precisione 95,3%, richiamo 68,3% |
+| token in uscita per record | **934**, erano 2 145 (−56%) |
+
+Il richiamo sulle condizioni resta dentro il pavimento di rumore di due punti
+misurato al § 8.6 di `06b`: la ristrutturazione non le ha toccate.
+
+Sui farmaci il 68,3% **sottostima**, e la ragione è dichiarata: il riferimento
+annota *ogni* farmaco nominato nella prosa, la regola nuova ne chiede di
+proposito un sottoinsieme. Dei 19 mancati, **16 non hanno alcun marcatore di
+evento** — la regola non li vuole. I mancati veri sono **3**, e i falsi positivi
+**2**. Sul bersaglio che la regola si pone il richiamo è del 93%.
+
+Resta però un disallineamento fra la regola e il riferimento, ed è onesto
+lasciarlo scritto: per misurare questa regola come si deve servirebbe un
+riferimento che annoti il *fatto* oltre al farmaco. Non è stato rifatto, perché
+rifarlo dopo aver visto i risultati è esattamente il vizio che il § 7 di `06b`
+descrive.
+
+
+### La corsa finale, e un guasto che ha insegnato qualcosa
+
+**1 000 record su 1 000, nessun fallimento, 1,652 dollari.**
+
+| | prima | dopo |
+|---|---|---|
+| condizioni | 16 742 | 16 323 |
+| farmaci di terapia | 12 392 | **11 919** (dal parser, esatti) |
+| farmaci narrati nella prosa | 62 | **2 174** |
+| token in uscita per record | 2 145 | **934** (−56%) |
+| menzioni non ancorate | 0,3% | 0,3% |
+
+I conteggi di terapia — 5 536 all'ingresso, 6 383 alla dimissione — coincidono
+**esattamente** con quelli del parser. Non è un accordo misurato: è un'identità
+per costruzione, perché la lettura di quei campi nel progetto è una sola.
+
+#### Il guasto: `IncompleteRead` a 510 record su 1 000
+
+Dopo 75 minuti la corsa è morta su una connessione chiusa a metà risposta. È il
+guasto di rete più transitorio che esista, e usciva dal ciclo dei tentativi come
+se fosse definitivo.
+
+La ragione è una tassonomia: **`IncompleteRead` discende da
+`http.client.HTTPException` e NON da `URLError`**, e il ciclo catturava
+`URLError`, `TimeoutError` e `JSONDecodeError` — la famiglia sbagliata.
+
+È la **seconda volta** che il progetto inciampa sulla stessa forma di problema.
+La prima fu `ErroreRitentabile`, che gestiva i guasti *del modello* ma veniva
+invocato fuori dal `try` e quindi non veniva mai ritentato. Questo è lo stesso
+difetto un livello più in basso, sui guasti *della rete*. La lezione comune: un
+meccanismo di ritentativo va provato **facendo fallire davvero** la cosa che
+dovrebbe assorbire, non guardandolo nel codice.
+
+Ora esiste `ERRORI_DI_RETE`, applicato a tutti e tre i backend, con tre test di
+regressione. Non cattura `OSError` intero, e c'è un test anche per quello: un
+permesso negato è un difetto da vedere subito, non un guasto da assorbire.
+
+Il danno reale è stato quasi nullo: il checkpoint aveva salvato 509 record e la
+cache conteneva anche le risposte arrivate dopo, così alla ripresa **488 dei 491
+record mancanti sono arrivati dalla cache** e solo 3 sono stati ripagati.
+
+#### Un effetto collaterale che il «100%» ha rivelato
+
+Il confronto dello step 6 dava «terapia ritrovata da B: 100,0%», che è il genere
+di cifra da verificare invece che da festeggiare. Verificandola è saltato fuori
+che **le pipeline A e C erano state prodotte prima delle correzioni al parser**,
+e avevano quindi 66 voci in meno di B sugli stessi campi.
+
+Le tre pipeline sarebbero sembrate in disaccordo sui campi strutturati per un
+motivo che non ha nulla a che vedere con l'estrazione: una era semplicemente più
+vecchia. A e C sono deterministiche e rifarle non costa nulla, quindi sono state
+rifatte. È la ragione per cui un numero perfetto va guardato con lo stesso
+sospetto di uno zero.

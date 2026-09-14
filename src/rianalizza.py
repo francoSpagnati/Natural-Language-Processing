@@ -40,6 +40,7 @@ from data_loading import carica_dataset
 RADICE = Path(__file__).resolve().parent.parent
 CORRENTE = RADICE / "data" / "processed" / "pipeline_b"
 ARCHIVIO = RADICE / "data" / "processed" / "pipeline_b_v1_prima_correzioni"
+CORSA_CORRENTE = RADICE / "data" / "processed" / "pipeline_b_v3"
 PAROLA_ALLERGIA = re.compile(r"allerg|intolleran|anafila", re.IGNORECASE)
 
 

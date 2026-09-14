@@ -21,10 +21,11 @@ from grafo import ASSERZIONE, ATC, CT, ICD, PIPELINE, PROV, RICOVERO  # noqa: E4
 
 
 def menzione(sigla, inizio, fine, tipo="condizione", enc=1, codice=None,
-             stato="affermato", soggetto="paziente", campo="Anamnesi"):
+             stato="affermato", soggetto="paziente", campo="Anamnesi",
+             strutturata=False):
     return Menzione(enc_oid=enc, sigla=sigla, tipo=tipo, campo=campo,
                     inizio=inizio, fine=fine, testo="x", codice=codice,
-                    stato=stato, soggetto=soggetto, strutturata=False)
+                    stato=stato, soggetto=soggetto, strutturata=strutturata)
 
 
 class TestAsserzioniEProvenienza(unittest.TestCase):
@@ -82,6 +83,49 @@ class TestAsserzioniEProvenienza(unittest.TestCase):
         g = self._costruisci([menzione("A", 10, 20, enc=1)])
         nodo = next(iter(g.subjects(grafo.RDF.type, CT.AsserzioneClinica)))
         self.assertEqual(g.value(nodo, CT.riguarda), RICOVERO["1"])
+
+
+class TestAgenteDelParser(unittest.TestCase):
+    """I campi di terapia hanno UNA lettura, non tre.
+
+    Le tre pipeline leggono i due campi strutturati con lo stesso parser
+    deterministico. Se il grafo le attribuisse a tre agenti diversi,
+    `ct:numeroPipeline` direbbe 3 dove c'e' una sola lettura ripetuta, e il
+    filtro dello step 8 scambierebbe quella ridondanza per una conferma
+    indipendente — cioe' si fiderebbe di piu' proprio dove non ha imparato nulla.
+    """
+
+    def _costruisci(self, menzioni):
+        g = Graph()
+        grafo.aggiungi_ricoveri(g, {1: menzioni})
+        return g
+
+    def test_tre_letture_dello_stesso_parser_fanno_una_sola_voce(self):
+        g = self._costruisci([
+            menzione("A", 0, 10, tipo="farmaco", campo="Terapia alla Dimissione",
+                     strutturata=True),
+            menzione("B", 0, 10, tipo="farmaco", campo="Terapia alla Dimissione",
+                     strutturata=True),
+            menzione("C", 0, 10, tipo="farmaco", campo="Terapia alla Dimissione",
+                     strutturata=True),
+        ])
+        nodo = next(iter(g.subjects(grafo.RDF.type, CT.AsserzioneClinica)))
+        self.assertEqual(g.value(nodo, CT.numeroPipeline), Literal(1))
+        self.assertEqual(set(g.objects(None, PROV.wasAttributedTo)),
+                         {PIPELINE[grafo.SIGLA_PARSER]})
+
+    def test_tre_riconoscimenti_indipendenti_valgono_tre(self):
+        """Il contrasto che rende il test precedente significativo."""
+        g = self._costruisci([menzione("A", 0, 10), menzione("B", 2, 12),
+                              menzione("C", 4, 14)])
+        nodo = next(iter(g.subjects(grafo.RDF.type, CT.AsserzioneClinica)))
+        self.assertEqual(g.value(nodo, CT.numeroPipeline), Literal(3))
+
+    def test_il_parser_e_un_agente_dichiarato(self):
+        g = Graph()
+        grafo.aggiungi_pipeline(g)
+        self.assertIn(PIPELINE[grafo.SIGLA_PARSER],
+                      set(g.subjects(grafo.RDF.type, PROV.SoftwareAgent)))
 
 
 class TestConservazioneDeiDati(unittest.TestCase):

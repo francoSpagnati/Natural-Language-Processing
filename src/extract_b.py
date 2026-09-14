@@ -42,6 +42,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from data_loading import RecordPaziente, carica_dataset
+from extract_a import farmaci_da_campo_strutturato
 from gazetteer import GazetteerClinico
 from llm_backend import (
     BackendGemini,
@@ -88,7 +89,7 @@ MOMENTO_PER_CAMPO = {
 
 
 ISTRUZIONI = """\
-Estrai le entita' cliniche dai referti di un ricovero cardiologico italiano.
+Estrai le entita' cliniche dall'anamnesi di un ricovero cardiologico italiano.
 
 REGOLA 1 - LO STATO VA NEL CAMPO `stato`, MAI NEL TESTO
 Quando il referto nega o mette in dubbio qualcosa, questo si registra nel campo
@@ -179,57 +180,34 @@ acronimi sciolti:
 
 Se il referto usa gia' la forma estesa, ripetila identica.
 
-REGOLA 7 - FARMACI: TUTTE LE SEZIONI, NON UNA SOLA
-Il referto ha fino a TRE sezioni, marcate da "###". Le due sezioni di terapia
-sono **elenchi diversi di farmaci diversi** e vanno estratte ENTRAMBE:
-"Terapia medica all'ingresso" e' quello che il paziente prendeva a casa,
-"Terapia alla Dimissione" e' quello che gli viene prescritto adesso. Nessuna
-delle due sostituisce l'altra e nessuna delle due e' piu' importante.
+REGOLA 7 - FARMACI: SOLO QUELLI CHE L'ANAMNESI RACCONTA
+Riceverai **solo l'anamnesi**, non gli elenchi di terapia. Quegli elenchi sono
+gia' letti da un parser che non sbaglia, quindi non e' tuo compito ricostruirli:
+il tuo compito e' cio' che un elenco non puo' contenere.
 
-  SBAGLIATO: estrarre solo la terapia d'ingresso e fermarsi
-  SBAGLIATO: estrarre solo la terapia di dimissione e fermarsi
-  GIUSTO:    ogni farmaco di ogni sezione presente, ciascuno con il suo `campo`
+Un elenco di terapia dice che cosa il paziente assume ADESSO. L'anamnesi dice
+che cosa ha assunto, perche' ha smesso, che cosa non ha tollerato e che cosa
+ha rifiutato. **Questa e' l'unica informazione sui farmaci che ti si chiede.**
 
-Ogni sezione e' un ELENCO: una voce per farmaco, non una per la sezione. Se una
-sezione contiene otto farmaci, in `farmaci` devono comparire otto voci con quel
-`campo`.
+Elenca un farmaco quando l'anamnesi gli attribuisce un FATTO:
+  - e' stato sospeso, ridotto, interrotto, scalato;
+  - non e' tollerato, ha dato una reazione o un'allergia;
+  - ha causato un evento (emorragia, effetto collaterale, complicanza);
+  - il paziente lo rifiuta o non lo assume;
+  - e' stato assunto in passato e ora non piu'.
 
-  Riga:    "Ramipril (Ramipril doc cps. rigide 2,5 mg): da assumere 2,5 mg (ore 21)"
-  Voce:    testo_grezzo "Ramipril (Ramipril doc cps. rigide 2,5 mg)"
-           campo "Terapia alla Dimissione", posologia "2,5 mg (ore 21)"
+  SBAGLIATO: ricopiare nella lista un farmaco solo perche' e' nominato
+  SBAGLIATO: dedurre il farmaco dalla condizione che tratterebbe
+  SBAGLIATO: elencare un farmaco senza che l'anamnesi dica nulla di lui
 
-Prima di concludere conta: per OGNI sezione "###" di terapia presente nel
-referto, in `farmaci` c'e' almeno una voce con quel `campo`?
-
-In `posologia` riporta dose e frequenza come sono scritte. Le condizioni pregresse
-o risolte restano "affermato": fanno parte della storia clinica.
-
-REGOLA 7bis - FARMACI ANCHE NELL'ANAMNESI, NON SOLO NELLE TERAPIE
-Le due sezioni di terapia non sono le uniche fonti di farmaci. L'anamnesi ne
-nomina altri, e sono clinicamente i piu' informativi proprio perche' NON stanno
-negli elenchi: un farmaco sospeso, uno ridotto, uno mal tollerato, uno assunto
-in passato, uno rifiutato dal paziente. Gli elenchi di terapia dicono che cosa
-il paziente assume ADESSO; l'anamnesi dice che cosa ha assunto, perche' ha
-smesso e che cosa non tollera.
-
-Quando nella prosa dell'anamnesi compare il nome di una sostanza o di un
-prodotto medicinale, va in `farmaci` con `campo` "Anamnesi", esattamente come
-quelli delle terapie.
-
-  SBAGLIATO: leggere l'anamnesi solo in cerca di condizioni, e i farmaci solo
-             nelle sezioni "###" di terapia
-  SBAGLIATO: saltare un farmaco dell'anamnesi perche' compare gia' in una
-             sezione di terapia — sono due menzioni distinte, con `campo`
-             diverso, e servono entrambe
-  SBAGLIATO: saltare un farmaco dell'anamnesi perche' il paziente ha smesso di
-             assumerlo: quello e' `stato`, non un motivo per ometterlo
-
-Copia il nome come e' scritto, refusi compresi, senza correggerlo. Se il
-paziente ha smesso, se il farmaco e' stato sospeso o se e' esplicitamente
-escluso, il nome si estrae comunque e la differenza si registra in `stato`.
+Il fatto va nel campo `stato` quando e' una negazione o un dubbio; il nome va in
+`testo_grezzo` copiato come e' scritto, refusi compresi, senza correggerlo.
 
 Un farmaco nominato come allergene va in `allergie` secondo la REGOLA 9 **e**
-in `farmaci` con `campo` "Anamnesi": e' la stessa sostanza vista da due lati.
+in `farmaci`: e' la stessa sostanza vista da due lati.
+
+Se l'anamnesi non racconta nulla di alcun farmaco, la lista va **vuota**. E'
+il caso piu' frequente, e una lista vuota e' la risposta giusta.
 
 REGOLA 8 - NON DEDURRE
 Non aggiungere il farmaco che tratterebbe una condizione presente, ne' la
@@ -248,11 +226,11 @@ sola non basta:
   - se il referto dice che le allergie non sono note, o che non ne sono
     riferite, la lista va **vuota**. La parola c'e', l'allergia no.
 
-I farmaci elencati nella terapia sono farmaci che il paziente **assume**. Non
-sono allergie: sono l'esatto contrario.
+Un farmaco che il paziente **assume** non e' un'allergia: e' l'esatto
+contrario.
 
-  SBAGLIATO: allergene "Bisoprololo (Congescor cp.riv. 2.5 mg)" preso dalla
-             terapia all'ingresso di un referto che di allergie non parla
+  SBAGLIATO: allergene "Bisoprololo" preso da un referto che di allergie
+             non parla, solo perche' il paziente lo assume
 
 Se il referto non nomina allergie, lascia la lista **vuota** e metti
 `stato_sezione_allergie` a "ignoto". Non metterla ad "affermato" per una lista
@@ -269,23 +247,44 @@ della sostanza e non il nome del campo.
 
 
 def componi_testo(record: RecordPaziente) -> str:
-    """Assembla i referti del record marcandone i confini.
+    """Il testo inviato al modello: **la sola anamnesi**.
 
-    I nomi delle sezioni coincidono con i valori ammessi per `campo`: il modello
-    non deve inventare un'etichetta, deve ricopiare quella sotto cui sta
-    leggendo.
+    PERCHE' NON I CAMPI DI TERAPIA
+        Sono liste con delimitatori (`;` all'ingresso, voci fra virgolette alla
+        dimissione) e un parser deterministico li legge meglio del modello:
+        misurato contro il campo stesso, il parser ha precisione e richiamo del
+        100% sull'ingresso, il modello il 99,3%. Mandarci un modello linguistico
+        non aggiunge capacita': aggiunge costo e una sorgente di errore dove non
+        ce n'era.
+
+        Erano anche il 29% del testo inviato e il 42% delle voci prodotte, cioe'
+        circa un terzo del costo di una corsa, speso per rifare peggio un lavoro
+        gia' fatto.
+
+        I farmaci di terapia entrano quindi dallo stesso
+        `farmaci_da_campo_strutturato` che usano le pipeline A e C: il progetto
+        ha una sola lettura di quei campi, non tre.
+
+    CHE COSA RESTA AL MODELLO
+        La prosa, dove sta cio' che nessuna lista contiene: le condizioni (dove
+        il richiamo del gazetteer e' del 20% e il suo del 70%), le allergie, la
+        familiarita', e i farmaci di cui l'anamnesi racconta un fatto — una
+        sospensione, un'intolleranza, un evento avverso.
     """
-    sezioni = [
-        (CampoReferto.ANAMNESI, record.testo_anamnesi),
-        (CampoReferto.TERAPIA_INGRESSO, record.testo_terapia_ingresso),
-        (CampoReferto.TERAPIA_DIMISSIONE, record.testo_terapia_dimissione),
-    ]
-    parti = [
-        f"### {campo.value}\n{(testo or '').strip()}"
-        for campo, testo in sezioni
-        if testo and testo.strip()
-    ]
-    return "\n\n".join(parti)
+    return (record.testo_anamnesi or "").strip()
+
+
+def campo_del_modello(dichiarato: CampoReferto) -> CampoReferto:
+    """Il campo di una menzione del modello e' sempre l'anamnesi.
+
+    Non e' una correzione difensiva ma una conseguenza: al modello arriva solo
+    l'anamnesi, quindi ogni sua citazione viene da li'. Lo schema ammette ancora
+    i tre valori — e' condiviso con le altre pipeline — e se il modello ne
+    scegliesse un altro la citazione verrebbe cercata nel campo sbagliato, dove
+    potrebbe perfino trovarsi per caso. Fissarlo qui rende quell'errore
+    impossibile invece che improbabile.
+    """
+    return CampoReferto.ANAMNESI
 
 
 def _testo_del_campo(record: RecordPaziente, campo: CampoReferto) -> str:
@@ -347,6 +346,7 @@ def converti(
 
     condizioni: list[CondizioneEstratta] = []
     for voce in estrazione.condizioni:
+        voce.campo = campo_del_modello(voce.campo)
         # L'espansione proposta dal modello resta sempre nella regola, anche
         # quando il risolutore aggancia un termine diverso: e' un dato prodotto
         # dalla pipeline e deve restare ispezionabile, non essere sovrascritto
@@ -392,6 +392,7 @@ def converti(
 
     farmaci: list[FarmacoEstratto] = []
     for voce in estrazione.farmaci:
+        voce.campo = campo_del_modello(voce.campo)
         # La menzione puo' essere composta ("Furosemide (Lasix cpr. 25 mg)"):
         # `risolvi_menzione` la scompone e dice quale forma ha risolto, che
         # finisce nella regola perche' la provenienza resti veritiera.
@@ -416,6 +417,7 @@ def converti(
 
     allergie: list[AllergiaEstratta] = []
     for voce in estrazione.allergie:
+        voce.campo = campo_del_modello(voce.campo)
         provenienza, ancorata = _provenienza(
             record, voce.campo, voce.allergene, regola
         )
@@ -430,6 +432,13 @@ def converti(
                 provenienza=provenienza,
             )
         )
+
+    # I farmaci dei due campi di terapia NON vengono dal modello: li legge lo
+    # stesso parser deterministico delle pipeline A e C. Il progetto ha cosi' una
+    # sola lettura di quei campi, identica nelle tre pipeline, e il confronto
+    # dello step 6 misura la differenza di *estrazione dalla prosa*, che e'
+    # l'unica su cui le tre si distinguono davvero.
+    farmaci = farmaci_da_campo_strutturato(record, risolutore_atc) + farmaci
 
     note: list[str] = []
     if non_ancorate:

@@ -134,22 +134,49 @@ consenso, e la differenza non sarebbe visibile nel grafo.
 ```
 terminologie    ATC      7 211 concetti      ICD-10   10 803 voci
 ricoveri            1 000
-menzioni           68 120
-asserzioni         32 907
-  sostenute da 1 pipeline    13 565   (41,2%)
-  sostenute da 2 pipeline     3 996   (12,1%)
-  sostenute da 3 pipeline    15 346   (46,6%)
-triple          1 215 906
+menzioni           69 533
+asserzioni         32 716
+  sostenute da 1 agente     24 966   (76,3%)
+  sostenute da 2 agenti      2 907   ( 8,9%)
+  sostenute da 3 agenti      4 843   (14,8%)
+triple          1 210 305
 ```
 
-Il numero da leggere è il **41,2%**. Quattro asserzioni su dieci poggiano su una
-sola pipeline, e lo step 6bis dice che quella pipeline sarà quasi sempre B, la
-sola con un richiamo alto. Una soglia di consenso a due pipeline scarterebbe
-quindi il 41% delle asserzioni, e non le peggiori: le più difficili, quelle che
-solo un metodo generativo trova.
+### Perché «agente» e non «pipeline», e perché la differenza è enorme
+
+Una versione precedente di questo documento riportava **41,2% / 12,1% / 46,6%**,
+e quel 46,6% di «consenso a tre» era **falso**.
+
+I farmaci dei due campi di terapia — circa dodicimila menzioni, più di un terzo
+del grafo — comparivano nell'uscita di tutte e tre le pipeline, e il grafo li
+attribuiva ad A, B e C come se tre metodi indipendenti fossero giunti alla stessa
+conclusione. Ma le tre pipeline leggono quei campi con lo **stesso** parser
+deterministico: era **una sola lettura contata tre volte**.
+
+Il filtro dello step 8 l'avrebbe scambiata per una conferma indipendente, cioè si
+sarebbe fidato di più proprio dove non aveva imparato nulla di nuovo.
+
+Ora esiste un agente `campo_strutturato`, e `ct:numeroPipeline` conta gli
+**agenti distinti**: tre letture dello stesso parser valgono 1, tre
+riconoscimenti indipendenti nella prosa valgono 3.
+
+Il quadro che ne esce è meno rassicurante e più vero:
+
+| | prima (sbagliato) | dopo |
+|---|---|---|
+| un solo agente | 41,2% | **76,3%** |
+| due agenti | 12,1% | 8,9% |
+| tre agenti | 46,6% | **14,8%** |
+
+**Tre quarti delle asserzioni poggiano su una sola fonte**, e la ridondanza vera
+è il 14,8%, non il 46,6%. Una soglia di consenso a due pipeline non scarterebbe
+il 41% delle asserzioni ma il **76%**.
 
 **Questo è il compromesso centrale dello step 8**, e il grafo esiste per renderlo
-misurabile invece che opinabile.
+misurabile invece che opinabile. Che il numero sia diventato molto peggiore
+dopo una correzione è il motivo per cui la correzione andava fatta: è il genere
+di errore che la provenienza serve a prevenire, e ci ero caduto io stesso
+costruendo il grafo.
 
 ---
 
@@ -187,57 +214,70 @@ Sono quindi gli errori più pericolosi del progetto: **un codice sbagliato che
 sembra certo.** Questa interrogazione li isola, e lo step 8 potrà trattarli come
 una categoria a sé.
 
-Sul corpus intero sono **151**. Poche in assoluto — lo 0,5% delle asserzioni —
+Sul corpus intero sono **129**. Poche in assoluto — lo 0,5% delle asserzioni —
 ma sono precisamente la categoria che lo step 6 ha identificato come la più
 insidiosa, e ora hanno un nome e un'interrogazione che le elenca.
 
 ### Il contributo esclusivo di ciascuna pipeline
 
 ```sparql
-SELECT ?pipeline (COUNT(?a) AS ?solo_sua) WHERE {
+SELECT ?pipeline (COUNT(DISTINCT ?a) AS ?solo_sua) WHERE {
   ?a a ct:AsserzioneClinica ; ct:numeroPipeline 1 ; prov:wasDerivedFrom ?m .
   ?m prov:wasAttributedTo ?pipeline .
 } GROUP BY ?pipeline ORDER BY DESC(?solo_sua)
 ```
 
-| pipeline | asserzioni che esistono solo perché lei le ha viste |
+| agente | asserzioni che esistono solo grazie a lui |
 |---|---|
-| **B** (modello linguistico) | **13 198** |
-| C (riconoscitore neurale) | 325 |
-| A (gazetteer) | 145 |
+| **B** (modello linguistico) | **12 819** |
+| `campo_strutturato` (il parser) | 11 833 |
+| C (riconoscitore neurale) | 192 |
+| A (gazetteer) | 122 |
+
+I quattro numeri sommano esattamente a 24 966, cioè alle asserzioni con
+`numeroPipeline = 1`. Il `DISTINCT` non è cosmetico: senza, un'asserzione
+sostenuta da tre menzioni dello stesso agente veniva contata tre volte, e il
+parser risultava a 35 675 — più del totale delle asserzioni che stava contando.
+Un numero più grande del suo insieme è il modo in cui un errore di conteggio si
+denuncia da solo.
 
 **È lo step 6bis confermato sul corpus intero, con un metodo diverso.** Il
-riferimento annotato misurava su 25 referti che B ha un richiamo di 70% contro il
-20% delle altre due; qui, su 1 000 referti e senza alcuna annotazione manuale, si
-vede la stessa cosa da un altro lato: **B porta da sola quaranta volte più
-materiale esclusivo di A e C messe insieme.**
+riferimento annotato misurava su 25 referti che B ha un richiamo del 69% sulle
+condizioni contro il 20% delle altre due; qui, su 1 000 referti e senza alcuna
+annotazione manuale, si vede la stessa cosa da un altro lato: **fra le pipeline
+che riconoscono, B porta da sola sessanta volte più materiale esclusivo di A e C
+messe insieme.**
+
+Le 11 833 del parser sono un'altra cosa e vanno lette diversamente: non sono
+riconoscimento ma lettura di un campo con delimitatori. Compaiono come «un solo
+agente» perché **c'è un solo agente**, non perché due metodi abbiano
+dissentito — e il filtro dello step 8 dovrà trattarle come il dato più
+affidabile del grafo, non come il meno confermato.
 
 Il che rende quantitativo l'avvertimento del § 4: una soglia di consenso a due
-pipeline non scarterebbe «le asserzioni dubbie», scarterebbe **l'intero
-contributo esclusivo della sola pipeline con un richiamo alto**.
-
-> I tre numeri sommano a 13 668 contro le 13 565 asserzioni con
-> `numeroPipeline = 1`: la differenza di 103 sono i gruppi ambigui, dove una
-> pipeline porta più di una menzione allo stesso punto e l'interrogazione la
-> conta una volta per menzione.
+pipeline non scarterebbe «le asserzioni dubbie». Scarterebbe **il contributo
+esclusivo della sola pipeline con un richiamo alto, e per di più l'intera terapia
+dei pazienti**, che è il dato di cui il sistema ha più bisogno e quello su cui
+sbaglia di meno.
 
 ### Negazione e familiarità sono sopravvissute
 
 ```
-affermato   paziente     24 075
-negato      paziente      1 353
-affermato   familiare     1 130
-incerto     paziente        478
-negato      familiare       181
+affermato   paziente     23 574
+negato      paziente      1 433
+affermato   familiare     1 138
+incerto     paziente        489
+negato      familiare       190
 incerto     familiare        16
+ignoto      paziente          1
 ```
 
-**Il 11,6% delle menzioni di condizione** non è una condizione attuale del
+**Il 12,2% delle menzioni di condizione** non è una condizione attuale del
 paziente. Un sistema che appiattisse il grafo su «quali malattie ha questo
-paziente» sbaglierebbe una volta su nove, e nei 1 327 casi familiari sbaglierebbe
+paziente» sbaglierebbe una volta su otto, e nei 1 344 casi familiari sbaglierebbe
 *persona*.
 
-Che i due assi siano indipendenti si legge nelle 181 menzioni `negato` +
+Che i due assi siano indipendenti si legge nelle 190 menzioni `negato` +
 `familiare`: «familiarità negativa per cardiopatia ischemica» è insieme familiare
 e negata, e comprimerle in un solo campo `stato` perderebbe l'una o l'altra.
 
@@ -248,16 +288,16 @@ gruppi più presenti nel corpus:
 
 | codice | gruppo | asserzioni |
 |---|---|---|
-| B01 | antitrombotici | 2 221 |
-| C07 | betabloccanti | 1 346 |
-| C03 | diuretici | 1 280 |
-| C10 | sostanze ipolipemizzanti | 1 164 |
-| C09 | sostanze ad azione sul sistema renina-angiotensina | 1 067 |
-| A02 | antiacidi, antimeteorici e antiulcera peptica | 953 |
-| A10 | farmaci usati nel diabete | 907 |
-| C01 | terapia cardiaca | 714 |
-| C08 | calcioantagonisti | 345 |
-| G04 | urologici | 339 |
+| B01 | antitrombotici | 2 187 |
+| C07 | betabloccanti | 1 338 |
+| C03 | diuretici | 1 261 |
+| C10 | sostanze ipolipemizzanti | 1 123 |
+| C09 | sostanze ad azione sul sistema renina-angiotensina | 1 005 |
+| A02 | antiacidi, antimeteorici e antiulcera peptica | 954 |
+| A10 | farmaci usati nel diabete | 885 |
+| C01 | terapia cardiaca | 715 |
+| C08 | calcioantagonisti | 344 |
+| G04 | urologici | 341 |
 
 **È un controllo di sanità dell'intera catena, non solo del grafo.** Sette dei
 dieci gruppi sono cardiovascolari, nell'ordine esatto in cui un reparto di
@@ -277,8 +317,8 @@ aspetta in una popolazione anziana.
 
 | | menzioni | irrisolte | |
 |---|---|---|---|
-| condizioni | 27 233 | 11 187 | **41,1%** |
-| farmaci | 40 887 | 3 198 | **7,8%** |
+| condizioni | 26 841 | 10 959 | **40,8%** |
+| farmaci | 42 692 | 3 750 | **8,8%** |
 
 Il vincolo del progetto è conservare, non cancellare: queste menzioni restano nel
 grafo, marcate `ct:irrisolta`, e sono **informazione**. Il 41% di condizioni

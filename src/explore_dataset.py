@@ -130,6 +130,12 @@ def nome_farmaco_plausibile(candidato: str, massimo_parole: int = 4) -> bool:
 # ("Olmesartan medox al") ma non contiene mai ':'.
 SEPARATORE_VOCI_INGRESSO = ";"
 
+# Livello 3 dell'ingresso: il nome e' cio' che precede la prima cifra. Serve
+# dove manca il ':' fra nome e posologia, o dove l'unico ':' della voce e'
+# quello di un orario. La parentesi e' ammessa nel nome, perche' all'ingresso
+# contiene il principio attivo e non la confezione ("NANCARE (Vitamina D)").
+PATTERN_ING_NOME_E_DOSE = re.compile(r"^\s*(?P<principio>[^\d:]+?)\s*(?=\d)")
+
 # Secondo formato osservato: prescrizione infusionale, dove il nome del farmaco
 # non e' in testa ma segue la dose:
 #   "125 mg di Furosemide salf*5fl 250mg/25ml in 100 ml Fisiologica"
@@ -181,9 +187,32 @@ def sonda_terapia_ingresso(testo: str) -> tuple[list[str], list[str], Counter]:
         if nome and nome_farmaco_plausibile(nome):
             nomi.append(nome)
             livelli["1_nome_posologia"] += 1
-        else:
-            scarti.append(voce)
-            livelli["non_interpretato"] += 1
+            continue
+
+        # Livello 3 - il nome non e' separato dalla posologia da ':', oppure i
+        # due punti che si trovano sono quelli di un orario ("ore 8:00") e il
+        # nome che ne risulta porta la dose incollata. Si riprova prendendo cio'
+        # che precede la prima cifra, e togliendo un'eventuale forma in coda:
+        # "Normast 600 mg 1 cp ore 8:00" -> "Normast".
+        #   Vale la stessa disciplina della dimissione: la guardia non viene
+        #   indebolita, le si ripresenta un nome ripulito.
+        #
+        #   NON si applica se la voce contiene una virgola. Quello e' il blocco
+        #   scritto a mano dal clinico, che elenca piu' farmaci in un segmento
+        #   solo ("cardirene 75 mg, ansimar 400 mg, lucen 20 mg"): prendere il
+        #   nome che precede la prima cifra ne restituirebbe UNO e perderebbe
+        #   silenziosamente gli altri, che e' peggio che dichiarare lo scarto.
+        alternativo = None if "," in voce else PATTERN_ING_NOME_E_DOSE.match(voce)
+        if alternativo:
+            candidato = PATTERN_FORMA_IN_CODA.sub(
+                "", alternativo.group("principio").strip()).strip()
+            if candidato and nome_farmaco_plausibile(candidato):
+                nomi.append(candidato)
+                livelli["3_nome_e_dose"] += 1
+                continue
+
+        scarti.append(voce)
+        livelli["non_interpretato"] += 1
 
     return nomi, scarti, livelli
 
@@ -232,6 +261,44 @@ PATTERN_DIM_SENZA_POSOLOGIA = re.compile(
     re.DOTALL,
 )
 
+# Livello 5 - come il livello 1, ma il nome commerciale contiene a sua volta una
+# parentesi: un farmaco estero porta la sua provenienza fra parentesi dentro la
+# descrizione della confezione. `[^()]*` non puo' attraversarla, e la voce
+# cadeva fra le non interpretate.
+#   Si prova per ULTIMO, dopo i quattro livelli esistenti: cosi' nessuna voce
+#   gia' riconosciuta cambia interpretazione, e il livello nuovo raccoglie solo
+#   cio' che oggi cade. Ammette un solo annidamento, che e' quanto il corpus
+#   mostra: piu' profondita' sarebbe una regola scritta su un caso ipotetico.
+PATTERN_DIM_COMMERCIALE_ANNIDATO = re.compile(
+    r"^\s*(?P<principio>[^(:]+?)\s*"
+    r"\((?P<commerciale>(?:[^()]|\([^()]*\))*)\)\s*:\s*(?P<posologia>.+)$",
+    re.DOTALL,
+)
+
+# Livello 6 - nome e dose senza nome commerciale e senza ':', che e' la forma in
+# cui alcuni reparti scrivono la terapia: "Rosuvastatina 5 mg (ore 22)",
+# "Bisoprololo 3.75 mg 1 cp alle ore 08:00". Il principio e' cio' che precede la
+# prima cifra, saltando un eventuale "da assumere".
+#   Si prova DOPO tutti gli altri: e' il piu' generico e ne oscurerebbe diversi.
+#   Una voce che comincia con una cifra ("500 ml Fisiologica") non lo soddisfa, ed
+#   e' corretto: non e' un farmaco prescritto ma un fluido.
+PATTERN_DIM_NOME_E_DOSE = re.compile(
+    r"^\s*(?P<principio>[^\d(:]+?)\s*(?:da assumere\s*)?(?P<posologia>\d.*)$",
+    re.DOTALL,
+)
+
+# La forma farmaceutica resta talvolta attaccata al nome ("Spironolattone cps
+# 25 mg"). La guardia `nome_farmaco_plausibile` la rifiuta, ed e' giusto: e' il
+# segnale che la posologia non e' stata separata. La risposta pero' non e'
+# indebolire la guardia — che protegge il vocabolario chiuso di tutti gli step
+# successivi — ma togliere la forma dalla coda del nome e ripresentare il nome
+# pulito alla stessa guardia, invariata.
+PATTERN_FORMA_IN_CODA = re.compile(
+    r"\s+(?:cp|cpr|cps|cpz|cp\.riv|cpr\.riv|compresse?|capsule?|"
+    r"gtt|fl|fiale?|bust|puff|soluz|scir|crema|cerotti?)\.?$",
+    re.IGNORECASE,
+)
+
 # Alla dimissione ammettiamo nomi piu' lunghi che in ingresso: le associazioni
 # precostituite sono un unico principio anche se elencano molte sostanze.
 MASSIME_PAROLE_PRINCIPIO = 12
@@ -275,11 +342,15 @@ def sonda_terapia_dimissione(testo: str) -> tuple[list[dict], list[str], Counter
             ("1_completo", PATTERN_DIM_COMPLETO),
             ("3_senza_commerciale", PATTERN_DIM_SENZA_COMMERCIALE),
             ("4_senza_posologia", PATTERN_DIM_SENZA_POSOLOGIA),
+            ("5_commerciale_annidato", PATTERN_DIM_COMMERCIALE_ANNIDATO),
+            ("6_nome_e_dose", PATTERN_DIM_NOME_E_DOSE),
         ):
             match = pattern.match(grezza)
             if not match:
                 continue
             principio = match.group("principio").strip()
+            if livello == "6_nome_e_dose":
+                principio = PATTERN_FORMA_IN_CODA.sub("", principio).strip()
             if not nome_farmaco_plausibile(principio, MASSIME_PAROLE_PRINCIPIO):
                 continue
             gruppi = match.groupdict()

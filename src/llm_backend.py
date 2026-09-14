@@ -35,6 +35,7 @@ l'API reale, non dedotti dalla documentazione: vedi `docs/04_pipeline_estrazione
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import random
@@ -77,6 +78,29 @@ MODELLO_OPENROUTER_PREDEFINITO = "deepseek/deepseek-v4.1-flash"
 
 # 429 = quota esaurita, 5xx = capacita' del servizio. Entrambi transitori: durante
 # le prove il 503 e' comparso di frequente e su modelli diversi nello stesso minuto.
+# Guasti di rete che vanno ritentati invece che propagati.
+#
+# `http.client.HTTPException` e' l'aggiunta che mancava, e costa cara scoprirlo
+# tardi: `IncompleteRead` ne discende ma NON discende da `URLError`, quindi una
+# risposta troncata a meta' — un guasto transitorio per eccellenza — usciva dal
+# ciclo dei tentativi come se fosse definitiva e abbatteva la corsa. E' successo
+# a 510 record su 1 000.
+#
+# `ConnectionError` copre la connessione chiusa dall'altro capo. `TimeoutError`
+# e' gia' una sua sorella (entrambe sotto `OSError`) ma resta esplicita perche'
+# e' il caso che si verifica piu' spesso e vale la pena leggerlo nel codice.
+#
+# Non si cattura `OSError` intero: un file non trovato o un permesso negato non
+# sono guasti di rete, e ritentarli nasconderebbe un difetto invece di
+# assorbirlo.
+ERRORI_DI_RETE = (
+    urllib.error.URLError,
+    http.client.HTTPException,
+    ConnectionError,
+    TimeoutError,
+    json.JSONDecodeError,
+)
+
 CODICI_RITENTABILI = frozenset({429, 500, 502, 503, 504})
 
 
@@ -346,7 +370,7 @@ class BackendGemini(BackendLLM):
                     attesa_suggerita = suggerita
                 if errore.code not in CODICI_RITENTABILI:
                     raise ultimo_errore from errore
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as errore:
+            except ERRORI_DI_RETE as errore:
                 ultimo_errore = ErroreLLM(f"{type(errore).__name__}: {errore}")
             else:
                 risposta = self._interpreta(grezza, tentativo, time.monotonic() - avvio)
@@ -495,7 +519,7 @@ class BackendOllama(BackendLLM):
                 # Un modello assente o una richiesta malformata non migliorano
                 # ritentando: meglio dirlo subito e con il messaggio del server.
                 raise ErroreLLM(f"HTTP {errore.code}: {dettaglio}") from errore
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as errore:
+            except ERRORI_DI_RETE as errore:
                 ultimo_errore = ErroreLLM(f"{type(errore).__name__}: {errore}")
             else:
                 risposta = self._interpreta(grezza, tentativo, time.monotonic() - avvio)
@@ -680,7 +704,7 @@ class BackendOpenRouter(BackendLLM):
                     ) from errore
                 if errore.code not in CODICI_RITENTABILI:
                     raise ultimo_errore from errore
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as errore:
+            except ERRORI_DI_RETE as errore:
                 ultimo_errore = ErroreLLM(f"{type(errore).__name__}: {errore}")
             else:
                 try:

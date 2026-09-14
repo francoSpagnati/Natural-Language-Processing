@@ -492,3 +492,67 @@ sul costo reale per record di queste due corse, e il budget residuo è inferiore
 insieme, e il documento le tiene entrambe: i numeri dello step 6 descrivono la
 corsa senza la 7bis, e il § 8.3 descrive di quanto quella corsa sottostimi la
 pipeline B sui farmaci narrati.
+
+
+---
+
+## 9. La regola sui farmaci narrati, rifatta con un altro obiettivo
+
+Il § 8 raccontava una correzione che portava il richiamo sui farmaci narrati da
+0% a 83%, e la presentava come un risultato. Una domanda l'ha rimessa in
+discussione prima che diventasse definitiva:
+
+> *I farmaci devono essere estratti da terapia all'ingresso e terapia alla
+> dimissione; quello che c'è scritto nell'anamnesi non deve influenzare più di
+> tanto quei due campi, che sono più sicuri. L'anamnesi è più utile per allergie,
+> familiarità eccetera.*
+
+Era esatto, e misurarlo ha cambiato il disegno della pipeline. I due campi di
+terapia hanno delimitatori, quindi un parser deterministico li legge con
+precisione e richiamo del 100% dove il modello linguistico si fermava al 99,3% —
+e costavano circa un terzo di ogni corsa. Il racconto completo, con le misure,
+sta in `04` § 7duodecies.
+
+### Che cosa cambia per questo documento
+
+La REGOLA 7 non chiede più *tutti* i farmaci nominati nella prosa ma quelli a cui
+l'anamnesi attribuisce un **fatto**: sospensione, riduzione, intolleranza, evento
+avverso, rifiuto. È la sola informazione sui farmaci che un elenco di terapia non
+può contenere, perché quell'elenco dice che cosa il paziente assume *ora*.
+
+Misurando le 56 menzioni del riferimento per contesto, la proporzione dà ragione
+alla domanda: **solo un terzo porta un marcatore di sicurezza**, gli altri due
+terzi sono racconto.
+
+| | contro il riferimento | |
+|---|---|---|
+| precisione | 95,3% | |
+| richiamo | 68,3% | **sottostimato, § seguente** |
+| F1 | 79,6% | |
+
+### Il riferimento e la regola non misurano più la stessa cosa
+
+**Va detto prima del numero.** Il riferimento annota *ogni* farmaco nominato
+nella prosa; la regola nuova ne chiede di proposito un sottoinsieme. Il 68,3%
+misura quindi quanto la regola somigli a una definizione che non è più la sua.
+
+Guardando i 19 mancati uno per uno: **16 non hanno alcun marcatore di evento** —
+la regola non li vuole, e non trovarli è il comportamento corretto. I mancati
+veri sono **3**, e i falsi positivi **2**. Sul bersaglio che la regola si pone il
+richiamo è del **93%**.
+
+**Il riferimento non è stato rifatto**, ed è una scelta: rifarlo dopo aver visto
+i risultati è esattamente il vizio che il § 7 descrive, e che lì è costato la
+frase più severa del documento. Misurare questa regola come si deve richiederebbe
+un riferimento che annoti il *fatto* oltre al farmaco, fissato **prima** di
+rimisurare. Finché non esiste, il 68,3% resta il numero pubblicato e questo
+paragrafo resta la sua interpretazione.
+
+### La corsa finale
+
+Il corpus è stato rifatto una volta sola, con il disegno nuovo: **1 000 record su
+1 000, nessun fallimento, 1,652 dollari**, contro i 2,42 della prima corsa e con
+il 56% di token in uscita in meno. I farmaci narrati passano da 62 a **2 174**, e
+i farmaci di terapia coincidono esattamente con il parser — 5 536 all'ingresso e
+6 383 alla dimissione — perché ora sono lo stesso dato, non due letture che si
+somigliano.

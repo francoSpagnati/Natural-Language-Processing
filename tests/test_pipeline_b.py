@@ -338,7 +338,12 @@ class TestBackendLocale(unittest.TestCase):
 
         def _invia(self, corpo):
             type(self).corpi.append(corpo)
-            return type(self).risposte.pop(0)
+            prossima = type(self).risposte.pop(0)
+            # Una risposta puo' essere un'eccezione: serve a provare che i
+            # guasti di rete vengono ritentati invece che propagati.
+            if isinstance(prossima, Exception):
+                raise prossima
+            return prossima
 
     def _backend(self, risposte, **kw):
         self.BackendFinto.risposte = list(risposte)
@@ -459,7 +464,12 @@ class TestBackendOpenRouter(unittest.TestCase):
 
         def _invia(self, corpo):
             type(self).corpi.append(corpo)
-            return type(self).risposte.pop(0)
+            prossima = type(self).risposte.pop(0)
+            # Una risposta puo' essere un'eccezione: serve a provare che i
+            # guasti di rete vengono ritentati invece che propagati.
+            if isinstance(prossima, Exception):
+                raise prossima
+            return prossima
 
     def _backend(self, risposte, **kw):
         self.BackendFinto.risposte = list(risposte)
@@ -474,6 +484,40 @@ class TestBackendOpenRouter(unittest.TestCase):
             "choices": [{"finish_reason": "stop", "message": {"content": contenuto}}],
             "usage": uso,
         }
+
+    def test_una_risposta_troncata_viene_ritentata(self):
+        """Regressione costata 490 record su 1 000.
+
+        `IncompleteRead` — la connessione chiusa a meta' risposta — discende da
+        `http.client.HTTPException` e NON da `URLError`. Il ciclo dei tentativi
+        catturava solo la seconda famiglia, quindi il guasto piu' transitorio
+        che esista usciva dal ciclo come se fosse definitivo e abbatteva la
+        corsa dopo 75 minuti di lavoro.
+        """
+        import http.client
+
+        backend = self._backend([http.client.IncompleteRead(b"met"), self._ok()])
+        risposta = backend.genera(Richiesta(
+            istruzioni="i", testo="t", schema={"type": "object"}))
+
+        self.assertEqual(risposta.contenuto, {"ok": True})
+        self.assertEqual(len(self.BackendFinto.corpi), 2)
+
+    def test_una_connessione_chiusa_viene_ritentata(self):
+        backend = self._backend([ConnectionResetError("reset"), self._ok()])
+        risposta = backend.genera(Richiesta(
+            istruzioni="i", testo="t", schema={"type": "object"}))
+
+        self.assertEqual(risposta.contenuto, {"ok": True})
+
+    def test_un_errore_che_non_e_di_rete_non_viene_ritentato(self):
+        """Non si cattura `OSError` intero: un permesso negato e' un difetto da
+        vedere subito, non un guasto da assorbire."""
+        backend = self._backend([PermissionError("niente permessi"), self._ok()])
+
+        with self.assertRaises(PermissionError):
+            backend.genera(Richiesta(
+                istruzioni="i", testo="t", schema={"type": "object"}))
 
     def test_lo_schema_viaggia_in_modalita_strict(self):
         backend = self._backend([self._ok()])
@@ -702,27 +746,36 @@ class TestConversione(unittest.TestCase):
         self.assertIn("non ritrovata", condizione.provenienza.regola)
         self.assertTrue(any("non ritrovate" in n for n in stato.note_estrazione))
 
-    def test_momento_dedotto_dal_campo(self):
-        """Il momento non si chiede al modello: si deduce dal campo, che e' verificabile."""
+    def test_un_farmaco_del_modello_e_sempre_narrativo(self):
+        """Il modello vede solo l'anamnesi, quindi ogni farmaco che segnala e'
+        un farmaco raccontato, non una voce di terapia.
+
+        Se dichiarasse un altro campo — lo schema ammette ancora i tre valori,
+        perche' e' condiviso con le altre pipeline — la citazione verrebbe
+        cercata nel campo sbagliato, dove potrebbe perfino trovarsi per caso.
+        `campo_del_modello` rende quell'errore impossibile invece che raro.
+        """
         stato = self._converti(
             EstrazioneLLM.model_validate(
                 {
                     "farmaci": [
                         {
                             "testo_grezzo": "Bisoprololo",
-                            "campo": "Terapia alla Dimissione",
+                            "campo": "Terapia alla Dimissione",   # dichiarato a torto
                             "stato": "affermato",
                             "posologia": "2,5 mg/die",
                         }
                     ]
                 }
             ),
-            dimissione="Bisoprololo 2,5 mg/die",
+            anamnesi="Bisoprololo sospeso per bradicardia.",
+            dimissione="",
         )
-        farmaco = stato.farmaci[0]
-        self.assertEqual(farmaco.momento, MomentoTerapia.DIMISSIONE)
+        farmaco = next(f for f in stato.farmaci if f.provenienza.pipeline.value != "campo_strutturato")
+        self.assertEqual(farmaco.momento, MomentoTerapia.NARRATIVO)
+        self.assertEqual(farmaco.provenienza.campo_sorgente, "Anamnesi")
+        self.assertIsNotNone(farmaco.provenienza.inizio)
         self.assertEqual(farmaco.codice_atc, "C07AB07")
-        self.assertEqual(farmaco.posologia, "2,5 mg/die")
 
     def test_negazione_conservata(self):
         stato = self._converti(
@@ -898,19 +951,75 @@ class TestGeneralizzazioneICD(unittest.TestCase):
         self.assertEqual(RisolutoreICD.categoria("I10"), "I10")
 
 
-class TestComposizioneTesto(unittest.TestCase):
-    def test_solo_le_sezioni_presenti(self):
-        testo = extract_b.componi_testo(record_di_prova(anamnesi="Anam.", ingresso=""))
-        self.assertIn("### Anamnesi", testo)
-        self.assertNotIn("### Terapia medica all'ingresso", testo)
+class TestTerapiaDalParserDeterministico(unittest.TestCase):
+    """I farmaci di terapia entrano in B senza passare dal modello.
 
-    def test_le_intestazioni_coincidono_coi_valori_ammessi(self):
-        """Il modello ricopia l'etichetta sotto cui legge invece di inventarla."""
-        testo = extract_b.componi_testo(
-            record_di_prova(anamnesi="A", ingresso="B", dimissione="C")
+    E' la stessa lettura che fanno le pipeline A e C: il progetto ha una sola
+    interpretazione dei due campi strutturati, non tre che possono divergere.
+    """
+
+    def _stato(self, **campi):
+        return extract_b.converti(
+            record_di_prova(**campi),
+            EstrazioneLLM.model_validate({}),
+            "m",
+            RisolutoreATCFinto(),
+            RisolutoreICDFinto(),
         )
-        for campo in CampoReferto:
-            self.assertIn(f"### {campo.value}", testo)
+
+    def test_i_farmaci_di_terapia_ci_sono_anche_se_il_modello_tace(self):
+        stato = self._stato(
+            anamnesi="Nessuna nota.",
+            ingresso="Bisoprololo: 2,5 mg cpr. /die (ore 8) ;",
+            dimissione='"Ramipril (Triatec cpr. 5 mg): da assumere 5 mg (ore 8)"',
+        )
+        nomi = {f.nome_grezzo for f in stato.farmaci}
+        self.assertIn("Bisoprololo", nomi)
+        self.assertIn("Ramipril", nomi)
+
+    def test_portano_la_provenienza_del_parser_non_quella_del_modello(self):
+        """Il filtro dello step 8 deve poter distinguere un dato letto da un
+        campo strutturato da uno riconosciuto nella prosa: sono affidabilita'
+        diverse, e nel grafo diventano due agenti diversi."""
+        stato = self._stato(anamnesi="x", ingresso="Bisoprololo: 2,5 mg ;")
+        farmaco = stato.farmaci[0]
+        self.assertEqual(farmaco.provenienza.pipeline.value, "campo_strutturato")
+        self.assertEqual(farmaco.provenienza.regola, "sonda_terapia_ingresso")
+        self.assertEqual(farmaco.momento, MomentoTerapia.INGRESSO)
+
+    def test_il_momento_distingue_i_due_campi(self):
+        stato = self._stato(
+            anamnesi="x",
+            ingresso="Bisoprololo: 2,5 mg ;",
+            dimissione='"Ramipril (Triatec cpr. 5 mg): da assumere 5 mg"',
+        )
+        momenti = {f.nome_grezzo: f.momento for f in stato.farmaci}
+        self.assertEqual(momenti["Bisoprololo"], MomentoTerapia.INGRESSO)
+        self.assertEqual(momenti["Ramipril"], MomentoTerapia.DIMISSIONE)
+
+
+class TestComposizioneTesto(unittest.TestCase):
+    """Al modello arriva la sola anamnesi.
+
+    I due campi di terapia sono liste con delimitatori, che un parser
+    deterministico legge col 100% di precisione e richiamo contro il campo
+    stesso, mentre il modello si fermava al 99,3%. Mandarceli costava circa un
+    terzo della corsa per rifare peggio un lavoro gia' fatto.
+    """
+
+    def test_i_campi_di_terapia_non_arrivano_al_modello(self):
+        testo = extract_b.componi_testo(
+            record_di_prova(anamnesi="Anamnesi del paziente.",
+                            ingresso="Bisoprololo: 2,5 mg",
+                            dimissione='"Ramipril (Triatec): 5 mg"')
+        )
+        self.assertEqual(testo, "Anamnesi del paziente.")
+        self.assertNotIn("Bisoprololo", testo)
+        self.assertNotIn("Ramipril", testo)
+
+    def test_un_record_senza_anamnesi_da_testo_vuoto(self):
+        self.assertEqual(
+            extract_b.componi_testo(record_di_prova(anamnesi="", ingresso="X: 1 mg")), "")
 
 
 class TestEstrazioneCompleta(unittest.TestCase):
@@ -1151,9 +1260,13 @@ class TestCampoDelleAllergie(unittest.TestCase):
     record esisteva davvero, altrove.
     """
 
-    def test_un_allergia_citata_dalla_terapia_si_ancora(self):
+    def test_un_allergia_si_ancora_sempre_sull_anamnesi(self):
+        """Regressione al contrario. Prima il modello leggeva anche le terapie e
+        poteva citarle; ora vede solo l'anamnesi, e un campo diverso dichiarato
+        nell'uscita e' un errore da neutralizzare, non da assecondare."""
         stato = extract_b.converti(
-            record_di_prova(anamnesi="Nessuna nota.", ingresso="Amoxicillina 1 g"),
+            record_di_prova(anamnesi="Allergia ad Amoxicillina.",
+                            ingresso="Amoxicillina 1 g"),
             EstrazioneLLM.model_validate(
                 {
                     "allergie": [
@@ -1170,7 +1283,7 @@ class TestCampoDelleAllergie(unittest.TestCase):
             RisolutoreICDFinto(),
         )
         provenienza = stato.allergie[0].provenienza
-        self.assertEqual(provenienza.campo_sorgente, "Terapia medica all'ingresso")
+        self.assertEqual(provenienza.campo_sorgente, "Anamnesi")
         self.assertIsNotNone(provenienza.inizio)
 
 

@@ -12,11 +12,18 @@ PERCHE' UN GRAFO, E NON UNA TABELLA
     modello linguistico del 70%. Nessuna delle tre e' sufficiente da sola.
 
 LE TRE FONTI E COSA CIASCUNA CONTRIBUISCE
+    Sulle CONDIZIONI, misurate contro il riferimento annotato:
+
     A  gazetteer deterministico     precisione 80,1%  richiamo 19,5%
-    B  modello linguistico          precisione 96,1%  richiamo 70,1%
+    B  modello linguistico          precisione 95,5%  richiamo 68,7%
     C  riconoscitore neurale        precisione 81,6%  richiamo 19,9%
 
-    (misure dello step 6bis su 25 referti annotati, condizioni)
+    Sui FARMACI DI TERAPIA non c'e' invece nulla da confrontare, ed e' una
+    proprieta' voluta: i due campi hanno delimitatori e le tre pipeline li
+    leggono con lo **stesso** parser deterministico. Nel grafo quelle menzioni
+    portano l'agente `campo_strutturato`, non la pipeline che le ha emesse,
+    perche' attribuirle a tre agenti diversi fingerebbe un accordo fra metodi
+    dove c'e' una sola lettura ripetuta tre volte.
 
 LA DECISIONE DI MODELLAZIONE CHE CONTA: LA MENZIONE E' UN NODO
     La tentazione e' collegare il ricovero direttamente alla condizione. Cosi'
@@ -98,7 +105,15 @@ FONTE_ICD = ("ICD-10 2019 in italiano, Volume 1 - Centro Collaboratore Italiano 
 LIVELLI_ATC = {1: "anatomico", 3: "terapeutico", 4: "farmacologico",
                5: "chimico", 7: "sostanza"}
 
+SIGLA_PARSER = "campo_strutturato"
+
 DESCRIZIONE_PIPELINE = {
+    SIGLA_PARSER: (
+        "Parser deterministico dei campi di terapia",
+        "Legge le due liste con delimitatori senza inferenza. Le tre pipeline "
+        "lo condividono: quei campi hanno una sola lettura in tutto il "
+        "progetto, non tre.",
+    ),
     "A": ("Pipeline A - gazetteer deterministico",
           "Riconoscimento per dizionario chiuso con algoritmo ConText per "
           "negazione, incertezza, storicita' e soggetto."),
@@ -216,6 +231,22 @@ def _uri_concetto(menzione: Menzione) -> URIRef | None:
     return ATC[menzione.codice] if menzione.tipo == "farmaco" else ICD[menzione.codice]
 
 
+def agente(m: Menzione) -> URIRef:
+    """Chi ha prodotto la menzione: una pipeline, o il parser condiviso.
+
+    E' la distinzione che tiene onesto `ct:numeroPipeline`. I farmaci dei due
+    campi di terapia sono letti dallo **stesso** parser deterministico da tutte e
+    tre le pipeline: attribuirli a tre agenti diversi mostrerebbe un consenso a
+    tre dove c'e' una sola lettura ripetuta tre volte, e il filtro dello step 8
+    scambierebbe quella ridondanza per una conferma indipendente.
+
+    Attribuendoli a un agente unico, una soglia di consenso a due pipeline
+    scarta correttamente i farmaci di terapia dal conteggio di accordo — perche'
+    su di loro non c'e' nessun accordo da misurare, c'e' un dato letto.
+    """
+    return PIPELINE[SIGLA_PARSER if m.strutturata else m.sigla]
+
+
 def aggiungi_menzione(g: Graph, m: Menzione, n: int) -> URIRef:
     nodo = MENZIONE[_identificatore(m.enc_oid, m.sigla, m.tipo, m.inizio, m.fine, n)]
     g.add((nodo, RDF.type, CT.Menzione))
@@ -226,7 +257,7 @@ def aggiungi_menzione(g: Graph, m: Menzione, n: int) -> URIRef:
     g.add((nodo, CT.fine, Literal(m.fine, datatype=XSD.integer)))
     g.add((nodo, CT.stato, Literal(m.stato)))
     g.add((nodo, CT.soggetto, Literal(m.soggetto)))
-    g.add((nodo, PROV.wasAttributedTo, PIPELINE[m.sigla]))
+    g.add((nodo, PROV.wasAttributedTo, agente(m)))
     # Il testo della menzione NON entra nel grafo quando questo viene
     # serializzato su disco: e' testo clinico verbatim, e il grafo e' un
     # artefatto che puo' circolare. Chi ha i dati grezzi lo ritrova dagli offset.
@@ -255,8 +286,8 @@ def aggiungi_gruppo(g: Graph, gruppo: Gruppo, n: int) -> None:
     g.add((nodo, CT.tipoEntita, Literal(tipo)))
     g.add((nodo, CT.riguarda, ricovero))
     g.add((ricovero, CT.haAsserzione, nodo))
-    g.add((nodo, CT.numeroPipeline,
-           Literal(len(gruppo.sigle), datatype=XSD.integer)))
+    agenti = {agente(m) for m in gruppo.menzioni}
+    g.add((nodo, CT.numeroPipeline, Literal(len(agenti), datatype=XSD.integer)))
     if gruppo.ambiguo:
         # Una pipeline contribuisce piu' di una menzione: il gruppo dice ancora
         # *chi* ha visto il punto, ma non permette di appaiare stato e codice.
@@ -269,7 +300,7 @@ def aggiungi_gruppo(g: Graph, gruppo: Gruppo, n: int) -> None:
         concetto = _uri_concetto(m)
         if concetto is not None:
             g.add((nodo, CT.concetto, concetto))
-            g.add((nodo, CT.codiceDa, PIPELINE[m.sigla]))
+            g.add((nodo, CT.codiceDa, agente(m)))
 
 
 def aggiungi_ricoveri(g: Graph, per_ricovero: dict[int, list[Menzione]]) -> dict:
@@ -281,7 +312,7 @@ def aggiungi_ricoveri(g: Graph, per_ricovero: dict[int, list[Menzione]]) -> dict
         for i, gruppo in enumerate(raggruppa(menzioni)):
             aggiungi_gruppo(g, gruppo, i)
             conteggi["asserzioni"] += 1
-            conteggi[f"pipeline_{len(gruppo.sigle)}"] += 1
+            conteggi[f"pipeline_{len({agente(m) for m in gruppo.menzioni})}"] += 1
         conteggi["menzioni"] += len(menzioni)
     conteggi["ricoveri"] = len(per_ricovero)
     return dict(conteggi)

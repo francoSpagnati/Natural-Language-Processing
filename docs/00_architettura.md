@@ -6,6 +6,14 @@ componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 **Ultimo step completato: 7 — Il knowledge graph RDF, con la provenienza come
 struttura.**
 
+> **Disegno dell'estrazione, rivisto.** A ogni campo il metodo più semplice che
+> lo risolve: i due campi di terapia hanno delimitatori e li legge un **parser
+> deterministico** (precisione e richiamo del 100% contro il campo stesso, dove
+> il modello linguistico si fermava al 99,3%); al modello resta la sola prosa —
+> condizioni, allergie, familiarità, e i farmaci di cui l'anamnesi racconta un
+> fatto. Mandare un modello su un campo strutturato non aggiungeva capacità:
+> aggiungeva costo e una sorgente di errore. Dettagli in `04` § 7duodecies.
+
 Il grafo tiene le tre descrizioni dello stesso paziente senza fonderle, ciascuna
 con l'indicazione di chi l'ha prodotta. Su 1 000 ricoveri: **68 120 menzioni,
 32 907 asserzioni cliniche, 1 215 906 triple**, più le due terminologie intere
@@ -17,22 +25,28 @@ da più menzioni, e `ct:numeroPipeline` diventa interrogabile in SPARQL.
 
 **Il numero che decide lo step 8**, ottenuto interrogando il grafo:
 
-| asserzioni che esistono solo perché quella pipeline le ha viste | |
+| asserzioni che esistono solo grazie a quell'agente | |
 |---|---|
-| **B** (modello linguistico) | **13 198** |
-| C (riconoscitore neurale) | 325 |
-| A (gazetteer) | 145 |
+| **B** (modello linguistico) | **12 819** |
+| `campo_strutturato` (il parser condiviso) | 11 833 |
+| C (riconoscitore neurale) | 192 |
+| A (gazetteer) | 122 |
 
-È lo step 6bis confermato sul corpus intero **con un metodo diverso** — 1 000
-referti, zero annotazioni manuali. Il 41,2% delle asserzioni poggia su una sola
-pipeline, e quella pipeline è quasi sempre B. Una soglia di consenso a due
-pipeline non scarterebbe «le asserzioni dubbie»: scarterebbe quasi per intero il
-contributo esclusivo della sola pipeline con un richiamo alto. È il compromesso
-centrale dello step 8, e ora è un numero invece che un'opinione.
+**Il 76,3% delle asserzioni poggia su un solo agente**, e una soglia di consenso
+a due scarterebbe tre quarti del grafo: il contributo esclusivo della sola
+pipeline con un richiamo alto, e per di più l'intera terapia dei pazienti.
 
-Altri due numeri che lo step 8 dovrà usare: **l'11,6% delle menzioni di
+Quel 76,3% è il risultato di una **correzione**. Il documento riportava prima
+41,2%, con un «consenso a tre» del 46,6% che era falso: i dodicimila farmaci di
+terapia comparivano in tutte e tre le pipeline, ma le tre li leggono con lo
+**stesso** parser deterministico. Era una sola lettura contata tre volte, e il
+filtro dello step 8 l'avrebbe scambiata per una conferma indipendente — fidandosi
+di più proprio dove non aveva imparato nulla. Ora `ct:numeroPipeline` conta gli
+**agenti distinti**, e la ridondanza vera è il 14,8%, non il 46,6%.
+
+Altri due numeri che lo step 8 dovrà usare: **il 12,2% delle menzioni di
 condizione non è una condizione attuale del paziente** (negata, incerta o di un
-familiare), e le asserzioni codificate **dal solo gazetteer sono 151** — poche,
+familiare), e le asserzioni codificate **dal solo gazetteer sono 129** — poche,
 ma sono la categoria che lo step 6 ha identificato come la più insidiosa, perché
 sbagliata e già codificata.
 
@@ -48,8 +62,14 @@ quattro condizioni su cinque**:
 | condizioni | precisione | **richiamo** | F1 |
 |---|---|---|---|
 | A (gazetteer) | 80,1% | **19,5%** | 31,4% |
-| B (LLM) | 96,1% | **70,1%** | **81,1%** |
+| B (LLM) | 95,5% | **68,7%** | **79,9%** |
 | C (NER) | 81,6% | **19,9%** | 31,9% |
+
+| farmaci nella prosa | precisione | **richiamo** | F1 |
+|---|---|---|---|
+| A | 95,1% | 65,0% | 77,2% |
+| B | 95,3% | 68,3% | 79,6% |
+| C | 95,5% | 70,0% | 80,8% |
 
 La ragione è strutturale: il vocabolario di A è costruito dai termini ICD-10 e C
 è addestrata sulle etichette che A produce, quindi entrambe trovano **solo ciò
@@ -61,12 +81,16 @@ realtà clinica.
 **Sui farmaci citati nella prosa la prima misura diceva B zero su sessanta, ed
 era un mio difetto, non del modello.** La regola del prompt definiva i farmaci
 come il contenuto delle due sezioni di terapia e non diceva mai che la prosa ne
-contiene altri. Aggiunta la regola mancante, il richiamo passa da **0% a circa
-85%**, verificato su 30 referti che non avevano avuto parte nella diagnosi. È la
-seconda volta nel progetto che un difetto attribuito al modello si rivela un
-difetto del prompt, e le due volte sono simmetriche: la prima il modello
-*inventava* per via di un esempio positivo, qui *ometteva* per via di una
-definizione troppo stretta. Racconto completo in `06b` § 8.
+contiene altri. È la seconda volta nel progetto che un difetto attribuito al
+modello si rivela un difetto del prompt, e le due volte sono simmetriche: la
+prima il modello *inventava* per via di un esempio positivo, qui *ometteva* per
+via di una definizione troppo stretta. Racconto completo in `06b` § 8.
+
+La correzione ha poi cambiato forma dopo una domanda che ha rimesso in
+discussione l'obiettivo: **i farmaci vanno presi dai campi di terapia, che sono
+strutturati; l'anamnesi serve ad altro.** Misurato, era esatto — e la conseguenza
+è il disegno riportato in cima a questo documento. Dettagli in `04`
+§ 7duodecies.
 
 Quella indagine ha prodotto anche il **pavimento di rumore** del progetto: tre
 corse dello stesso modello sugli stessi 25 referti danno 70,1%, 68,2% e 70,1% di

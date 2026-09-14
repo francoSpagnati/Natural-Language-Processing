@@ -41,7 +41,10 @@ DOMANDE: list[tuple[str, str, str]] = [
     (
         "Quante asserzioni sopravvivono a una soglia di consenso",
         """Il filtro dello step 8 potrà pretendere che una condizione sia vista da
-        più di una pipeline. Questa è la domanda che dice quanto costerebbe.""",
+        più di una pipeline. Questa è la domanda che dice quanto costerebbe.
+        `ct:numeroPipeline` conta gli AGENTI distinti, non le menzioni: le tre
+        pipeline leggono i campi di terapia con lo stesso parser, e contarle
+        separatamente mostrerebbe un consenso a tre dove c'è una sola lettura.""",
         """
         SELECT ?pipeline (COUNT(?a) AS ?asserzioni) WHERE {
           ?a a ct:AsserzioneClinica ; ct:numeroPipeline ?pipeline .
@@ -66,7 +69,7 @@ DOMANDE: list[tuple[str, str, str]] = [
         """La complementarità misurata allo step 6bis, riletta sul corpus intero:
         quante asserzioni esistono solo perché quella pipeline le ha viste.""",
         """
-        SELECT ?pipeline (COUNT(?a) AS ?solo_sua) WHERE {
+        SELECT ?pipeline (COUNT(DISTINCT ?a) AS ?solo_sua) WHERE {
           ?a a ct:AsserzioneClinica ; ct:numeroPipeline 1 ; prov:wasDerivedFrom ?m .
           ?m prov:wasAttributedTo ?pipeline .
         } GROUP BY ?pipeline ORDER BY DESC(?solo_sua)

@@ -119,14 +119,47 @@ class TestSondaTerapiaDimissione(unittest.TestCase):
 
         self.assertEqual(voci[0]["principio"], "Sacubitril/valsartan")
 
-    def test_posologia_incollata_al_nome_viene_rifiutata(self):
-        """Regressione: i due punti di '08:00' fingevano da separatore.
+    def test_posologia_incollata_al_nome_viene_separata(self):
+        """Regressione: i due punti di '08:00' fingevano da separatore, e il
+        vocabolario acquisiva voci come 'Bisoprololo 3.75 mg 1 cp alle ore 08'.
 
-        Senza la guardia, il vocabolario acquisiva voci come
-        'Bisoprololo 3.75 mg 1 cp alle ore 08'.
+        La prima risposta fu **scartare** la voce intera. Costava un farmaco per
+        salvare il vocabolario, e nel corpus costava 40 prescrizioni di
+        dimissione. Il livello 6 la interpreta invece di scartarla: il nome resta
+        pulito — che era l'intento della guardia — e la posologia va al suo posto.
         """
         testo = '"Bisoprololo 3.75 mg 1 cp alle ore 08:00"'
         voci, scarti, _ = sonda_terapia_dimissione(testo)
+
+        self.assertEqual(len(voci), 1)
+        self.assertEqual(voci[0]["principio"], "Bisoprololo")
+        self.assertEqual(voci[0]["posologia"], "3.75 mg 1 cp alle ore 08:00")
+        self.assertEqual(scarti, [])
+
+    def test_la_forma_farmaceutica_non_resta_attaccata_al_nome(self):
+        """'Spironolattone cps 25 mg': la forma va tolta, non il farmaco."""
+        voci, scarti, _ = sonda_terapia_dimissione(
+            '"Spironolattone cps 25 mg: da assumere 6,25 mg (ore 18)"')
+
+        self.assertEqual(len(voci), 1)
+        self.assertEqual(voci[0]["principio"], "Spironolattone")
+
+    def test_il_commerciale_con_parentesi_annidata_viene_letto(self):
+        """Un farmaco estero porta la provenienza fra parentesi dentro la
+        descrizione della confezione, e `[^()]*` non puo' attraversarla."""
+        voci, _, livelli = sonda_terapia_dimissione(
+            '"Propiltiouracile (Propycil 50mg recordati ilac (estero) cpr.): '
+            'da assumere 50 mg (ore 8)"')
+
+        self.assertEqual(len(voci), 1)
+        self.assertEqual(voci[0]["principio"], "Propiltiouracile")
+        self.assertEqual(livelli["5_commerciale_annidato"], 1)
+
+    def test_un_fluido_non_e_un_farmaco_prescritto(self):
+        """'500 ml Fisiologica' comincia con una cifra: il livello 6 non lo
+        accetta, ed e' corretto. Resta fra i non interpretati invece di entrare
+        nel vocabolario come sostanza."""
+        voci, scarti, _ = sonda_terapia_dimissione('"500 ml Fisiologica"')
 
         self.assertEqual(voci, [])
         self.assertEqual(len(scarti), 1)

@@ -30,9 +30,13 @@ L'ECCEZIONE: IL VOCABOLARIO PUBBLICO
     L'eccezione vale per il termine **e per ogni sua porzione**, non per una
     frase che lo contiene: «diabete mellito» è vocabolario e «ficienza mitralica
     congeni» lo è altrettanto, perché la finestra scorrevole taglia i termini a
-    metà e una porzione di vocabolario resta vocabolario. «Familiarita per
-    diabete mellito (padre, affetto da Parkinson)» invece è il racconto di una
-    famiglia, e nessun termine pubblicato la contiene.
+    metà e una porzione di vocabolario resta vocabolario. Una frase che intreccia
+    più termini con i legamenti del racconto — una familiarità, un parente
+    nominato, una data — non lo è, e nessun termine pubblicato la contiene.
+
+    Questo controllo ha segnalato **la propria docstring**: l'esempio che usava
+    per illustrare la regola era una frase vera, presente in un referto solo. È
+    la prova che serviva: la regola non fa eccezioni per chi la scrive.
 """
 
 from __future__ import annotations
