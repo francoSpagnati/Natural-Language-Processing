@@ -49,6 +49,57 @@ class BaseConText(unittest.TestCase):
         return attributi_per_entita(trova_ambiti(documento), inizio, fine)
 
 
+class TestNonRiferisce(BaseConText):
+    """«Non riferisce X» e' una negazione, non un'affermazione.
+
+    Il difetto non era in un marcatore ma nella loro interazione: `non` apriva
+    l'ambito e `riferisce`, che e' un **terminatore**, lo chiudeva subito dopo,
+    lasciando l'entita' fuori dalla negazione. La correzione riconosce l'intera
+    espressione, cosi' l'ambito parte dopo di essa.
+
+    E' emerso costruendo la demo dello step 9, su un paziente scritto a mano:
+    il difetto e' stato trovato **usando** il dato, non misurandolo. Nel corpus
+    la famiglia "non riferit*" compare 48 volte in 48 referti, piu' di altre
+    espressioni gia' nel lessico.
+    """
+
+    def test_non_riferisce_nega(self):
+        self.assertIn(Attributo.NEGAZIONE,
+                      self.attributi("Non riferisce angina da sforzo.", "angina"))
+
+    def test_nega_l_elenco_intero(self):
+        testo = "Non riferisce angina ne' cardiopatia ischemica."
+        self.assertIn(Attributo.NEGAZIONE, self.attributi(testo, "angina"))
+        self.assertIn(Attributo.NEGAZIONE,
+                      self.attributi(testo, "cardiopatia ischemica"))
+
+    def test_le_varianti_al_participio(self):
+        for frase, entita in (
+            ("Non riferiti episodi di angina.", "angina"),
+            ("Non riferita angina da sforzo.", "angina"),
+            ("Non riferito diabete mellito.", "diabete mellito"),
+        ):
+            with self.subTest(frase=frase):
+                self.assertIn(Attributo.NEGAZIONE, self.attributi(frase, entita))
+
+    def test_riferisce_da_solo_resta_un_terminatore(self):
+        """La correzione non deve rompere cio' per cui il terminatore esiste.
+
+        In «Nega diabete ma riferisce ipertensione» l'ipertensione NON e'
+        negata, ed e' esattamente il caso che ha messo `riferisce` fra i
+        terminatori. Se questo test si rompe, la correzione ha barattato un
+        errore con il suo opposto.
+        """
+        testo = "Nega diabete ma riferisce ipertensione arteriosa."
+        self.assertIn(Attributo.NEGAZIONE, self.attributi(testo, "diabete"))
+        self.assertNotIn(Attributo.NEGAZIONE,
+                         self.attributi(testo, "ipertensione arteriosa"))
+
+    def test_una_affermazione_semplice_resta_affermata(self):
+        self.assertNotIn(Attributo.NEGAZIONE,
+                         self.attributi("Riferisce angina da sforzo.", "angina"))
+
+
 class TestNegazione(BaseConText):
     def test_nega_semplice(self):
         attributi = self.attributi("Nega diabete mellito.", "diabete mellito")

@@ -84,6 +84,26 @@ MARCATORI_NEGAZIONE = [
     Marcatore("negati", Attributo.NEGAZIONE, Direzione.AVANTI, 14),
     Marcatore("senza", Attributo.NEGAZIONE, Direzione.AVANTI, 6),
     Marcatore("mai", Attributo.NEGAZIONE, Direzione.AVANTI, 6),
+    # La famiglia "non riferit*" deve stare PRIMA di "non", e come espressione
+    # composta, per una ragione precisa: `riferisce` e' un terminatore di
+    # ambito — serve a "Nega diabete ma riferisce ipertensione" — e con il solo
+    # marcatore "non" chiuderebbe la negazione all'istante, lasciando
+    # "Non riferisce angina ne' cardiopatia ischemica" come un'affermazione.
+    # Riconoscendo l'intera espressione l'ambito parte dopo di essa e il
+    # terminatore non entra in gioco.
+    #
+    # Il difetto e' emerso dalla demo dello step 9bis, su un paziente scritto a
+    # mano: un sistema che raccomanda lo trova perche' prova a usare il dato,
+    # non perche' lo misura. E' la stessa forma dello step 8.
+    #
+    # Giustificato con lo stesso metodo del resto del lessico, cioe' contando
+    # il corpus: "non riferisce" 23 occorrenze in 23 referti, "non riferiti" 18,
+    # "non riferita" 6, "non riferito" 1 — 48 in tutto, piu' di "non presenta"
+    # (6) e "non risultano" (2), che infatti non sono nel lessico.
+    Marcatore("non riferisce", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
+    Marcatore("non riferiti", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
+    Marcatore("non riferita", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
+    Marcatore("non riferito", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
     # "non" e' il marcatore piu' frequente ma anche il piu' rischioso: compare
     # in "non in terapia con X" (negazione vera) e in "non ha eseguito il
     # dosaggio" (dove non nega alcuna entita'). L'ambito e' quindi stretto.

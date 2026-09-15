@@ -230,12 +230,26 @@ def _entita_dalla_prosa(
     return condizioni, farmaci
 
 
-def allergie_dal_referto(record: RecordPaziente) -> tuple[list[AllergiaEstratta], StatoConoscenza]:
+def allergie_dal_referto(
+    record: RecordPaziente, risolutore: RisolutoreATC | None = None
+) -> tuple[list[AllergiaEstratta], StatoConoscenza]:
     """Estrae le allergie e lo *stato* della sezione, che sono cose diverse.
 
     Una lista vuota può voler dire "il clinico ha verificato che non ce ne sono"
     oppure "il referto non ne parla": senza distinguerle il filtro di sicurezza
     non saprebbe quanto fidarsi.
+
+    `risolutore` codifica in ATC gli allergeni della categoria «principi
+    attivi». Senza di esso la pipeline estraeva l'allergene come stringa e non
+    lo codificava mai, e **lo strato di sicurezza era cieco**: il filtro dello
+    step 8 confronta codici ATC, non nomi, quindi un'allergia non codificata
+    non poteva bloccare niente. Il difetto è emerso costruendo la demo — cioè
+    provando a usare il dato invece che a misurarlo, che nel progetto è il modo
+    in cui i difetti del contratto dati si fanno vedere.
+
+    Solo i principi attivi vengono codificati: un'allergia a un alimento o a un
+    polline va conservata ma non vincola la scelta di un farmaco, ed è la
+    distinzione che il campo `categoria` esiste per esprimere.
     """
     testo = record.testo_anamnesi or ""
     esito = sonda_allergie(testo)
@@ -253,17 +267,25 @@ def allergie_dal_referto(record: RecordPaziente) -> tuple[list[AllergiaEstratta]
                 if not allergene:
                     continue
                 posizione = testo.find(allergene)
+                atc = None
+                fonte_atc = None
+                stato_norm = StatoNormalizzazione.NON_TENTATO
+                if risolutore is not None and categoria.startswith("principi"):
+                    atc, stato_norm, fonte_atc = risolutore.risolvi(allergene)
                 allergie.append(
                     AllergiaEstratta(
                         allergene=allergene,
                         categoria=categoria,
+                        codice_atc=atc,
+                        stato_normalizzazione=stato_norm,
                         provenienza=Provenienza(
                             pipeline=Pipeline.A_DETERMINISTICA,
                             campo_sorgente=CAMPO_ANAMNESI,
                             testo_originale=allergene,
                             inizio=posizione if posizione >= 0 else None,
                             fine=posizione + len(allergene) if posizione >= 0 else None,
-                            regola=f"sonda_allergie:{categoria}",
+                            regola=(f"sonda_allergie:{categoria}"
+                                    + (f" atc:{fonte_atc}" if fonte_atc else "")),
                         ),
                     )
                 )
@@ -283,7 +305,7 @@ def estrai(
         record, gazetteer, risolutore, collegatore
     )
     farmaci = farmaci_da_campo_strutturato(record, risolutore) + farmaci_prosa
-    allergie, stato_sezione = allergie_dal_referto(record)
+    allergie, stato_sezione = allergie_dal_referto(record, risolutore)
 
     note: list[str] = []
     _, scarti_ingresso, _ = sonda_terapia_ingresso(record.testo_terapia_ingresso or "")

@@ -148,6 +148,15 @@ PATTERN_INFUSIONE = re.compile(
 )
 
 
+# Una virgola fra due cifre e' un separatore decimale, non un elenco.
+PATTERN_VIRGOLA_DECIMALE = re.compile(r"(?<=\d),(?=\d)")
+
+
+def _virgola_di_elenco(voce: str) -> bool:
+    """True se la voce contiene una virgola che separa voci, non decimali."""
+    return "," in PATTERN_VIRGOLA_DECIMALE.sub("", voce)
+
+
 def sonda_terapia_ingresso(testo: str) -> tuple[list[str], list[str], Counter]:
     """Estrae i nomi (commerciali) dei farmaci dal campo terapia in ingresso.
 
@@ -197,12 +206,22 @@ def sonda_terapia_ingresso(testo: str) -> tuple[list[str], list[str], Counter]:
         #   Vale la stessa disciplina della dimissione: la guardia non viene
         #   indebolita, le si ripresenta un nome ripulito.
         #
-        #   NON si applica se la voce contiene una virgola. Quello e' il blocco
-        #   scritto a mano dal clinico, che elenca piu' farmaci in un segmento
-        #   solo ("cardirene 75 mg, ansimar 400 mg, lucen 20 mg"): prendere il
-        #   nome che precede la prima cifra ne restituirebbe UNO e perderebbe
-        #   silenziosamente gli altri, che e' peggio che dichiarare lo scarto.
-        alternativo = None if "," in voce else PATTERN_ING_NOME_E_DOSE.match(voce)
+        #   NON si applica se la voce contiene una virgola DI ELENCO. Quello e'
+        #   il blocco scritto a mano dal clinico, che elenca piu' farmaci in un
+        #   segmento solo ("cardirene 75 mg, ansimar 400 mg, lucen 20 mg"):
+        #   prendere il nome che precede la prima cifra ne restituirebbe UNO e
+        #   perderebbe silenziosamente gli altri, che e' peggio che dichiarare
+        #   lo scarto.
+        #
+        #   La virgola DECIMALE non e' un elenco: "Bisoprololo 2,5 mg" e' una
+        #   voce sola. La prima versione della guardia le confondeva, e in
+        #   italiano la virgola decimale e' la notazione normale — «2,5 mg» e'
+        #   il dosaggio piu' comune del bisoprololo. Sul corpus la distinzione
+        #   vale poco (4 voci su 5 605, dal 98,77% al 98,84% di copertura); su
+        #   un testo scritto a mano vale tutto, ed e' cosi' che e' emersa:
+        #   costruendo la demo, non misurando il corpus.
+        alternativo = (None if _virgola_di_elenco(voce)
+                       else PATTERN_ING_NOME_E_DOSE.match(voce))
         if alternativo:
             candidato = PATTERN_FORMA_IN_CODA.sub(
                 "", alternativo.group("principio").strip()).strip()

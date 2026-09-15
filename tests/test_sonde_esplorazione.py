@@ -78,6 +78,40 @@ class TestSondaTerapiaIngresso(unittest.TestCase):
         self.assertEqual(nomi, [])
         self.assertEqual(len(scarti), 1)
 
+    def test_la_virgola_decimale_non_e_un_elenco(self):
+        """«Bisoprololo 2,5 mg» e' una voce sola, non due.
+
+        La guardia contro i blocchi in prosa scartava ogni voce con una virgola,
+        e in italiano la virgola decimale e' la notazione normale: 2,5 mg e' il
+        dosaggio piu' comune del bisoprololo. Il difetto e' emerso costruendo la
+        demo, scrivendo una prescrizione a mano — non misurando il corpus, dove
+        vale solo 4 voci su 5 605.
+        """
+        nomi, scarti, _ = sonda_terapia_ingresso("Bisoprololo 2,5 mg: 1 cp ;")
+
+        self.assertEqual(nomi, ["Bisoprololo"])
+        self.assertEqual(scarti, [])
+
+    def test_la_guardia_sull_elenco_resta_attiva(self):
+        """La correzione non deve riaprire il buco che la guardia chiudeva.
+
+        Se questo test si rompe, il parser ha ricominciato a estrarre UN farmaco
+        da un blocco che ne elenca quattro, perdendo gli altri tre in silenzio.
+        """
+        nomi, scarti, _ = sonda_terapia_ingresso(
+            "cardirene 75 mg, ansimar 400 mg, lucen 20 mg ;")
+
+        self.assertEqual(nomi, [])
+        self.assertEqual(len(scarti), 1)
+
+    def test_virgola_decimale_ed_elenco_insieme(self):
+        """Una virgola di elenco vince, anche se ce n'e' una decimale accanto."""
+        nomi, scarti, _ = sonda_terapia_ingresso(
+            "bisoprololo 2,5 mg, ramipril 5 mg ;")
+
+        self.assertEqual(nomi, [])
+        self.assertEqual(len(scarti), 1)
+
     def test_nome_con_punti_e_cifre_accettato(self):
         """'Furosemide l.f.m.' e 'Natecal d3' sono nomi legittimi."""
         nomi, _, _ = sonda_terapia_ingresso("Furosemide l.f.m.: 25 mg cpr. /die ; Natecal d3: 1 cpr /die ;")
