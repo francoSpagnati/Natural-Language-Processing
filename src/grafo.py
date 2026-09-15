@@ -258,6 +258,13 @@ def aggiungi_menzione(g: Graph, m: Menzione, n: int) -> URIRef:
     g.add((nodo, CT.stato, Literal(m.stato)))
     g.add((nodo, CT.soggetto, Literal(m.soggetto)))
     g.add((nodo, PROV.wasAttributedTo, agente(m)))
+    # COME la menzione e' stata prodotta, non solo da chi. E' la differenza fra
+    # `icd:termine_esatto` e `icd:generalizzazione_ambigua`, cioe' fra un codice
+    # certo e uno che qualcuno dovrebbe guardare: senza questo anello la traccia
+    # dice che il gazetteer ha assegnato I50.9, ma non che l'ha fatto su una
+    # corrispondenza esatta o su una generalizzazione.
+    if m.regola:
+        g.add((nodo, CT.regola, Literal(m.regola)))
     # Il testo della menzione NON entra nel grafo quando questo viene
     # serializzato su disco: e' testo clinico verbatim, e il grafo e' un
     # artefatto che puo' circolare. Chi ha i dati grezzi lo ritrova dagli offset.

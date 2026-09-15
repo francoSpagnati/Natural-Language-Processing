@@ -79,6 +79,12 @@ class Menzione:
     stato: str
     soggetto: str
     strutturata: bool   # letta da un parser di campo, non riconosciuta nel testo
+    # COME e' stata prodotta: `gazetteer:...`, `llm:deepseek...`,
+    # `icd:termine_esatto`, `icd:generalizzazione_ambigua`. E' l'anello che
+    # distingue un codice certo da uno incerto, e lo step 6 ha mostrato che
+    # la differenza conta: gli errori del gazetteer arrivano gia' codificati.
+    # Ha un valore predefinito perche' non tutti i chiamanti la conoscono.
+    regola: str = ""
 
 
 def _menzioni_di(stato: dict, sigla: str) -> list[Menzione]:
@@ -104,6 +110,7 @@ def _menzioni_di(stato: dict, sigla: str) -> list[Menzione]:
                     stato=voce["stato"],
                     soggetto=voce.get("soggetto", "paziente"),
                     strutturata=provenienza["pipeline"] == PIPELINE_STRUTTURATA,
+                    regola=provenienza.get("regola", ""),
                 )
             )
     return fuori

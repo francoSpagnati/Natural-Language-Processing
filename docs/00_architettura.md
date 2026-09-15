@@ -3,7 +3,155 @@
 Documento vivo, aggiornato **a ogni step**. Dà la visione d'insieme di come i
 componenti si collegano; il dettaglio di ogni step sta nel documento dedicato.
 
-**Ultimo step completato: 8 — Il filtro di sicurezza simbolico.**
+**Ultimo step completato: 9 — I tre ranker.**
+
+Il filtro dello step 8 dice che cosa *non* si può dare; il ranker dice che cosa
+conviene dare. E la verità di riferimento non è stata annotata: **era già nei
+dati.** La terapia alla dimissione è la decisione che un cardiologo ha davvero
+preso, su **841 ricoveri**, esatta e gratuita — la stessa proprietà che allo
+step 7 aveva permesso di misurare il parser deterministico contro il campo
+stesso.
+
+**Due numeri decidono la forma dello step**, entrambi misurati prima di
+scrivere una riga di ranker:
+
+| | |
+|---|---|
+| copiare la terapia d'ingresso azzecca | **63,6%** della terapia di dimissione |
+| prescrizioni di dimissione **non** cardiovascolari | **40,4%** |
+
+Il primo obbliga a separare due compiti: prevedere la terapia completa è quasi
+risolto senza ragionare, e il compito vero sono le **2 075 classi aggiunte**
+durante il ricovero. Il secondo dà al ranker simbolico un tetto intorno al 60%
+**per costruzione** — gastroprotettori, allopurinolo, levotiroxina e potassio
+non stanno in nessuna linea guida cardiologica. Non ho colmato quel divario
+inventando regole: sarebbe stata conoscenza di un modello travestita da linea
+guida.
+
+Sulle sole aggiunte, 244 ricoveri di prova:
+
+| ranker | ric@3 | ric@5 | ric@10 | MAP |
+|---|---|---|---|---|
+| continuità della terapia | 10,4% | 11,7% | 12,5% | 0,114 |
+| frequenza (non guarda il paziente) | 36,8% | 49,5% | 67,2% | 0,426 |
+| simbolico (27 indicazioni ESC citate) | 20,3% | 28,0% | 31,0% | 0,210 |
+| **ibrido** | **38,8%** | **53,1%** | **70,2%** | **0,456** |
+
+**Le linee guida cardiologiche, da sole, sono un ranker peggiore del sapere
+quali farmaci si prescrivono in questo reparto.** Tarando il peso delle
+indicazioni su una parte di validazione ritagliata dall'addestramento, l'ottimo
+è **piccolo ma non zero**: a peso nullo il richiamo@3 scende da 31,2% a 28,3%.
+
+**E il ranker con modello linguistico perde contro un contatore, in locale come
+in remoto.** Due modelli, stesso prompt, stessi 244 ricoveri:
+
+| | ric@5 sulle aggiunte | costo | tempo |
+|---|---|---|---|
+| `deepseek-v4.1-flash` (remoto) | 24,0% | 0,1425 $ | 22 min |
+| `qwen3.5:4b` (locale) | 19,7% | 0 $ | 1 h 34 min |
+| frequenza (un contatore) | **49,5%** | 0 $ | istantaneo |
+
+I 4,3 punti fra i due modelli sono sopra il rumore di fondo del progetto, ma
+**sono molto meno dei 25 che li separano entrambi da un contatore che non guarda
+nemmeno il paziente.** La ragione è misurata e conferma la tesi: l'**84,5%**
+delle prime cinque proposte di `deepseek` è cardiovascolare (82,6% per `qwen`),
+contro il 74,3% dell'ibrido. Propongono la cardiologia giusta — betabloccanti,
+ACE-inibitori, sartani, statine — e mancano il 40% che cardiologia non è. Su
+questo compito **sapere che cosa si prescrive in questo reparto vale più che
+sapere la medicina**, non perché la medicina conti meno, ma perché il bersaglio
+è una decisione reale e le decisioni reali contengono molto che le linee guida
+non regolano.
+
+Il vincolo all'insieme candidato separa i due modelli meglio delle metriche.
+Sul remoto è scattato 18 volte, e **18 su 18 sono codici ATC reali che il
+paziente sta già prendendo**: non allucina, ricopia dalla sezione «terapia in
+atto» del prompt. Sul locale è scattato 40 volte, e **15 occorrenze non esistono
+nel registro ATC dell'AIFA** — fra queste i sette suffissi consecutivi `R05AA`…
+`R05AG`. Il modello piccolo non sceglie: enumera l'albero ATC scorrendo le
+lettere. Per il modello remoto il vincolo è igiene; per quello locale è la cosa
+che lo rende utilizzabile.
+
+**Il filtro dello step 8 non esclude nulla, e la ragione è corretta.** Avevo
+scritto che i due step «si incastrano»; la misura lo ha smentito. I due parlano
+a livelli diversi dell'ATC — il filtro giudica un farmaco, il ranker propone una
+classe — le allergie codificate sono **57 in 841 ricoveri**, e le due regole che
+avrebbero potuto scattare erano già state declassate dal principio del fatto
+mancante. Il tentativo di far incontrare i livelli per prefisso ha prodotto
+subito un falso blocco esemplare: un paziente allergico all'**aspirina** a cui
+il medico aveva prescritto **clopidogrel**, che è l'alternativa corretta proprio
+per lui. È la terza volta nel progetto che una regola di sicurezza troppo larga
+nega una terapia invece di proteggere, e la forma giusta è di nuovo quella dello
+step 8: **avvertire, non vietare.** Dettagli in `09`.
+
+---
+
+**Step 9ter — La traccia: il grafo smette di essere un artefatto parallelo.**
+
+Una domanda ha messo in luce un difetto architetturale vero: **il knowledge
+graph dello step 7 non lo consumava nessuno.** Lo leggevano `interroga.py`, il
+suo notebook e i suoi test; il filtro, il ranker e la demo leggevano i JSON
+delle pipeline e lo scavalcavano. Un milione e duecentomila triple fuori dalla
+catena.
+
+Non era inutile — il numero che ha deciso il disegno dello step 8 (76,3% di
+asserzioni su un solo agente, 14,8% di ridondanza vera contro il 46,6%
+apparente) è uscito interrogando quel grafo. Ma era un artefatto **di analisi**,
+non uno strato del sistema.
+
+`src/traccia.py` lo rende uno strato. Ogni proposta si percorre all'indietro
+fino alle parole esatte del referto, **interrogando il grafo in SPARQL**:
+
+```
+C03DA  ← indicazione ESC 2021, classe I
+       ← condizione I50.9  (ICD-10 2019, Elenco Sistematico)
+       ← asserzione, 1 agente
+       ← menzione  A  Anamnesi 21–39  «scompenso cardiaco»
+          regola: gazetteer:scompenso cardiaco
+```
+
+L'anello `ct:regola` è nuovo, e dice **come** il codice è stato assegnato:
+`icd:termine_esatto` contro `icd:generalizzazione_ambigua` è la differenza fra
+un codice certo e uno da guardare — e lo step 6 aveva misurato che gli errori
+esclusivi della pipeline A arrivano già codificati, 9 su 9.
+
+**Filtro e ranker continuano a non passare dal grafo, e la ragione è misurata**:
+un'interrogazione SPARQL costa 12,43 ms contro 0,073 µs di una lettura da
+dizionario, e le 5 863 valutazioni dello step 8 diventerebbero 73 secondi di
+sole interrogazioni per ottenere gli stessi fatti. Gli strati che **decidono**
+leggono la proiezione compatta; lo strato che **spiega** interroga il grafo. Un
+test impedisce alle due proiezioni di divergere in silenzio — se lo facessero,
+la traccia mostrerebbe la provenienza di una raccomandazione decisa su altro.
+Dettagli in `09c`.
+
+---
+
+**Step 9bis — La demo, e i tre difetti che ha trovato.**
+
+`src/demo.py` prende un'anamnesi scritta a mano e le fa attraversare l'intera
+catena: riconoscimento, codifica ICD-10/ATC, filtro di sicurezza, ranker, con la
+linea guida citata accanto a ogni proposta. Gira **senza rete, senza chiavi e
+senza costo** — gazetteer e ConText — perché chi guarda deve poterla rieseguire.
+
+Il progetto era arrivato allo step 9 senza che nessuno avesse mai **usato** il
+contratto dati: ogni step lo produceva, lo misurava o lo confrontava. La demo è
+il primo consumatore, e ha trovato subito tre difetti che nessuna metrica
+mostrava:
+
+| difetto | effetto sul corpus |
+|---|---|
+| `Non riferisce X` registrato come **affermato** — `riferisce` è un terminatore e chiudeva la negazione aperta da `non` | 4 attribuzioni su 5 237 |
+| la pipeline A estraeva le allergie ma **non le codificava mai in ATC**, e il filtro confronta codici: lo strato di sicurezza era cieco | 46 allergeni ora codificati, **nessun numero dello step 8 si muove** |
+| la **virgola decimale** («Bisoprololo 2,5 mg») scartava la voce, confusa con la virgola di elenco dei blocchi in prosa | 5 536 → 5 540 voci, 98,77% → 98,84% |
+
+Presi uno per uno sono rumore in qualunque tabella. Guardati da dove il sistema
+viene usato sono una negazione letta al contrario, uno strato di sicurezza cieco
+e una prescrizione italiana normale che non viene letta. **Una metrica aggregata
+misura la media, e i difetti di un supporto alla decisione non stanno nella
+media.** Dettagli in `09b`.
+
+---
+
+**Step 8 — Il filtro di sicurezza simbolico.**
 
 Provato contro la terapia che i cardiologi hanno davvero prescritto — la
 verifica più severa disponibile senza dati nuovi: su **5 863 prescrizioni di
@@ -235,9 +383,13 @@ codice ICD.
 | 5 | [`05_pipeline_estrazione_C.md`](05_pipeline_estrazione_C.md) | ✅ completato |
 | 6 | [`06_confronto_pipeline.md`](06_confronto_pipeline.md) | ✅ completato |
 | 6bis | [`06b_riferimento_annotato.md`](06b_riferimento_annotato.md) | ✅ richiamo misurato su 25 referti |
-| 7 | `07_knowledge_graph.md` | ⬜ da fare |
-| 8 | `08_motore_fase1_filtro.md` | ⬜ da fare |
-| 9 | `09_motore_fase2_ranker.md` | ⬜ da fare |
+| 7 | [`07_knowledge_graph.md`](07_knowledge_graph.md) | ✅ grafo RDF con la provenienza |
+| 8 | [`08_filtro_sicurezza.md`](08_filtro_sicurezza.md) | ✅ filtro provato sulla terapia reale |
+| 9 | [`09_ranker.md`](09_ranker.md) | ✅ tre ranker misurati sulle decisioni dei medici |
+| 9bis | [`09b_demo.md`](09b_demo.md) | ✅ demo end-to-end su pazienti nuovi |
+| 9ter | [`09c_traccia.md`](09c_traccia.md) | ✅ traccia di provenienza interrogata sul grafo |
+| 7 | [`notebooks/03_knowledge_graph.ipynb`](../notebooks/03_knowledge_graph.ipynb) | ✅ interrogazioni SPARQL |
+| 9 | [`notebooks/04_ranker.ipynb`](../notebooks/04_ranker.ipynb) | ✅ analisi del confronto fra ranker |
 | 10 | `10_tool_mcp.md` | ⬜ da fare |
 | 11 | `11_valutazione.md` | ⬜ da fare |
 
