@@ -44,6 +44,8 @@ src/ranker.py             step 9   i tre ranker + due linee di base
 src/valuta_ranker.py      step 9   valutazione contro la terapia reale
 src/demo.py               step 9b  demo end-to-end
 src/traccia.py            step 9c  traccia di provenienza via SPARQL
+src/mcp_server.py         step 10  server MCP, 5 strumenti di sola lettura
+src/mcp_client_locale.py  step 10  host MCP locale con ollama
 src/llm_backend.py                 backend LLM intercambiabili, con cache
 src/privacy.py                     controllo che non esca testo clinico
 ```
@@ -59,6 +61,7 @@ python3 -m unittest discover -s tests -q     # 379 test, nessuno usa la rete
 python3 src/privacy.py                       # deve dire: frasi specifiche: 0
 python3 src/demo.py --esempio 1 --traccia    # un paziente dall'inizio alla fine
 python3 src/valuta_ranker.py                 # ranker senza LLM (gratis)
+python3 src/mcp_client_locale.py --strumenti # handshake col server MCP
 ```
 
 ## Numeri da non ricalcolare

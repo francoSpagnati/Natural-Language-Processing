@@ -85,6 +85,53 @@ step 8: **avvertire, non vietare.** Dettagli in `09`.
 
 ---
 
+**Step 10 — Il tool MCP: il sistema diventa uno strumento per un altro agente.**
+Cinque strumenti di sola lettura (`cardio_proponi_terapia`,
+`cardio_sostegno_del_concetto`, `cardio_verifica_sicurezza`,
+`cardio_cerca_codice`, `cardio_statistiche_corpus`), due client: Claude Code via
+`claude mcp add` e un host locale con ollama.
+
+La domanda che ha deciso il disegno non e' «quali strumenti esporre» ma **che
+cosa un modello non deve poter fare**. Due vincoli, entrambi fissati da un test:
+
+- **sola lettura**, dichiarata con `read_only_hint` perche' il client possa
+  verificarla. Lo step 8 e' simbolico per vincolo: un modello che potesse
+  toccare regole, grafo o insieme candidato scavalcherebbe l'unico strato che
+  decide che cosa e' ammissibile;
+- **il corpus non passa di qui.** Un client MCP puo' essere remoto — Claude Code
+  manda il risultato di uno strumento a un modello che gira altrove — quindi un
+  tool che leggesse un referto per `enc_oid` spedirebbe testo clinico fuori
+  dalla macchina senza violare nessuna riga di `.gitignore`. La difesa sta nella
+  **firma** degli strumenti, e un test verifica che nessuno accetti un
+  identificativo di ricovero.
+
+Il costo dice dove sta il collo di bottiglia: uno strumento risponde in
+0,007-1,6 s, un giro del modello ne costa 12-52. L'orchestrazione costa due
+ordini di grandezza piu' degli strumenti.
+
+**Quattro corse col modello locale, e tre hanno trovato difetti — due miei.**
+`qwen3.5:4b` sceglie lo strumento giusto quando la domanda e' in prosa, ma:
+
+1. ricevendo proposte con `fonte: null` ha **inventato la motivazione**, con un
+   «profilo nefroprotettivo» e `A02BC` (gastroprotettori) presentato come
+   «betabloccante selettivo». Causa: lo strumento restituiva il tasso di base del
+   reparto senza dire che non aveva estratto niente — la quarta ricorrenza del
+   **principio del fatto mancante**, e la prima a questa frontiera. Ora ogni
+   proposta dichiara il proprio `fondamento` e le estrazioni vuote sono
+   segnalate;
+2. passando il testo allo strumento **lo ha riscritto invertendo un fatto**:
+   «iperteso» e' diventato «Ipotensione». Il server non ha modo di accorgersene,
+   estrae correttamente dalla parafrasi, e produce offset di provenienza che
+   puntano a parole che nessuno ha scritto. **La provenienza vale quanto il testo
+   che arriva allo strumento**, e questo resta il limite non risolto dello step:
+   la difesa e' un'istruzione, quindi e' debole.
+
+Dopo le correzioni, sullo stesso testo, il modello **dichiara di non avere i
+fatti e chiede quelli che gli servono** invece di fabbricare una raccomandazione.
+Il merito non e' suo: e' del campo `fatti_mancanti`. Un modello conversazionale
+riempie i vuoti che gli si lasciano, e l'unico modo di impedirglielo e' non
+lasciarne. Dettagli in `10`.
+
 **Step 9ter — La traccia: il grafo smette di essere un artefatto parallelo.**
 
 Una domanda ha messo in luce un difetto architetturale vero: **il knowledge
@@ -390,7 +437,7 @@ codice ICD.
 | 9ter | [`09c_traccia.md`](09c_traccia.md) | ✅ traccia di provenienza interrogata sul grafo |
 | 7 | [`notebooks/03_knowledge_graph.ipynb`](../notebooks/03_knowledge_graph.ipynb) | ✅ interrogazioni SPARQL |
 | 9 | [`notebooks/04_ranker.ipynb`](../notebooks/04_ranker.ipynb) | ✅ analisi del confronto fra ranker |
-| 10 | `10_tool_mcp.md` | ⬜ da fare |
+| 10 | [`10_tool_mcp.md`](10_tool_mcp.md) | ✅ server MCP di sola lettura, due client |
 | 11 | `11_valutazione.md` | ⬜ da fare |
 
 ## Architettura di destinazione

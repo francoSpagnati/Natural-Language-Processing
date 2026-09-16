@@ -58,10 +58,23 @@ torch>=2.0
 #   per citare le fonti. Sono tutti forniti da rdflib.namespace.
 rdflib>=7.0
 
+# --- Step 10: il server MCP --------------------------------------------------
+# SDK ufficiale del Model Context Protocol. Serve sia al server (`MCPServer`,
+# che in mcp 1.x si chiamava FastMCP) sia al client locale (`ClientSession` e
+# `stdio_client`), quindi una dipendenza sola copre le due meta' dello step.
+#   Attenzione alla versione: da mcp 2.0 `from mcp.server.fastmcp import FastMCP`
+#   non esiste piu' ed e' diventato `from mcp.server.mcpserver import MCPServer`.
+#   Gran parte della documentazione in giro e' ancora ferma a 1.x.
+mcp>=2.0
+
+# Il client locale parla con ollama, che espone le chiamate a strumenti nel
+# formato di OpenAI. La traduzione fra i due dialetti sta tutta in
+# `_schema_per_ollama`, in un punto solo.
+ollama>=0.4
+
 # --- Step successivi (da scommentare quando lo step viene implementato) -------
 # networkx         # step 7bis: conversione dei sottografi per la visualizzazione
 # pyvis            # step 7bis: resa HTML interattiva dei sottografi
 # matplotlib       # step 11: figure statiche e tabelle dei risultati
-# mcp              # step 10: SDK ufficiale, FastMCP
 # scikit-learn     # step 6/11: metriche di accordo e valutazione
 # pandas           # step 11: tabelle dei risultati
