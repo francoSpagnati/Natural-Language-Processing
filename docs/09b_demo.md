@@ -258,14 +258,28 @@ progetto: **nessuna finestra di 40 caratteri di un file versionato può comparir
 in meno di cinque referti.**
 
 Il test che la verifica ha subito trovato una violazione nella prima stesura:
-
-```
-'ibrillazione atriale permanente. Iperten'  →  1 referto
-```
+una finestra di 40 caratteri a cavallo di due frasi — *«…atriale permanente.
+Iperten…»* — presente in **un solo referto**. La riporto qui accorciata di
+proposito: scriverla per intero la rimetterebbe nel repository, ed è il motivo
+per cui questo documento ha fallito il controllo una seconda volta dopo che il
+codice l'aveva già superato.
 
 Scrivendo testo sintetico «con la grammatica del corpus» avevo ricostruito per
 caso una giunzione di frasi che esiste in un referto solo. Gli esempi sono stati
 riscritti finché il conteggio non è andato a zero.
+
+### Il controllo passava perché non guardava
+
+La seconda violazione non è stata trovata subito, e la ragione è un difetto del
+controllo, non della disciplina: `file_versionati` chiamava `git ls-files`, che
+elenca **l'indice**. Un file nuovo e non ancora aggiunto non veniva letto, quindi
+il controllo passava *per assenza* — e la violazione entrava al primo commit.
+
+Ora l'elenco è `git ls-files --cached --others --exclude-standard`: i file
+tracciati più quelli non tracciati che `.gitignore` non esclude, cioè
+esattamente quelli che un `git add` porterebbe dentro. Un controllo di sicurezza
+che tace su ciò che non ha guardato è peggio di nessun controllo, perché produce
+la stessa riga di esito.
 
 La soglia e la lunghezza di finestra il test **le importa da `src/privacy.py`**
 invece di ridefinirle: due copie della stessa regola possono divergere, e quella

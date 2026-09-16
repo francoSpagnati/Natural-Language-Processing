@@ -81,8 +81,20 @@ def vocabolario_pubblico(radice: Path = RADICE) -> str:
 
 
 def file_versionati(radice: Path = RADICE) -> list[Path]:
-    elenco = subprocess.run(["git", "ls-files"], cwd=radice,
-                            capture_output=True, text=True, check=True).stdout.split()
+    """I file che finirebbero in un commit, non solo quelli gia' tracciati.
+
+    `git ls-files` da solo elenca l'indice, quindi **un file nuovo non ancora
+    aggiunto non viene controllato**: il controllo passa per assenza, e la
+    violazione entra nel repository al primo commit. E' successo davvero — una
+    frase presente in un solo referto e' arrivata in `docs/09b_demo.md` perche'
+    il controllo era stato lanciato quando il file era ancora non tracciato.
+
+    `--others --exclude-standard` aggiunge i file non tracciati che `.gitignore`
+    non esclude, cioe' esattamente quelli che un `git add` porterebbe dentro.
+    """
+    elenco = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        cwd=radice, capture_output=True, text=True, check=True).stdout.split()
     return [radice / f for f in elenco if Path(f).suffix in ESTENSIONI]
 
 
