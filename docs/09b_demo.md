@@ -1,5 +1,8 @@
 # Step 9bis — La demo: un paziente nuovo, dall'anamnesi alla proposta
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/demo.py --esempio 1`
+
 Le metriche degli step 6, 6bis e 9 dicono *quanto bene* il sistema funziona.
 Questo documento descrive il modo di vedere **che cosa fa**, su un paziente che
 nel dataset non esiste: si scrive un'anamnesi e una terapia in atto, e il

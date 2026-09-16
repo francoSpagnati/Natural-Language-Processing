@@ -1,5 +1,8 @@
 # Step 10 — Il tool MCP: il sistema diventa uno strumento per un altro agente
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/mcp_client_locale.py --strumenti`
+
 Fino allo step 9 il sistema si usa da riga di comando: chi lo interroga sa già
 che cosa chiedere. Qui diventa uno **strumento che un modello conversazionale può
 chiamare** — ed è il primo punto del progetto in cui un modello linguistico sta
@@ -306,21 +309,92 @@ la ragione è registrata in
 
 ---
 
-## 7. Che cosa lo step 10 lascia aperto
+## 7. La valutazione: dieci domande scritte prima
 
-- **La parafrasi del testo resta il limite non risolto.** Il server non può
-  sapere se l'anamnesi che riceve è quella del clinico: la corsa 3 l'ha
-  invertita («iperteso» → «Ipotensione») e nessun controllo lato server può
-  accorgersene. La difesa è un'istruzione, quindi è debole. Una difesa vera
+Quattro corse non sono una misura. Qui le domande sono scritte **prima** di
+eseguirle — [`src/valuta_mcp.py`](../src/valuta_mcp.py) — ciascuna con lo
+strumento atteso e se un testo clinico va passato. Coprono i cinque strumenti, i
+due stili di scrittura (prosa e telegrafico), due casi di sicurezza e una
+domanda fuori ambito. Si conta: strumento giusto al primo colpo, testo passato
+intatto, risposta arrivata. Modello `qwen3.5:4b`, zero denaro.
+
+### Il controllo a valle, prima della misura
+
+Il server non può sapere se l'anamnesi che riceve è quella del clinico; il
+client sì, perché ha il messaggio dell'utente. `testo_fedele` confronta i due
+testi normalizzati — minuscole, spazi, punteggiatura via — e se il testo passato
+non è contenuto in quello dell'utente stampa `!! anamnesi PARAFRASATA` e avvisa
+il modello di ripetere la chiamata copiando alla lettera. Non impedisce la
+parafrasi: la rende **visibile e contabile**. È la colonna «intatto».
+
+### Due corse, perché la prima ha trovato un difetto mio
+
+| | corsa 1 | corsa 2 |
+|---|---|---|
+| strumento giusto | 9/10 | 9/10 |
+| testo intatto | 5/5 | **6/6** |
+| risposta arrivata | 10/10 | 10/10 |
+| parafrasi rilevate | 0 | 0 |
+
+**Corsa 1.** Fallisce la domanda 1 — la prosa piena, il caso «favorevole» — con
+**zero strumenti chiamati**. Il modello ha letto la mia istruzione «passa
+l'anamnesi ALLA LETTERA» come un obbligo dell'*utente* e gli ha chiesto di
+riscrivere il testo che aveva già. L'istruzione contro la parafrasi ha prodotto
+un errore diverso. Riformulata: *chi* copia (il modello) e *da dove* (dal
+messaggio dell'utente, che c'è già).
+
+**Corsa 2.** La domanda 1 passa. Fallisce la domanda 2, quella telegrafica, in
+un modo che vale più del successo: il modello **decide da sé** che cosa
+aggiungere — bisoprololo e spironolattone, clinicamente sensati — e chiede al
+filtro di sicurezza se siano ammessi, passando **i nomi**:
+
+```
+-> cardio_verifica_sicurezza(farmaco_atc='Bisoprololo', ...)
+-> cardio_verifica_sicurezza(farmaco_atc='Spironolattone', ...)
+```
+
+Il filtro confronta codici. Una stringa che non è un codice non incontra nessuna
+regola, e la risposta era **`ammesso`** — a vuoto. Un falso permesso, che per
+uno strato di sicurezza è l'errore peggiore: dice sì a ciò che non ha capito.
+
+Ora `cardio_verifica_sicurezza` rifiuta tutto ciò che non è un codice ATC del
+registro AIFA, senza emettere verdetto, e rimanda a `cardio_cerca_codice`. Un
+test lo fissa su nomi, stringhe vuote e codici della forma giusta ma
+inesistenti. È la quinta ricorrenza del principio del fatto mancante, e la
+seconda a questa frontiera.
+
+Rieseguita da sola dopo la correzione, la domanda 2 è passata — strumento
+giusto, testo intatto, due giri. Non lo conto come effetto della correzione: il
+modello a temperatura zero non è deterministico fra una corsa e l'altra, e una
+prova sola non distingue la correzione dalla variabilità. Lo conto come ciò che
+è: un caso in più in cui il percorso giusto è stato preso.
+
+### Che cosa dice la misura
+
+Nove strumenti giusti su dieci in entrambe le corse, con errori **diversi**: la
+scelta dello strumento è sensibile alla formulazione e alla corsa, non a un
+difetto fisso.
+**Zero parafrasi in undici passaggi di testo**, con il controllo che le avrebbe
+contate: il difetto della corsa 3 (§3) esiste, ma sotto l'istruzione corretta
+non si è ripresentato — undici casi non bastano a dire quanto sia raro, bastano
+a dire che non è la norma. La domanda fuori ambito non ha chiamato nulla, e la
+domanda 9 ha ricevuto l'avvertimento sull'allergia. Tempo per domanda: da 9 s a
+226 s, mediana intorno ai 40.
+
+---
+
+## 8. Che cosa lo step 10 lascia aperto
+
+- **La parafrasi è visibile, non impedita.** Il controllo a valle del §7 la
+  conta e avvisa il modello; non può impedirgli di riscrivere. Una difesa vera
   richiederebbe che il testo entrasse nel sistema **senza passare dal modello**
-  — per esempio un `resource` MCP che il client apre da file, con il modello che
-  ne riceve solo l'identificatore. È un disegno diverso, ed è la prima cosa da
-  fare se questo server dovesse servire a qualcosa più di una dimostrazione.
-- **Quattro corse non sono una valutazione.** Servirebbero dieci domande con
-  l'esito atteso, e il conteggio di quante volte il modello sceglie lo strumento
-  giusto e passa il testo intatto. La skill `mcp-builder` descrive proprio questo
-  (Fase 4), e si può fare a costo zero con ollama. Le quattro corse qui sono
-  aneddoti utili, non una misura, e la differenza va detta.
+  — un `resource` MCP che il client apre da file, con il modello che ne riceve
+  solo l'identificatore. È un disegno diverso, ed è la prima cosa da fare se
+  questo server dovesse servire a qualcosa più di una dimostrazione.
+- **Dieci domande sono una misura piccola.** Bastano a distinguere un difetto
+  sistematico da uno occasionale, non a stimare quanto sia raro. Cento domande
+  con la stessa forma costerebbero una notte di CPU, e la lista è già scritta
+  per essere estesa.
 - **Il server non espone il corpus, per scelta.** Se servisse — per esempio per
   mostrare un caso reale al docente — la strada corretta non è aggiungere un
   tool, ma un secondo server che accetti **solo** il client locale, dove il

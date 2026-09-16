@@ -1,5 +1,8 @@
 # Step 9 — I tre ranker: che cosa proporre, e in che ordine
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/valuta_ranker.py` (senza LLM, gratis)
+
 Il filtro dello step 8 dice che cosa **non** si può dare. Su 5 863 prescrizioni
 reali ne ha vietate quattro, quindi da solo lascia passare quasi tutto: è una
 rete di sicurezza, non un suggeritore. Lo step 9 è lo strato che ordina ciò che
@@ -288,11 +291,12 @@ Tre letture, in ordine di importanza:
    piccoli — da 2 a 3,6 punti, cioè al limite del pavimento di rumore — ma sono
    **coerenti**, e cinque margini nella stessa direzione dicono più di uno solo.
 
-   > **Rivisto allo step 11.** Con un bootstrap su 1 000 ricampionamenti dei
-   > ricoveri, la differenza ibrido − frequenza sta in **[−0,2%, +7,5%]** sul
-   > richiamo@5 e in [−2,0%, +1,7%] su hF: **include lo zero, quindi non è
-   > distinguibile.** La direzione resta quella, il campione non basta a
-   > concluderlo. Vedi [`11_valutazione.md`](11_valutazione.md) §6.
+   > **Rivisto allo step 11.** Con un bootstrap su questi 244 ricoveri la
+   > differenza ibrido − frequenza sta in [−0,2%, +7,5%]; con la **validazione
+   > incrociata su tutti gli 841** scende a **48,5% contro 47,5%**, intervallo
+   > **[−1,5%, +3,4%]**. Un punto, dentro il rumore, attorno allo zero: i due
+   > ranker sono indistinguibili. Questa divisione singola era un campione
+   > favorevole a chi impara. Vedi [`11_valutazione.md`](11_valutazione.md) §6–7.
 
 2. **Il simbolico da solo perde contro un ranker che non guarda il paziente.**
    28,0% contro 49,5% a k=5. Non è sorprendente dato il tetto del §4, ma va
@@ -620,5 +624,6 @@ frattempo può essere cambiato.
   restano i tre fatti che più limitano la precisione clinica delle regole.
 - **La precisione non è interpretabile** come misura di correttezza, per la
   ragione del §1: il riferimento è una decisione giusta, non tutte.
-- **La metrica gerarchica** è rimandata allo step 11, dove il §7 mostra che vale
-  da 4 a 7 punti.
+- **La metrica gerarchica** è misurata allo step 11: i 4–7 punti che il §7
+  anticipava si sono rivelati un effetto del denominatore, e il bootstrap dello
+  stesso step mette un intervallo dietro ogni differenza di questo documento.

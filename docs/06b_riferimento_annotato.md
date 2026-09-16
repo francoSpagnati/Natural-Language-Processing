@@ -1,5 +1,8 @@
 # Step 6bis — Un riferimento annotato a mano
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/riferimento.py`
+
 Fino a qui il progetto non ha mai misurato il **richiamo**. Precisione sì, su
 campioni aggiudicati; richiamo mai. La ragione è semplice e va detta: per sapere
 quante condizioni una pipeline ha *mancato* bisogna sapere quante ce n'erano, e
@@ -492,7 +495,6 @@ sul costo reale per record di queste due corse, e il budget residuo è inferiore
 insieme, e il documento le tiene entrambe: i numeri dello step 6 descrivono la
 corsa senza la 7bis, e il § 8.3 descrive di quanto quella corsa sottostimi la
 pipeline B sui farmaci narrati.
-
 
 ---
 

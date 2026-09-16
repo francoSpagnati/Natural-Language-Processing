@@ -61,8 +61,9 @@ sys.path.insert(0, str(RADICE / "src"))
 from ranker import (  # noqa: E402
     Caso, Raccomandazione, Ranker, RankerContinuita, RankerFrequenza,
     RankerIbrido, RankerSimbolico, applica_filtro, insieme_candidato, nomi_atc,
+    pieghe,
 )
-from valuta_ranker import carica_casi, dividi  # noqa: E402
+from valuta_ranker import carica_casi, dividi, misura  # noqa: E402
 
 # I livelli dell'ATC, in caratteri di prefisso, come li definisce la
 # classificazione e come li porta il registro AIFA: C / C07 / C07A / C07AB.
@@ -329,6 +330,73 @@ def bootstrap(esiti: Sequence[Esito], k: int, giri: int = 1000,
     }
 
 
+def proiezioni(r: Ranker, casi: Sequence[Caso], candidati: Sequence[str]
+               ) -> tuple[dict[int, list[str]], dict[int, frozenset[str]]]:
+    """Ordini e bersagli del compito 2 per un ranker gia' addestrato."""
+    ordini: dict[int, list[str]] = {}
+    bersagli: dict[int, frozenset[str]] = {}
+    for caso in casi:
+        ammessi = applica_filtro(caso, candidati)
+        codici = [x.classe_atc for x in r.ordina(caso, ammessi)]
+        ordini[caso.enc_oid] = [c for c in codici if c not in caso.terapia_ingresso]
+        bersagli[caso.enc_oid] = caso.aggiunte & set(ammessi)
+    return ordini, bersagli
+
+
+def esito_da_proiezioni(sigla: str, nome: str, ordini, bersagli, k: int) -> Esito:
+    return Esito(
+        sigla, nome,
+        {n: richiamo_per_livello(ordini, bersagli, n, k) for n in LIVELLI},
+        misure_gerarchiche(ordini, bersagli, k),
+        errori_di_famiglia(ordini, bersagli, k),
+        ordini, bersagli,
+    )
+
+
+def valuta_incrociata(fabbriche: Sequence, casi: Sequence[Caso], quante: int,
+                      k: int) -> list[Esito]:
+    """Validazione incrociata a `quante` pieghe.
+
+    Per ogni piega: l'insieme candidato e i ranker si costruiscono **solo**
+    sulle altre, e la piega e' misurata come prova. Ogni ricovero contribuisce
+    una volta sola, e nessun ranker vede mai in addestramento il paziente su cui
+    viene misurato. Le proiezioni delle pieghe si concatenano e le metriche si
+    calcolano sull'unione, come se fosse un'unica prova da 841 ricoveri.
+
+    Il prezzo e' che l'insieme candidato cambia da piega a piega — e' costruito
+    sull'addestramento di ciascuna — quindi il tetto non e' unico. E' corretto:
+    e' il prezzo che paga qualunque sistema che debba proporre a un paziente
+    nuovo classi che ha visto solo in altri pazienti.
+
+    `fabbriche` sono funzioni senza argomenti che restituiscono un ranker
+    nuovo: riaddestrare lo stesso oggetto cinque volte lascerebbe residui.
+    """
+    divisione = pieghe(casi, quante)
+    accumulo: dict[str, tuple[str, dict, dict]] = {}
+    for i, prova in enumerate(divisione):
+        addestramento = [c for j, p in enumerate(divisione) if j != i for c in p]
+        candidati = insieme_candidato(addestramento)
+        for fabbrica in fabbriche:
+            r = fabbrica()
+            r.addestra(addestramento)
+            ordini, bersagli = proiezioni(r, prova, candidati)
+            nome, o, b = accumulo.setdefault(r.sigla, (r.nome, {}, {}))
+            o.update(ordini)
+            b.update(bersagli)
+    return [esito_da_proiezioni(sigla, nome, o, b, k)
+            for sigla, (nome, o, b) in accumulo.items()]
+
+
+def stampa_step9(esiti: Sequence[Esito]) -> None:
+    """Le metriche dello step 9 sulle stesse proiezioni: richiamo@k e MAP."""
+    print("\nMETRICHE DELLO STEP 9 SULLE STESSE PROIEZIONI (aggiunte)")
+    print(f"{'ranker':36}{'ric@3':>8}{'ric@5':>8}{'ric@10':>8}{'prec@5':>8}{'MAP':>8}")
+    for e in esiti:
+        m = misura(e.ordini, e.bersagli)
+        print(f"{e.nome[:35]:36}{m['richiamo@3']:7.1%} {m['richiamo@5']:7.1%} "
+              f"{m['richiamo@10']:7.1%} {m['precisione@5']:7.1%} {m['MAP']:7.3f}")
+
+
 def stampa(esiti: Sequence[Esito], k: int) -> None:
     print(f"\nRICHIAMO@{k} SULLE AGGIUNTE, PER LIVELLO ATC")
     print(f"{'ranker':36}" + "".join(f"{NOMI_LIVELLO[n][:12]:>13}" for n in LIVELLI))
@@ -377,11 +445,35 @@ def main() -> None:
                                 "(gratis se la corsa dello step 9 e' gia' stata "
                                 "fatta con lo stesso modello).")
     argomenti.add_argument("--modello", default=None)
+    argomenti.add_argument("--pieghe", type=int, default=0,
+                           help="Validazione incrociata a K pieghe su tutti i casi "
+                                "invece della divisione singola. Il ranker LLM e' "
+                                "escluso: servirebbero chiamate nuove.")
     argomenti.add_argument("--bootstrap", type=int, default=1000,
                            help="Giri di bootstrap sui ricoveri (0 per saltarlo).")
     opzioni = argomenti.parse_args()
 
     casi = carica_casi(opzioni.cartella_b)
+
+    if opzioni.pieghe:
+        fabbriche = [RankerCasuale, RankerContinuita, RankerFrequenza,
+                     RankerSimbolico, RankerIbrido]
+        print(f"Casi: {len(casi)}, validazione incrociata a {opzioni.pieghe} "
+              f"pieghe: ogni ricovero misurato una volta come prova.")
+        esiti = valuta_incrociata(fabbriche, casi, opzioni.pieghe, opzioni.k)
+        stampa_step9(esiti)
+        stampa(esiti, opzioni.k)
+        incertezza = None
+        if opzioni.bootstrap:
+            print(f"\nBootstrap su {opzioni.bootstrap} ricampionamenti dei ricoveri...")
+            incertezza = bootstrap(esiti, opzioni.k, opzioni.bootstrap,
+                                   coppie=[("ibr", "freq"), ("ibr", "simb"),
+                                           ("freq", "simb")])
+            _stampa_incertezza(esiti, incertezza, opzioni.k)
+        _scrivi(opzioni.uscita, esiti, opzioni.k, incertezza,
+                {"pieghe": opzioni.pieghe, "casi": len(casi)})
+        return
+
     addestramento, prova = dividi(casi, opzioni.quota_prova)
     candidati = insieme_candidato(addestramento)
     print(f"Casi: {len(casi)} (addestramento {len(addestramento)}, "
@@ -426,31 +518,40 @@ def main() -> None:
         print(f"\nBootstrap su {opzioni.bootstrap} ricampionamenti dei ricoveri...")
         incertezza = bootstrap(esiti, opzioni.k, opzioni.bootstrap,
                                coppie=coppie)
-        print(f"\nINTERVALLI AL 95% (richiamo@{opzioni.k} esatto, e hF)")
-        print(f"{'ranker':36}{'ric esatto':>22}{'hF':>22}")
-        for e in esiti:
-            i = incertezza["per_ranker"][e.sigla]
-            r5 = i[f"ric{LIVELLI[-1]}"]
-            hf = i["hF"]
-            print(f"{e.nome[:35]:36}"
-                  f"{f'[{r5[0]:.1%}, {r5[1]:.1%}]':>22}"
-                  f"{f'[{hf[0]:.1%}, {hf[1]:.1%}]':>22}")
-        print("\nDIFFERENZE APPAIATE (stesso campione a ogni giro)")
-        for coppia, misure in incertezza["differenze_appaiate"].items():
-            for chiave, (basso, alto) in misure.items():
-                verdetto = ("include lo zero: NON distinguibile"
-                            if basso <= 0 <= alto else "esclude lo zero")
-                print(f"  {coppia:14} {chiave:6} "
-                      f"[{basso:+.1%}, {alto:+.1%}] — {verdetto}")
+        _stampa_incertezza(esiti, incertezza, opzioni.k)
+    _scrivi(opzioni.uscita, esiti, opzioni.k, incertezza,
+            {"casi_di_prova": len(prova), "classi_candidate": len(candidati)})
 
-    opzioni.uscita.parent.mkdir(parents=True, exist_ok=True)
-    opzioni.uscita.write_text(json.dumps({
-        "k": opzioni.k,
-        "casi_di_prova": len(prova),
-        "classi_candidate": len(candidati),
+
+def _stampa_incertezza(esiti: Sequence[Esito], incertezza: dict, k: int) -> None:
+    print(f"\nINTERVALLI AL 95% (richiamo@{k} esatto, e hF)")
+    print(f"{'ranker':36}{'ric esatto':>22}{'hF':>22}")
+    for e in esiti:
+        i = incertezza["per_ranker"][e.sigla]
+        r5 = i[f"ric{LIVELLI[-1]}"]
+        hf = i["hF"]
+        print(f"{e.nome[:35]:36}"
+              f"{f'[{r5[0]:.1%}, {r5[1]:.1%}]':>22}"
+              f"{f'[{hf[0]:.1%}, {hf[1]:.1%}]':>22}")
+    print("\nDIFFERENZE APPAIATE (stesso campione a ogni giro)")
+    for coppia, misure in incertezza["differenze_appaiate"].items():
+        for chiave, (basso, alto) in misure.items():
+            verdetto = ("include lo zero: NON distinguibile"
+                        if basso <= 0 <= alto else "esclude lo zero")
+            print(f"  {coppia:14} {chiave:6} "
+                  f"[{basso:+.1%}, {alto:+.1%}] — {verdetto}")
+
+
+def _scrivi(uscita: Path, esiti: Sequence[Esito], k: int,
+            incertezza: dict | None, intestazione: dict) -> None:
+    uscita.parent.mkdir(parents=True, exist_ok=True)
+    uscita.write_text(json.dumps({
+        "k": k,
+        **intestazione,
         "livelli": {str(n): NOMI_LIVELLO[n] for n in LIVELLI},
         "risultati": [{
             "sigla": e.sigla, "nome": e.nome,
+            "step9": misura(e.ordini, e.bersagli),
             "richiamo_per_livello": {str(n): v for n, v in e.richiamo.items()},
             "gerarchiche": e.gerarchiche,
             "errori_di_famiglia": {
@@ -460,8 +561,7 @@ def main() -> None:
         } for e in esiti],
         **({"incertezza": incertezza} if incertezza else {}),
     }, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"\nDettaglio in {opzioni.uscita}")
-
+    print(f"\nDettaglio in {uscita}")
 
 if __name__ == "__main__":
     main()

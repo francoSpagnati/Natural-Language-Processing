@@ -1,5 +1,8 @@
 # Step 5 — Pipeline C: NER + Entity Linking
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/silver_labels.py && python3 src/ner_train.py && python3 src/extract_c.py`
+
 Terza e ultima pipeline di estrazione. La domanda a cui risponde è precisa: **un
 modello a token addestrato sulle annotazioni della pipeline A riesce a trovare
 menzioni che il gazetteer non trova?** Se la risposta fosse no, la pipeline C

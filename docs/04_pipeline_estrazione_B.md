@@ -1,5 +1,8 @@
 # Step 4 — Pipeline B: estrazione con un modello linguistico
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/extract_b.py` (la corsa completa è in cache: rieseguirla non chiama il modello)
+
 Seconda delle tre pipeline di estrazione. Dove la pipeline A riconosce solo ciò
 che è già nei vocabolari chiusi, questa legge il referto come lo leggerebbe una
 persona: trova le menzioni, ne interpreta il contesto e scioglie le
@@ -1370,7 +1373,6 @@ lasciarlo scritto: per misurare questa regola come si deve servirebbe un
 riferimento che annoti il *fatto* oltre al farmaco. Non è stato rifatto, perché
 rifarlo dopo aver visto i risultati è esattamente il vizio che il § 7 di `06b`
 descrive.
-
 
 ### La corsa finale, e un guasto che ha insegnato qualcosa
 

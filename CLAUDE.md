@@ -46,6 +46,7 @@ src/demo.py               step 9b  demo end-to-end
 src/traccia.py            step 9c  traccia di provenienza via SPARQL
 src/mcp_server.py         step 10  server MCP, 5 strumenti di sola lettura
 src/mcp_client_locale.py  step 10  host MCP locale con ollama
+src/valuta_gerarchica.py  step 11  metrica gerarchica, controllo casuale, bootstrap
 src/llm_backend.py                 backend LLM intercambiabili, con cache
 src/privacy.py                     controllo che non esca testo clinico
 ```
@@ -57,10 +58,11 @@ base scaricabili con `src/fetch_external_kb.py` (manifest citabile in `kb/`).
 ## Comandi
 
 ```bash
-python3 -m unittest discover -s tests -q     # 379 test, nessuno usa la rete
+python3 -m unittest discover -s tests -q     # 446 test, nessuno usa la rete
 python3 src/privacy.py                       # deve dire: frasi specifiche: 0
 python3 src/demo.py --esempio 1 --traccia    # un paziente dall'inizio alla fine
 python3 src/valuta_ranker.py                 # ranker senza LLM (gratis)
+python3 src/valuta_gerarchica.py             # step 11 con bootstrap (gratis)
 python3 src/mcp_client_locale.py --strumenti # handshake col server MCP
 ```
 
@@ -70,7 +72,8 @@ python3 src/mcp_client_locale.py --strumenti # handshake col server MCP
 |---|---|
 | referti | 1 000, di cui **841** con terapia di dimissione codificata |
 | linea di base: copiare la terapia d'ingresso | **63,6%** della dimissione |
-| miglior ranker (ibrido), richiamo@5 sulle aggiunte | **53,1%** |
+| ibrido / frequenza, richiamo@5 sulle aggiunte, 5 pieghe su 841 | **48,5% / 47,5%**, differenza [−1,5%, +3,4%]: **indistinguibili** |
+| modello linguistico contro frequenza (divisione singola) | da −20 a −31 punti, distinguibile |
 | tetto di dominio: prescrizioni non cardiologiche | **40,4%** |
 | filtro step 8 su 5 863 prescrizioni | 91,3% ammesse, 8,6% da verificare, 4 vietate |
 | interrogazione SPARQL contro lettura da dizionario | 12,43 ms contro 0,073 µs |

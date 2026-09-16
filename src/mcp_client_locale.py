@@ -49,10 +49,30 @@ ISTRUZIONI = (
     "memoria, perche' le tue risposte non sono verificabili e le loro si'. "
     "Quando proponi una terapia riporta la fonte che lo strumento ti da'. "
     "Non inventare codici ATC o ICD: se ti serve un codice, cercalo. "
-    "Quando passi l'anamnesi a uno strumento, copiala alla lettera: "
-    "riscriverla cambia i fatti. Misurato su questo sistema, una parafrasi ha "
-    "trasformato «iperteso» in «ipotensione»."
+    "Il testo clinico e' gia' nel messaggio dell'utente: non chiederglielo di "
+    "nuovo. Quando TU lo passi a uno strumento, copialo dal messaggio "
+    "carattere per carattere, senza riassumerlo: una riscrittura cambia i "
+    "fatti (misurato: «iperteso» e' diventato «ipotensione»)."
 )
+
+
+def _normalizza(testo: str) -> str:
+    """Minuscole, spazi compressi, punteggiatura via: cio' che resta e' il contenuto."""
+    import re
+
+    return re.sub(r"[^\w]+", " ", testo.lower()).strip()
+
+
+def testo_fedele(passato: str, originale: str) -> bool:
+    """Il testo passato allo strumento e' un pezzo di quello dell'utente?
+
+    E' il controllo a valle contro la parafrasi. Non puo' impedirla — il modello
+    scrive quello che vuole — ma la rende **visibile**: misurato, una parafrasi
+    ha trasformato «iperteso» in «Ipotensione», e senza questo controllo nessuno
+    se ne sarebbe accorto. Il confronto e' su testo normalizzato, cosi' una
+    maiuscola o una virgola in piu' non contano come riscrittura.
+    """
+    return _normalizza(passato) in _normalizza(originale)
 
 
 def _compatta(argomenti: dict, larghezza: int = 38) -> str:
@@ -102,6 +122,7 @@ async def conversa(domanda: str, modello: str = MODELLO,
 
     chiamate: list[dict] = []
     gia_viste: set[tuple[str, str]] = set()
+    secondi_totali = 0.0
     async with stdio_client(parametri) as (lettura, scrittura):
         async with ClientSession(lettura, scrittura) as sessione:
             await sessione.initialize()
@@ -123,6 +144,7 @@ async def conversa(domanda: str, modello: str = MODELLO,
                 risposta = ollama.chat(model=modello, messages=messaggi,
                                        tools=strumenti, think=False)
                 secondi = time.time() - avvio
+                secondi_totali += secondi
                 messaggio = risposta["message"]
                 messaggi.append(messaggio)
                 richieste = messaggio.get("tool_calls") or []
@@ -132,7 +154,8 @@ async def conversa(domanda: str, modello: str = MODELLO,
 
                 if not richieste:
                     return {"risposta": messaggio.get("content", ""),
-                            "chiamate": chiamate, "giri": giro + 1}
+                            "chiamate": chiamate, "giri": giro + 1,
+                            "secondi": secondi_totali}
 
                 for richiesta in richieste:
                     nome = richiesta["function"]["name"]
@@ -149,6 +172,15 @@ async def conversa(domanda: str, modello: str = MODELLO,
                     # stessa risposta lo lascerebbe nel ciclo fino ai giri
                     # massimi; dirglielo e' l'unica informazione nuova che si
                     # puo' dare, e costa una riga.
+                    # Controllo a valle: se lo strumento riceve un'anamnesi, deve
+                    # essere un pezzo del testo dell'utente, non una riscrittura.
+                    fedele = None
+                    if "anamnesi" in argomenti and isinstance(argomenti["anamnesi"], str):
+                        fedele = testo_fedele(argomenti["anamnesi"], domanda)
+                        if not fedele and verboso:
+                            print("          !! anamnesi PARAFRASATA: il testo passato "
+                                  "non e' contenuto in quello dell'utente")
+
                     firma = (nome, json.dumps(argomenti, sort_keys=True))
                     if firma in gia_viste:
                         testo = (f"Hai gia' chiamato {nome} con questi stessi "
@@ -173,13 +205,20 @@ async def conversa(domanda: str, modello: str = MODELLO,
                         # eccezione: e' l'unica forma in cui puo' correggersi,
                         # ed e' cio' che il protocollo si aspetta.
                         testo = f"errore dallo strumento: {errore}"
+                    if fedele is False:
+                        # Al modello si dice che ha riscritto: e' l'unica
+                        # informazione che puo' fargli ripassare il testo vero.
+                        testo += ("\n\nAVVISO DEL CLIENT: l'anamnesi che hai passato "
+                                  "non coincide con il testo dell'utente. Ripeti la "
+                                  "chiamata copiando il testo alla lettera.")
                     chiamate.append({"strumento": nome, "argomenti": argomenti,
-                                     "caratteri_risposta": len(testo)})
+                                     "caratteri_risposta": len(testo),
+                                     **({} if fedele is None else {"testo_fedele": fedele})})
                     messaggi.append({"role": "tool", "content": testo,
                                      "tool_name": nome})
 
     return {"risposta": "(nessuna risposta finale entro i giri previsti)",
-            "chiamate": chiamate, "giri": GIRI_MASSIMI}
+            "chiamate": chiamate, "giri": GIRI_MASSIMI, "secondi": secondi_totali}
 
 
 async def elenca() -> list[str]:

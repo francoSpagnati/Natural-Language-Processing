@@ -20,10 +20,11 @@ from pathlib import Path
 RADICE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RADICE / "src"))
 
-from ranker import Caso  # noqa: E402
+from ranker import Caso, RankerFrequenza, pieghe  # noqa: E402
 from valuta_gerarchica import (  # noqa: E402
     LIVELLI, Esito, RankerCasuale, antenati, bootstrap, errori_di_famiglia,
     intervallo, misure_gerarchiche, profondita_comune, richiamo_per_livello,
+    valuta_incrociata,
 )
 
 
@@ -212,6 +213,64 @@ class TestLIncertezza(unittest.TestCase):
         fino a farli mentire."""
         esiti = [self.esito("ibr", {i: ["C07AB"] for i in range(7)})]
         self.assertEqual(bootstrap(esiti, 5, giri=10)["ricoveri_ricampionati"], 7)
+
+
+class TestLaValidazioneIncrociata(unittest.TestCase):
+    """Ogni ricovero misurato una volta, da un ranker che non lo ha visto."""
+
+    def casi(self, n: int = 40) -> list[Caso]:
+        # Meta' dei pazienti ha I50.9 e riceve C03DA; l'altra meta' I10 e C07AB.
+        # Cosi' un ranker che impara ha qualcosa da imparare, e la fuga di
+        # informazione fra pieghe si vedrebbe.
+        fuori = []
+        for i in range(n):
+            if i % 2:
+                fuori.append(Caso(1000 + i, frozenset({"I50.9"}), frozenset(),
+                                  frozenset(), frozenset({"C03DA"})))
+            else:
+                fuori.append(Caso(1000 + i, frozenset({"I10"}), frozenset(),
+                                  frozenset(), frozenset({"C07AB"})))
+        return fuori
+
+    def test_le_pieghe_sono_disgiunte_e_coprono_tutto(self) -> None:
+        casi = self.casi()
+        divise = pieghe(casi, 5)
+        visti = [c.enc_oid for p in divise for c in p]
+        self.assertEqual(sorted(visti), sorted(c.enc_oid for c in casi))
+        self.assertEqual(len(visti), len(set(visti)))
+
+    def test_le_pieghe_sono_deterministiche(self) -> None:
+        """Due corse, stesse pieghe: altrimenti due misure non si confrontano."""
+        casi = self.casi()
+        prime = [[c.enc_oid for c in p] for p in pieghe(casi, 5)]
+        seconde = [[c.enc_oid for c in p] for p in pieghe(casi, 5)]
+        self.assertEqual(prime, seconde)
+
+    def test_ogni_ricovero_e_misurato_una_volta_sola(self) -> None:
+        casi = self.casi()
+        esiti = valuta_incrociata([RankerFrequenza], casi, 5, 5)
+        self.assertEqual(len(esiti), 1)
+        self.assertEqual(sorted(esiti[0].ordini), sorted(c.enc_oid for c in casi))
+
+    def test_il_ranker_non_vede_il_paziente_su_cui_e_misurato(self) -> None:
+        """Il controllo di fuga: un ranker che ricorda ogni paziente visto in
+        addestramento e risponde solo su quelli deve fare ZERO in prova."""
+
+        class Memorizza(RankerFrequenza):
+            sigla = "mem"
+            nome = "memorizza"
+
+            def addestra(self, casi):
+                self._visti = {c.enc_oid for c in casi}
+                super().addestra(casi)
+
+            def ordina(self, caso, candidati):
+                if caso.enc_oid in self._visti:
+                    return super().ordina(caso, candidati)
+                return []
+
+        esiti = valuta_incrociata([Memorizza], self.casi(), 5, 5)
+        self.assertEqual(esiti[0].richiamo[5], 0.0)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,8 @@
 # Step 6 — Confronto fra le tre pipeline
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/confronto.py`
+
 Le pipeline A, B e C leggono gli stessi referti e producono lo stesso schema.
 Questo step misura in che cosa differiscono, e quanto di quella differenza è
 attribuibile al solo **riconoscimento** delle menzioni.

@@ -865,6 +865,24 @@ def carica_casi(cartella: Path) -> list[Caso]:
     return casi
 
 
+def pieghe(casi: Sequence[Caso], quante: int = 5,
+           seme: int = 20260915) -> list[list[Caso]]:
+    """Divide i casi in `quante` pieghe disgiunte, in modo deterministico.
+
+    Stessa idea di `dividi`: l'assegnazione dipende solo dall'`enc_oid` e dal
+    seme, cosi' due corse producono le stesse pieghe. Serve alla validazione
+    incrociata dello step 11 — ogni ricovero e' misurato una volta sola, come
+    prova, da un ranker che non lo ha mai visto in addestramento.
+    """
+    import hashlib
+
+    fuori: list[list[Caso]] = [[] for _ in range(quante)]
+    for caso in casi:
+        impronta = hashlib.sha256(f"{seme}:{caso.enc_oid}".encode()).hexdigest()
+        fuori[int(impronta[:8], 16) % quante].append(caso)
+    return fuori
+
+
 def dividi(casi: Sequence[Caso], quota_prova: float = 0.3,
            seme: int = 20260915) -> tuple[list[Caso], list[Caso]]:
     """Divide in addestramento e prova in modo deterministico e riproducibile.

@@ -1,5 +1,8 @@
 # Step 11 — La valutazione gerarchica, e i punti che erano aritmetica
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/valuta_gerarchica.py --pieghe 5`
+
 Lo step 9 conta una proposta giusta o sbagliata. Un ricovero di prova mostra
 perché non basta: il ranker simbolico propone `C10AA` (statina semplice), il
 medico ha prescritto `C10BA` (statina **in associazione** con ezetimibe).
@@ -231,7 +234,60 @@ Le altre due differenze invece **reggono**, e sono le due affermazioni dello ste
 
 ---
 
-## 7. Una trappola trovata misurando
+## 7. Validazione incrociata: tutti gli 841 ricoveri come prova
+
+Le sezioni precedenti usano una sola divisione: 597 ricoveri per imparare, 244
+per misurare. Il bootstrap dice quanto quei 244 sono affidabili, ma non usa mai
+gli altri 597 come prova.
+
+Con **cinque pieghe** ogni ricovero è misurato una volta, da un ranker che non
+lo ha mai visto in addestramento; l'insieme candidato è ricostruito a ogni piega
+sulle altre quattro, così nessuna classe presente solo nella prova può entrare.
+Il ranker con modello linguistico è escluso: servirebbero 600 chiamate nuove.
+
+| ranker | ric@3 | **ric@5** | ric@10 | prec@5 | MAP |
+|---|---|---|---|---|---|
+| casuale | 3,2% | 5,3% | 10,8% | 2,8% | 0,075 |
+| continuità | 10,1% | 10,6% | 13,2% | 6,6% | 0,108 |
+| simbolico | 15,8% | 23,7% | 29,2% | 13,6% | 0,185 |
+| frequenza | 32,6% | 47,5% | 65,2% | 26,5% | 0,402 |
+| **ibrido** | **36,8%** | **48,5%** | **67,2%** | 26,6% | **0,425** |
+
+Intervalli al 95%, 1 000 ricampionamenti su 841 ricoveri:
+
+| differenza appaiata | richiamo@5 | hF | |
+|---|---|---|---|
+| **ibrido − frequenza** | **[−1,5%, +3,4%]** | [−1,8%, +0,4%] | include lo zero |
+| ibrido − simbolico | [+21,7%, +28,0%] | [+14,6%, +17,9%] | esclude lo zero |
+| frequenza − simbolico | [+20,9%, +26,9%] | [+15,2%, +18,7%] | esclude lo zero |
+
+Tre cose cambiano, una no.
+
+**La divisione singola era favorevole a chi impara.** L'ibrido scende da 53,1% a
+**48,5%**, il simbolico da 28,0% a 23,7%, la frequenza da 49,5% a 47,5%. I 244
+ricoveri di prova erano un campione un po' fortunato; con tutti gli 841 le cifre
+si assestano più in basso, come ci si aspetta.
+
+**Il vantaggio dell'ibrido si riduce a un punto** — 48,5% contro 47,5% — con
+intervallo [−1,5%, +3,4%]: **dentro il pavimento di rumore del progetto e
+attorno allo zero.** Non è più «coerente ma non distinguibile»: è
+indistinguibile e basta. Sotto hF la frequenza è avanti.
+
+**Il simbolico è nettamente sotto entrambi**, e ora lo si può dire con un
+intervallo: da 21 a 28 punti di richiamo. È la tesi del §4 dello step 9 — *le
+linee guida da sole sono un ranker peggiore del sapere che cosa si prescrive in
+questo reparto* — con la misura che le mancava.
+
+**L'effetto del denominatore resta identico.** Il caso guadagna 7,0 punti
+salendo di un livello (5,3% → 12,3%), l'ibrido 7,7 (48,5% → 56,2%): il vantaggio
+sul caso passa da +43,2 a +43,9, meno di un punto. La conclusione del §3 non
+dipendeva dalla divisione.
+
+Comando: `python3 src/valuta_gerarchica.py --pieghe 5`.
+
+---
+
+## 8. Una trappola trovata misurando
 
 **Troncare i codici può *abbassare* il richiamo.** Succede su **15 ricoveri di
 prova** reali:
@@ -254,7 +310,7 @@ prossima «semplificazione» non lo cancella.
 
 ---
 
-## 8. Che cosa lo step 11 lascia aperto
+## 9. Che cosa lo step 11 lascia aperto
 
 - **Il livello giusto resta una scelta, non una misura.** Lo step 11 mostra che
   salire di livello non migliora il confronto fra metodi; non dice quale livello
@@ -265,8 +321,7 @@ prossima «semplificazione» non lo cancella.
   questo documento. Sono errori molto diversi, e distinguerli richiederebbe una
   scala di gravità — che sarebbe una fonte in più da citare, non una formula da
   inventare.
-- **Il campione è quello che è.** Gli intervalli del §6 sono larghi perché 196
-  ricoveri con bersaglio sono pochi per distinguere due metodi vicini. Nessuna
-  metrica nuova rimedia a questo: servirebbero più ricoveri, oppure una
-  validazione incrociata sull'intero corpus invece di una sola divisione — che
-  è la cosa più utile che si possa fare dopo questo step, e costa zero.
+- **Il ranker con modello linguistico non è nella validazione incrociata.**
+  I suoi numeri restano quelli della divisione singola (§3–6); rimisurarlo su
+  tutti gli 841 costerebbe circa 600 chiamate, che per il modello remoto sono
+  altri 35 centesimi e per il locale quattro ore di CPU.

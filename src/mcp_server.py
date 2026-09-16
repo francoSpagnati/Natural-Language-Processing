@@ -120,10 +120,11 @@ def _analisi(anamnesi: str, terapia_ingresso: str, con_traccia: bool) -> dict:
         "FORMATO: le voci della terapia vanno separate da punto e virgola e "
         "ciascuna deve portare la dose: `Furosemide 25 mg; Ramipril 5 mg`. "
         "Senza dose la voce non viene letta. "
-        "IMPORTANTE: passa l'anamnesi ALLA LETTERA come l'hai ricevuta, senza "
-        "riassumerla ne' riscriverla. Gli offset di provenienza si riferiscono al "
-        "testo che passi: se lo parafrasi, la provenienza indica parole che il "
-        "clinico non ha scritto. Non e' una prescrizione."
+        "IMPORTANTE: il campo `anamnesi` va copiato dal messaggio dell'utente "
+        "carattere per carattere, senza riassumere ne' riscrivere (non serve "
+        "chiederlo di nuovo all'utente). Gli offset di provenienza si riferiscono "
+        "al testo passato: una parafrasi indica parole che il clinico non ha "
+        "scritto. Non e' una prescrizione."
     ),
 )
 def proponi_terapia(anamnesi: str, terapia_ingresso: str = "",
@@ -256,7 +257,8 @@ def sostegno_del_concetto(anamnesi: str, codice: str,
         "per questo paziente. Tre esiti: ammesso, da_verificare, vietato — mai "
         "un si' o no secco, perche' un falso blocco nega una terapia e un falso "
         "permesso lascia passare una controindicazione. Ogni verdetto porta le "
-        "sue regole con la fonte."
+        "sue regole con la fonte. `farmaco_atc` deve essere un CODICE ATC "
+        "(C07AB, B01AC06), non un nome: per un nome usa prima cardio_cerca_codice."
     ),
 )
 def verifica_sicurezza(anamnesi: str, farmaco_atc: str,
@@ -268,7 +270,29 @@ def verifica_sicurezza(anamnesi: str, farmaco_atc: str,
         farmaco_atc: il codice ATC del farmaco da verificare.
         terapia_ingresso: le voci della terapia in atto, separate da `;`.
     """
+    import re
+
     from filtro import StatoPerFiltro, valuta
+    from ranker import nomi_atc
+
+    # Un verdetto la cui premessa e' fallita non si presenta come valido. Il
+    # filtro confronta CODICI: una stringa che non e' un codice non incontra
+    # nessuna regola e uscirebbe «ammesso» a vuoto — un falso permesso, che e'
+    # l'errore peggiore di uno strato di sicurezza. Misurato: il modello locale
+    # ha chiesto la sicurezza di «Bisoprololo» e «Spironolattone» per nome, e la
+    # prima versione rispondeva ammesso a entrambi.
+    codice = farmaco_atc.strip().upper()
+    if "atc" not in _CACHE:
+        _CACHE["atc"] = nomi_atc()
+    if not re.fullmatch(r"[A-Z]\d{2}([A-Z]([A-Z](\d{2})?)?)?", codice) \
+            or codice not in _CACHE["atc"]:
+        return {
+            "errore": ("`farmaco_atc` deve essere un codice ATC presente nel "
+                       "registro AIFA (per esempio C07AB o C07AB07), non un nome. "
+                       "Nessun verdetto emesso: cerca prima il codice con "
+                       "cardio_cerca_codice."),
+            "ricevuto": farmaco_atc,
+        }
 
     demo = _catena()
     record = demo.paziente_da_testo(anamnesi, terapia_ingresso)
@@ -281,10 +305,10 @@ def verifica_sicurezza(anamnesi: str, farmaco_atc: str,
     terapia = {f.codice_atc for f in stato.farmaci
                if f.codice_atc and f.momento.value == "ingresso"}
     esito = valuta(StatoPerFiltro(0, condizioni, allergie, terapia),
-                   farmaco_atc.strip().upper(),
-                   esclusa_dalla_terapia=farmaco_atc.strip().upper())
+                   codice, esclusa_dalla_terapia=codice)
     return {
-        "farmaco_atc": farmaco_atc, "esito": esito.esito.value,
+        "farmaco_atc": codice, "nome": _CACHE["atc"].get(codice, ""),
+        "esito": esito.esito.value,
         "motivi": esito.motivi,
         "condizioni_viste": sorted({c["codice"] for c in condizioni}),
         "allergie_viste": sorted(allergie),

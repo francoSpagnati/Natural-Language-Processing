@@ -1,5 +1,8 @@
 # Step 7 — Il knowledge graph, e la provenienza come struttura
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/grafo.py && python3 src/interroga.py`
+
 Lo step 6bis ha misurato per la prima volta il **richiamo** delle tre pipeline, e
 il risultato decide la forma di questo step. Sulle condizioni: il gazetteer 19,5%,
 il riconoscitore neurale 19,9%, il modello linguistico 70,1%. **Nessuna delle tre

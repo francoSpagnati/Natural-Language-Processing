@@ -1,5 +1,8 @@
 # Step 9ter — Da dove viene questa raccomandazione: la traccia sul grafo
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/demo.py --esempio 1 --traccia`
+
 Questo documento nasce da una domanda, e la risposta onesta è scomoda:
 
 > *«Nella demo e anche in generale non c'è nessun modo di visualizzare il grafo
@@ -208,6 +211,8 @@ La stessa catena è navigabile nella pagina di dimostrazione, allo stadio 05.
   dell'addestramento l'hanno suggerita. Sarebbe la spiegazione naturale della
   parte statistica del ranker ibrido, e il grafo avrebbe già la forma per
   portarla.
-- **Il tool MCP dello step 10** dovrebbe esporre `sostegno_del_concetto` come
-  strumento a sé: «da dove viene questo fatto» è esattamente la domanda che un
-  modello conversazionale ha bisogno di poter fare.
+- **Il tool MCP dello step 10** espone `sostegno_del_concetto` come strumento a
+  sé (`cardio_sostegno_del_concetto`): «da dove viene questo fatto» è la domanda
+  che un modello conversazionale ha bisogno di poter fare. Lo step 10 ha però
+  trovato il limite: la traccia vale quanto il testo che arriva allo strumento,
+  e se il modello lo parafrasa gli offset indicano parole che nessuno ha scritto.

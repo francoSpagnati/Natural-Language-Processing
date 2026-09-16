@@ -1,5 +1,8 @@
 # Step 8 — Il filtro di sicurezza simbolico
 
+**Stato:** completato.
+**Riproducibilità:** `python3 src/filtro.py`
+
 È il punto in cui il sistema smette di descrivere e comincia a raccomandare, e
 quindi il punto in cui un errore smette di essere una cifra sbagliata in un
 rapporto e diventa una terapia negata o una controindicazione lasciata passare.

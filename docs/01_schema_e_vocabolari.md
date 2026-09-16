@@ -1,6 +1,8 @@
 # Step 1 — Schema dello stato paziente e vocabolari chiusi
 
-**Stato:** completato, **in attesa di validazione**.
+**Stato:** completato. Lo schema è stato validato dall'uso: è il contratto
+dati di tutte le pipeline e del filtro, ed è passato alla versione 1.1.0 allo
+step 5 (asse del soggetto).
 **Riproducibilità:** `python3 src/build_vocabularies.py`
 
 ---

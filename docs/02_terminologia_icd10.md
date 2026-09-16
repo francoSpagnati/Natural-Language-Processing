@@ -1,7 +1,8 @@
 # Step 2 (parte 1) — Terminologia ICD-10 italiana
 
-**Stato:** estrazione completata. Il collegamento del vocabolario ai codici è
-**sospeso in attesa di una decisione** (§ 6).
+**Stato:** completato. La decisione del § 6 è stata presa come proposto: il
+collegamento delle condizioni ai codici sta negli step 3 e 5
+(`src/entity_linking.py`), dove ci sono negazione e riconoscimento.
 **Riproducibilità:** `python3 src/extract_icd10.py`
 
 ---
@@ -160,7 +161,7 @@ Per i farmaci il discorso resta diverso e la strada dello step 2 è valida: sono
 elencati in campi semi-strutturati, e il collegamento nome → ATC è una vera
 normalizzazione da tabella (§ 4 di `docs/01`).
 
-## 6. Decisione richiesta
+## 6. Decisione richiesta (presa: vedi Stato)
 
 Propongo di **riordinare gli step**: chiudere lo step 2 sui soli farmaci
 (risoluzione ATC, dove le tre cause dei mancati match sono già diagnosticate e

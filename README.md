@@ -1,130 +1,91 @@
-# Sistema di supporto alla decisione terapeutica cardiologica
+# Sistema di supporto alla decisione terapeutica in cardiologia
 
 Progetto finale per il corso *Natural Language Processing for Digital Health*.
 
-Dato lo stato di un paziente cardiologico (patologie, farmaci in corso,
-allergie), il sistema suggerisce una terapia **spiegabile**, con le motivazioni
-espresse come cammini in una knowledge base a grafo (indicazioni,
-controindicazioni, interazioni, linee guida), ed è esposto come **tool MCP**
-richiamabile da un LLM.
+Legge referti cardiologici italiani, ne estrae lo stato clinico con **tre
+pipeline diverse** (deterministica, modello linguistico, NER + entity linking),
+lo codifica in **ICD-10** e **ATC**, lo mette in un knowledge graph con la
+provenienza di ogni fatto, e propone la terapia di dimissione passando da un
+**filtro di sicurezza simbolico** e da un ordinamento misurato contro le
+decisioni vere dei cardiologi. Il tutto è esposto come **server MCP** a un
+modello conversazionale, con una traccia che dice *per quali parole del referto*
+una proposta esiste.
 
-> **Stato: step 5 di 11 completato** (pipeline C: NER italiano addestrato su etichette silver + collegamento alla knowledge base).
-> Lo sviluppo procede per step sequenziali; vedi
-> [`docs/00_architettura.md`](docs/00_architettura.md) per la visione d'insieme
-> e l'indice dei documenti.
+**Tutti i dodici step sono completati.** Il punto d'ingresso è
+[`docs/00_architettura.md`](docs/00_architettura.md): che cosa fa il sistema, la
+tesi in sei righe, che cosa ogni step ha trovato, i numeri con l'incertezza, che
+cosa resta aperto.
 
-## Dataset
+## I risultati in tre righe
 
-`data/raw/anamnesiterapie.txt`: 1000 anamnesi cardiologiche in italiano,
-pseudonimizzate, in un unico array JSON. Ogni record ha un'anamnesi narrativa e
-la terapia all'ingresso; 857 record hanno anche la terapia alla dimissione, che
-fa da ground truth per la valutazione. Il dettaglio empirico del formato è in
-[`docs/00_esplorazione_dati.md`](docs/00_esplorazione_dati.md).
+- **Il miglior ranker non è misurabilmente migliore di un contatore** che non
+  guarda il paziente: 48,5% contro 47,5% di richiamo@5, intervallo al 95%
+  [−1,5%, +3,4%], validazione incrociata su 841 ricoveri.
+- **Il modello linguistico perde contro quel contatore** di 20–31 punti, perché
+  propone la cardiologia giusta e manca il 40,4% delle prescrizioni che
+  cardiologia non è.
+- **Le garanzie del sistema valgono fino al confine dello strumento.** Un modello
+  davanti al server MCP può invertire un fatto nella parafrasi («iperteso» →
+  «ipotensione») senza che il server se ne accorga.
 
-I dati clinici **non sono versionati** (vedi `.gitignore`).
+## Dataset e vincoli
 
-### Due vincoli di provenienza, non negoziabili
+`data/raw/anamnesiterapie.txt`: 1 000 anamnesi cardiologiche in italiano,
+pseudonimizzate, con terapia all'ingresso e — per 841 — la terapia alla
+dimissione, che è la verità di riferimento del compito. **I dati clinici non sono
+versionati**, e un controllo automatico (`src/privacy.py`) verifica che nessun
+file del repository contenga una finestra di testo presente in meno di cinque
+referti.
 
-1. **Il dataset è l'export grezzo dell'ospedale.** Esistono varianti dello
-   stesso dataset già filtrate e strutturate da un LLM: sono scartate, perché
-   costruirci sopra significherebbe ereditare un'estrazione già fatta da un
-   altro modello — cioè proprio ciò che questo progetto deve implementare e
-   confrontare. Il confronto fra le tre pipeline non sarebbe più interpretabile.
-2. **Ogni mapping viene da una knowledge base citabile.** Le conversioni nome
-   commerciale → principio attivo → codice ATC e condizione → ICD-10 sono
-   ancorate a fonti esterne riportate esplicitamente (WHO ATC/DDD Index, AIFA,
-   openFDA, Wikidata). Le regolarità osservate nel dataset valgono come evidenza
-   da verificare, mai come fonte autorevole. Le voci non coperte da alcuna fonte
-   sono segnalate come mapping manuali con la fonte puntuale, non riempite in
-   silenzio.
+Due vincoli non negoziabili:
 
-## Struttura del repository
+1. **Solo l'export grezzo.** Le varianti già passate per un LLM sono scartate:
+   costruirci sopra significherebbe misurare un'estrazione fatta da altri.
+2. **Ogni mappatura da una knowledge base citabile** — AIFA (ATC), ICD-10 2019
+   Elenco Sistematico italiano. Una voce non coperta si marca, non si inventa.
+
+## Struttura
 
 ```
-data/raw/        dataset clinico grezzo (non versionato)
-data/external/   knowledge base esterne scaricate (non versionate)
-data/interim/    vocabolari grezzi rigenerabili
-src/             moduli Python
-docs/            un documento per step + indice architetturale
-kb/              manifest delle fonti esterne + knowledge graph in Turtle (step 7)
-notebooks/       esplorazione interattiva
-tests/           test                                (dallo step 2)
-reports/         output rigenerabili
+src/          un modulo per step, più i moduli condivisi (schema, backend LLM, privacy)
+tests/        446 test su dati sintetici, nessuno usa la rete
+docs/         un documento per step + l'indice architetturale
+notebooks/    quattro notebook di analisi, senza output salvati
+kb/           manifest delle fonti esterne: URL, data, SHA-256
+data/         non versionato: grezzo, knowledge base, intermedi, uscite
+.claude/      skill di progetto per Claude Code
 ```
 
 ## Esecuzione
 
-Python ≥ 3.10 (sintassi `X | None` nelle annotazioni). L'unica dipendenza
-esterna finora è **Pydantic**, introdotta allo step 1 per lo schema dei dati:
+Python ≥ 3.10. Dipendenze motivate una per una in `requirements.txt`.
 
 ```bash
 pip install -r requirements.txt
-python3 -m spacy download it_core_news_sm   # modello italiano, serve dallo step 3
+python3 -m spacy download it_core_news_sm
+python3 src/fetch_external_kb.py                  # scarica AIFA, scrive il manifest
+ollama pull qwen3.5:4b                            # il modello locale degli step 9 e 10
+
+python3 -m unittest discover -s tests -q          # 446 test
+python3 src/privacy.py                            # deve dire: frasi specifiche: 0
+python3 src/demo.py --esempio 1 --traccia         # un paziente dall'inizio alla fine
+python3 src/valuta_gerarchica.py --pieghe 5       # la valutazione finale, gratis
+claude mcp add cardio -- python3 src/mcp_server.py
 ```
 
-La pipeline B (step 4) gira per impostazione predefinita su un **modello
-locale** servito da [Ollama](https://ollama.com):
-
-```bash
-ollama pull qwen3:4b
-```
-
-In alternativa puo' usare Google AI Studio (`--motore gemini`), che richiede una
-chiave in `.env.local`, file escluso da git:
-
-```bash
-echo 'GEMINI_API_KEY=...' > .env.local
-```
-
-Le chiamate passano dalla libreria standard, quindi non aggiungono
-dipendenze, e ogni risposta e' messa in cache su disco: rilanciare la
-pipeline non riconsuma la quota e restituisce gli stessi risultati.
-
-Le dipendenze dei prossimi step sono elencate e motivate in `requirements.txt`,
-commentate finché lo step che le richiede non è implementato.
-
-```bash
-python3 src/explore_dataset.py     # esplorazione: report + vocabolari grezzi
-python3 src/fetch_external_kb.py   # scarica le KB esterne + scrive il manifest
-python3 src/verifica_ponte_aifa.py # confronta il ponte interno con AIFA
-
-python3 src/build_vocabularies.py   # vocabolari chiusi in JSON + JSON Schema
-
-python3 src/extract_icd10.py        # terminologia ICD-10 italiana dal PDF
-
-python3 src/normalize_drugs.py      # risoluzione ATC dei farmaci
-
-python3 src/extract_a.py            # pipeline A su tutti i record
-
-python3 src/extract_b.py --record 25                 # pipeline B, modello locale (Ollama)
-python3 src/extract_b.py --motore gemini --record 10 # pipeline B, Google AI Studio
-
-python3 src/silver_labels.py        # etichette silver dall'uscita di pipeline A
-python3 src/ner_train.py            # addestra il NER (circa un'ora su CPU)
-python3 src/extract_c.py            # pipeline C su tutti i record
-
-python3 -m unittest discover -s tests -v   # 179 test, nessuno usa la rete
-```
-
-Il primo rigenera `reports/00_esplorazione.txt` e i CSV in `data/interim/`.
+La pipeline B sul corpus intero e il ranker remoto usano
+`deepseek/deepseek-v4.1-flash` via OpenRouter, chiave in `.env.local` (non
+versionato); le prove locali dello step 4 usavano `qwen3:4b`. Ogni risposta è in cache
+per impronta della richiesta: rieseguire una valutazione non chiama il modello e
+non costa. Spesa totale del progetto: **4,45 $**.
 
 ## Fonti esterne
 
-| Fonte | Uso | Licenza |
+| fonte | uso | licenza |
 |---|---|---|
-| [AIFA — Agenzia Italiana del Farmaco](https://www.aifa.gov.it/liste-dei-farmaci) | registro ATC in italiano, anagrafica delle confezioni (nome commerciale → principio attivo → ATC), titolari AIC | CC-BY 4.0 |
-| [Google AI Studio — API Gemini](https://ai.google.dev/) | modello linguistico di riferimento per la pipeline B (step 4). **Non** è una fonte di conoscenza: non fornisce codici, solo l'individuazione delle menzioni | servizio, 20 richieste/giorno sul piano gratuito |
-| [Qwen3 4B](https://ollama.com/library/qwen3) via Ollama | modello linguistico effettivo della pipeline B, eseguito in locale | Apache 2.0 |
-| [bioBIT](https://huggingface.co/IVN-RIN/bioBIT) — Buonocore et al., *J. Biomed. Inform.* 2023 | modello di base del NER italiano della pipeline C (step 5) | modello pubblico su Hugging Face |
-| ICD-10 2019 italiano, Centro Collaboratore OMS — Regione FVG, via [reteclassificazioni.it](https://www.reteclassificazioni.it/) | terminologia delle condizioni: 10 803 codici, 13 642 termini | PDF scaricato manualmente |
-
-`src/fetch_external_kb.py` le scarica e scrive `kb/manifest_fonti.json` con URL,
-data di download, dimensione, SHA-256 e il motivo per cui ogni file serve. Il
-manifest è versionato anche se i dati non lo sono, così la tracciabilità
-sopravvive a un clone e si può accorgersi quando una fonte cambia a monte.
-
-## Scelte tecniche
-
-Ogni scelta non ovvia è motivata nel documento dello step corrispondente, con le
-alternative scartate e il perché. Le decisioni dello step 0 sono nella sezione 6
-di [`docs/00_esplorazione_dati.md`](docs/00_esplorazione_dati.md).
+| [AIFA](https://www.aifa.gov.it/liste-dei-farmaci) | registro ATC italiano, anagrafica confezioni | CC-BY 4.0 |
+| ICD-10 2019, Centro Collaboratore OMS FVG, via [reteclassificazioni.it](https://www.reteclassificazioni.it/) | terminologia delle condizioni, 10 803 codici | PDF scaricato a mano |
+| ESC 2021 (scompenso) e aggiornamento 2023, ESC 2024 (fibrillazione atriale), ESC 2023 (sindromi coronariche; malattia cardiovascolare nel diabete), ESC/ESH 2024 (ipertensione), ESC/EAS 2019 (dislipidemie) | le 27 indicazioni del ranker simbolico, citate una per una in `src/ranker.py` | pubbliche |
+| [bioBIT](https://huggingface.co/IVN-RIN/bioBIT), Buonocore et al. 2023 | modello di base del NER italiano | Hugging Face |
+| [Qwen3.5 4B](https://ollama.com/library/qwen3.5) via Ollama; DeepSeek V4.1 Flash via OpenRouter | i modelli linguistici; **non** sono fonti di conoscenza, solo motori di estrazione e ordinamento | Apache 2.0 / a consumo |
+| [`anthropics/skills`](https://github.com/anthropics/skills) `mcp-builder` | guida alla costruzione del server MCP, con provenienza dichiarata in `.claude/skills/` | Apache 2.0 |

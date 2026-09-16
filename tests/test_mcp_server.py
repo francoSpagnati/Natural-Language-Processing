@@ -203,8 +203,13 @@ class TestIlPrincipioDelFattoMancante(unittest.TestCase):
         """
         descrizione = next(s.description for s in strumenti()
                            if s.name == "cardio_proponi_terapia")
-        self.assertIn("ALLA LETTERA", descrizione)
+        self.assertIn("carattere per carattere", descrizione)
         self.assertIn("provenienza", descrizione)
+        # La prima formulazione («passa l'anamnesi ALLA LETTERA») e' stata
+        # letta dal modello come un obbligo dell'utente: ha chiesto di
+        # riscrivere il testo invece di chiamare lo strumento. La descrizione
+        # deve dire CHI copia e DA DOVE.
+        self.assertIn("dal messaggio dell'utente", descrizione)
 
     def test_la_descrizione_dello_strumento_documenta_il_separatore(self) -> None:
         """Il modello ha sbagliato formato perche' nessuno gliel'aveva detto."""
@@ -258,6 +263,26 @@ class TestVerificaSicurezza(unittest.TestCase):
         self.assertIn("B01AC06", esito["allergie_viste"])
         self.assertEqual(esito["esito"], "vietato")
         self.assertTrue(esito["motivi"])
+
+    def test_un_nome_al_posto_del_codice_NON_produce_un_verdetto(self) -> None:
+        """Il falso permesso, misurato nella valutazione a dieci domande.
+
+        Il modello ha chiesto la sicurezza di «Bisoprololo» per nome, e il
+        filtro — che confronta codici — non ha trovato nessuna regola e ha
+        risposto `ammesso`. Uno strato di sicurezza che dice si' a cio' che non
+        capisce e' peggio di uno che non c'e'.
+        """
+        for nome in ("Bisoprololo", "aspirina", "", "XYZ99", "C99ZZ"):
+            with self.subTest(ricevuto=nome):
+                esito = mcp_server.verifica_sicurezza(ANAMNESI, nome, TERAPIA)
+                self.assertIn("errore", esito)
+                self.assertNotIn("esito", esito)
+                self.assertIn("cardio_cerca_codice", esito["errore"])
+
+    def test_un_codice_a_sette_caratteri_e_accettato(self) -> None:
+        esito = mcp_server.verifica_sicurezza(ANAMNESI, "c07ab07", TERAPIA)
+        self.assertEqual(esito["farmaco_atc"], "C07AB07")
+        self.assertIn("esito", esito)
 
     def test_spiega_che_da_verificare_non_e_un_divieto(self) -> None:
         esito = mcp_server.verifica_sicurezza(ANAMNESI, "C03DA", TERAPIA)
