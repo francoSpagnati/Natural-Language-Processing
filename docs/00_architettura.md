@@ -85,6 +85,42 @@ step 8: **avvertire, non vietare.** Dettagli in `09`.
 
 ---
 
+**Step 11 — La valutazione gerarchica, e i punti che erano aritmetica.**
+Lo step 9 conta una proposta giusta o sbagliata: proporre `C10AA` (statina) dove
+il medico ha prescritto `C10BA` (statina in associazione) vale come proporre un
+antibiotico. Lo step 11 misura quanto costa, e la risposta e' **molto meno di
+quanto sembrava**.
+
+Tre misure — richiamo per livello ATC, metriche gerarchiche classiche (hP, hR,
+hF; Kiritchenko et al. 2005), quota degli errori di famiglia — e **un controllo
+che viene prima di tutte: un ranker casuale a seme fisso**. Troncare i codici
+alza il richiamo di chiunque, quindi un numero che sale dopo il troncamento non
+dimostra niente da solo.
+
+- **I 4-7 punti anticipati dallo step 9 sono un effetto del denominatore.**
+  L'ibrido sale di ~5 punti salendo di un livello, ma **il caso ne sale 6,4**:
+  al netto, il vantaggio dell'ibrido **cala** da +45,9 a +44,4. La metrica
+  gerarchica non premia il ranker bravo, premia di piu' chi tira a sorte.
+- **Il quasi-centro e' reale ma minoritario**, e l'aneddoto dello step 9
+  indicava il ranker sbagliato: una proposta errata su sette dell'ibrido manca
+  solo il sottogruppo chimico (14,2%, contro il 3,4% del caso), mentre il
+  simbolico ne fa **4,8%** e sbaglia soprattutto dentro l'apparato giusto (43%).
+- **I due modelli linguistici sbagliano come il simbolico**: 51,6% degli errori
+  nel solo apparato. Propongono quasi sempre cardiologia e quasi mai la classe
+  giusta — la stessa conclusione dello step 9, raggiunta da una misura
+  indipendente.
+- **`deepseek` al primo livello sta sotto il caso (-7,5 punti):** concentrarsi
+  sul cuore costa, quando il 40,4% delle prescrizioni non e' cardiologia.
+
+**Il bootstrap corregge lo step 9.** Su 1 000 ricampionamenti dei ricoveri — non
+delle prescrizioni, che dentro un ricovero non sono indipendenti — la differenza
+**ibrido meno frequenza sta in [-0,2%, +7,5%] e include lo zero**: il miglior
+ranker del progetto **non e' misurabilmente migliore di un contatore che non
+guarda il paziente**. Reggono invece le altre due affermazioni dello step 9: il
+modello linguistico perde davvero contro il contatore (da -20 a -31 punti) e il
+modello grande ordina davvero meglio del piccolo ([+0,1%, +8,2%], per un soffio).
+Dettagli in `11`.
+
 **Step 10 — Il tool MCP: il sistema diventa uno strumento per un altro agente.**
 Cinque strumenti di sola lettura (`cardio_proponi_terapia`,
 `cardio_sostegno_del_concetto`, `cardio_verifica_sicurezza`,
@@ -438,7 +474,7 @@ codice ICD.
 | 7 | [`notebooks/03_knowledge_graph.ipynb`](../notebooks/03_knowledge_graph.ipynb) | ✅ interrogazioni SPARQL |
 | 9 | [`notebooks/04_ranker.ipynb`](../notebooks/04_ranker.ipynb) | ✅ analisi del confronto fra ranker |
 | 10 | [`10_tool_mcp.md`](10_tool_mcp.md) | ✅ server MCP di sola lettura, due client |
-| 11 | `11_valutazione.md` | ⬜ da fare |
+| 11 | [`11_valutazione.md`](11_valutazione.md) | ✅ metrica gerarchica, controllo casuale, bootstrap |
 
 ## Architettura di destinazione
 

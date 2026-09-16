@@ -288,6 +288,12 @@ Tre letture, in ordine di importanza:
    piccoli — da 2 a 3,6 punti, cioè al limite del pavimento di rumore — ma sono
    **coerenti**, e cinque margini nella stessa direzione dicono più di uno solo.
 
+   > **Rivisto allo step 11.** Con un bootstrap su 1 000 ricampionamenti dei
+   > ricoveri, la differenza ibrido − frequenza sta in **[−0,2%, +7,5%]** sul
+   > richiamo@5 e in [−2,0%, +1,7%] su hF: **include lo zero, quindi non è
+   > distinguibile.** La direzione resta quella, il campione non basta a
+   > concluderlo. Vedi [`11_valutazione.md`](11_valutazione.md) §6.
+
 2. **Il simbolico da solo perde contro un ranker che non guarda il paziente.**
    28,0% contro 49,5% a k=5. Non è sorprendente dato il tetto del §4, ma va
    detto chiaramente: *le linee guida cardiologiche, da sole, sono un ranker
@@ -333,6 +339,13 @@ Quanto costa questo artefatto, misurato risalendo la gerarchia ATC
 Allargare di un solo livello vale **da 4 a 7 punti**. È la motivazione diretta
 della metrica gerarchica dello step 11: due terapie della stessa famiglia non
 sono un errore quanto due terapie di famiglie diverse.
+
+> **Esito allo step 11: quei punti erano aritmetica.** Misurando con un ranker
+> casuale come controllo, anche il caso guadagna salendo di livello — 6,4 punti
+> contro i ~5 dell'ibrido — quindi il vantaggio sul caso **cala** invece di
+> crescere. E l'aneddoto qui sopra indicava il ranker sbagliato: il simbolico è
+> quello che fa **meno** quasi-centri di tutti (4,8%), mentre il 43% dei suoi
+> errori condivide solo l'apparato. Vedi [`11_valutazione.md`](11_valutazione.md).
 
 ---
 
@@ -554,7 +567,8 @@ ricoveri, stessa cache**: cambia solo il modello.
 | costo | **0 $** | 0,1425 $ |
 
 I 4,3 punti di richiamo@5 sono sopra il rumore di fondo del progetto, che è di
-due punti: il modello grande ordina davvero meglio. Ma **la differenza fra i due
+due punti: il modello grande ordina davvero meglio. Lo step 11 lo conferma con un
+bootstrap appaiato — **[+0,1%, +8,2%]**, che esclude lo zero per un soffio. Ma **la differenza fra i due
 modelli è molto più piccola della differenza che separa entrambi dal contatore
 di frequenza**, che sta a 49,5% e non guarda nemmeno il paziente. Il limite non
 è la taglia del modello: è che il compito chiede di sapere che cosa si
