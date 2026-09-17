@@ -68,8 +68,8 @@ davvero prescritto, su **841** ricoveri.
   [−1,5%, +3,4%] in validazione incrociata a 5 pieghe. A livello di sostanza
   (7 caratteri ATC) l'ibrido è invece avanti di 4–9 punti, [+4,1%, +8,7%]:
   «il migliore» dipende dall'unità di misura.
-- Il ranker con modello linguistico perde di 20–31 punti contro quel
-  contatore: propone la cardiologia giusta e manca il **40,4%** delle
+- Il ranker con modello linguistico perde di 22–29 punti contro quel
+  contatore (21,7% su tutti gli 841 ricoveri): propone la cardiologia giusta e manca il **40,4%** delle
   prescrizioni che cardiologia non è.
 - Il guadagno «gerarchico» (contare gli antenati ATC) era aritmetica: lo
   guadagna anche un ranker casuale.
@@ -114,7 +114,7 @@ estrazione sopra un'estrazione fatta da un modello avrebbe misurato quella.
 | il dataset non si versiona | è dell'ospedale; `data/` è in `.gitignore` |
 | la sicurezza è sempre simbolica | il filtro non impara dal dataset e non chiede a un modello: ogni regola porta la fonte e si contesta riga per riga |
 | tre esiti, non due | un falso blocco nega una terapia, un falso permesso lascia passare una controindicazione |
-| prima il modello locale, si paga solo con numeri misurati | spesa totale del progetto in inferenza: **«SPESA» $** |
+| prima il modello locale, si paga solo con numeri misurati | spesa totale del progetto in inferenza: **4,79 $** |
 
 ---
 
@@ -142,7 +142,7 @@ perché una regola di sicurezza deve poter essere contestata da un clinico.
 | esposizione | `mcp_server`, `mcp_client_locale`, `valuta_mcp` | 10 |
 | valutazione | `valuta_gerarchica` | 11 |
 
-Ogni modulo ha il suo file di test; «NTEST» test, nessuno usa la rete.
+Ogni modulo ha il suo file di test; 471 test, nessuno usa la rete.
 
 ---
 
@@ -446,14 +446,14 @@ differenze appaiate; un **ranker casuale a seme fisso** come controllo.
 | simbolico | 15,8% | 23,7% | 29,2% | 0,185 | [21,5%, 25,8%] |
 | frequenza | 32,6% | 47,5% | 65,2% | 0,402 | [44,8%, 50,3%] |
 | **ibrido** | **36,8%** | **48,5%** | **67,2%** | **0,425** | [45,7%, 51,1%] |
-| `deepseek-v4.1-flash`, tutti gli 841 con i candidati della divisione singola | «LLM_R3» | «LLM_R5» | «LLM_R10» | «LLM_MAP» | «LLM_CI» |
+| `deepseek-v4.1-flash`, tutti gli 841 con i candidati della divisione singola | 15,8% | 21,7% | 33,7% | 0,205 | [19,4%, 24,0%] |
 
 | differenza appaiata (ric@5) | intervallo 95% | |
 | --- | --- | --- |
 | **ibrido − frequenza** | **[−1,5%, +3,4%]** | include lo zero: indistinguibili |
 | ibrido − simbolico | [+21,7%, +28,0%] | esclude lo zero |
 | frequenza − simbolico | [+20,9%, +26,9%] | esclude lo zero |
-| `deepseek` − frequenza | «LLM_DIFF» | esclude lo zero |
+| `deepseek` − frequenza | [−29,2%, −22,5%] | esclude lo zero |
 
 ### 8.2 Il controllo casuale: il guadagno gerarchico era aritmetica
 
@@ -574,7 +574,7 @@ python3 -m spacy download it_core_news_sm
 python3 src/fetch_external_kb.py                  # AIFA, con manifest in kb/
 ollama pull qwen3.5:4b                            # il modello locale (step 9 e 10)
 
-python3 -m unittest discover -s tests -q          # «NTEST» test, nessuna rete
+python3 -m unittest discover -s tests -q          # 471 test, nessuna rete
 python3 src/demo.py --esempio 1 --traccia         # un paziente dall'inizio alla fine
 python3 src/demo.py --interattivo                 # la tua anamnesi da tastiera
 python3 src/kb_build.py --figura                  # rigenera kb/conoscenza.ttl e la figura
@@ -594,7 +594,7 @@ OpenRouter sta in `.env.local`, mai nel codice.
 
 ```text
 src/          un modulo per step, più schema, backend LLM, conoscenza
-tests/        «NTEST» test su dati sintetici
+tests/        471 test su dati sintetici
 docs/         un documento per step, l'indice, la guida al codice, il brief, le figure
 kb/           conoscenza.ttl (il grafo clinico) e manifest_fonti.json
 notebooks/    quattro notebook di analisi, senza output salvati

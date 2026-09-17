@@ -59,10 +59,10 @@ base scaricabili con `src/fetch_external_kb.py` (manifest citabile in `kb/`).
 ## Comandi
 
 ```bash
-python3 -m unittest discover -s tests -q     # 446 test, nessuno usa la rete
+python3 -m unittest discover -s tests -q     # 471 test, nessuno usa la rete
 python3 src/demo.py --esempio 1 --traccia    # un paziente dall'inizio alla fine
 python3 src/valuta_ranker.py                 # ranker senza LLM (gratis)
-python3 src/valuta_gerarchica.py             # step 11 con bootstrap (gratis)
+python3 src/valuta_gerarchica.py --pieghe 5  # step 11: 5 pieghe + bootstrap (gratis); --sostanza per l'unita' a 7
 python3 src/mcp_client_locale.py --strumenti # handshake col server MCP
 ```
 
@@ -73,11 +73,12 @@ python3 src/mcp_client_locale.py --strumenti # handshake col server MCP
 | referti | 1 000, di cui **841** con terapia di dimissione codificata |
 | linea di base: copiare la terapia d'ingresso | **63,6%** della dimissione |
 | ibrido / frequenza, richiamo@5 sulle aggiunte, 5 pieghe su 841 | **48,5% / 47,5%**, differenza [−1,5%, +3,4%]: **indistinguibili** |
-| modello linguistico contro frequenza (divisione singola) | da −20 a −31 punti, distinguibile |
+| modello linguistico (deepseek) contro frequenza, tutti gli 841 | 21,7% contro 47,5%, [−29,2%, −22,5%]: distinguibile |
+| ibrido / frequenza con unita' = sostanza (7 caratteri) | 44,3% / 38,0%, [+4,1%, +8,7%]: **l'ibrido e' avanti** |
 | tetto di dominio: prescrizioni non cardiologiche | **40,4%** |
 | filtro step 8 su 5 863 prescrizioni | 91,3% ammesse, 8,6% da verificare, 4 vietate |
 | interrogazione SPARQL contro lettura da dizionario | 12,43 ms contro 0,073 µs |
-| speso su OpenRouter | **4,4494 $** su 5 |
+| speso su OpenRouter | **4,79 $** (budget chiuso: nessun'altra corsa a pagamento) |
 
 **Rumore di fondo del progetto: due punti percentuali.** Una differenza piu'
 piccola non significa niente e non va raccontata come un risultato.

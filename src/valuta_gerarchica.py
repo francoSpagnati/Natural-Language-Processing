@@ -455,17 +455,35 @@ def _llm_su_tutti(casi: Sequence[Caso], opzioni) -> Esito:
     backend = BackendOpenRouter(**kwargs)
     tetto = opzioni.tetto_dollari
 
+    speso = {"nuovo": 0.0}    # solo le risposte pagate adesso: la cache non costa
+
     def rapporto(n, enc, risposta, secondi):
+        if not risposta.da_cache:
+            speso["nuovo"] += risposta.costo
         if n % 50 == 0 or not risposta.da_cache and n <= 3:
             print(f"  llm {n}/{len(casi)}  enc {enc}  cache={risposta.da_cache}  "
-                  f"speso {r_llm.costo:.4f} $")
-        if r_llm.costo > tetto:
-            raise SystemExit(f"tetto di spesa superato: {r_llm.costo:.4f} $ > {tetto} $")
+                  f"speso ora {speso['nuovo']:.4f} $ (registrato {r_llm.costo:.4f} $)")
+        if speso["nuovo"] > tetto:
+            raise SystemExit(f"tetto di spesa superato: {speso['nuovo']:.4f} $ > {tetto} $")
 
     r_llm = RankerLLM(backend, nomi_icd(), nomi_atc(), rapporto=rapporto)
     addestramento, _ = dividi(casi, opzioni.quota_prova)
     candidati = insieme_candidato(addestramento)
     tutti = sorted(casi, key=lambda c: c.enc_oid)
+    if opzioni.llm_solo_cache:
+        # Nessuna spesa: solo i ricoveri la cui risposta e' gia' su disco. Il
+        # sottoinsieme e' deciso dall'ordine degli identificativi e dalla
+        # divisione singola, non dall'esito: le differenze appaiate su di esso
+        # restano lecite, e vanno dichiarate come misurate su quel sottoinsieme.
+        from llm_backend import CARTELLA_CACHE, Richiesta
+        from ranker import ISTRUZIONI_LLM, SCHEMA_LLM, descrivi_caso
+        icd, atc = nomi_icd(), nomi_atc()
+
+        def in_cache(c):
+            r = Richiesta(istruzioni=ISTRUZIONI_LLM, schema=SCHEMA_LLM, temperatura=0.0,
+                          testo=descrivi_caso(c, applica_filtro(c, candidati), icd, atc))
+            return (CARTELLA_CACHE / (r.impronta(backend.modello) + ".json")).exists()
+        tutti = [c for c in tutti if in_cache(c)]
     print(f"Ranker LLM ({backend.modello}) su {len(tutti)} casi, {len(candidati)} "
           f"candidati della divisione singola, tetto {tetto} $ ...")
     ordini, bersagli = proiezioni(r_llm, tutti, candidati)
@@ -530,6 +548,10 @@ def main() -> None:
                                 "escluso: servirebbero chiamate nuove.")
     argomenti.add_argument("--bootstrap", type=int, default=1000,
                            help="Giri di bootstrap sui ricoveri (0 per saltarlo).")
+    argomenti.add_argument("--llm-solo-cache", action="store_true",
+                           help="Con --llm: misura il ranker LLM solo sui ricoveri gia' in "
+                                "cache (zero spesa), e le differenze appaiate su quel "
+                                "sottoinsieme.")
     argomenti.add_argument("--tetto-dollari", type=float, default=0.45,
                            help="Con --pieghe e --llm openrouter: la corsa si ferma "
                                 "se la spesa supera questo tetto.")
@@ -557,14 +579,17 @@ def main() -> None:
               f"pieghe: ogni ricovero misurato una volta come prova.")
         esiti = valuta_incrociata(fabbriche, casi, opzioni.pieghe, opzioni.k)
         coppie = [("ibr", "freq"), ("ibr", "simb"), ("freq", "simb")]
+        esito_llm = None
         if opzioni.llm:
             # Il ranker LLM non impara dai casi: le pieghe non gli servono.
             # Si misura su TUTTI gli 841 con l'insieme candidato della divisione
-            # singola, cosi' le 244 risposte gia' pagate arrivano dalla cache e
-            # si pagano solo le altre 597. Ogni ricovero e' misurato una volta,
-            # come per gli altri ranker, e le differenze appaiate sono lecite.
-            esiti.append(_llm_su_tutti(casi, opzioni))
-            coppie += [("llm_rem", "freq"), ("llm_rem", "ibr"), ("llm_rem", "simb")]
+            # singola, cosi' le risposte gia' pagate arrivano dalla cache. Ogni
+            # ricovero e' misurato una volta, come per gli altri ranker, e le
+            # differenze appaiate sono lecite.
+            esito_llm = _llm_su_tutti(casi, opzioni)
+            if len(esito_llm.bersagli) == len(esiti[0].bersagli):
+                esiti.append(esito_llm)
+                coppie += [("llm_rem", "freq"), ("llm_rem", "ibr"), ("llm_rem", "simb")]
         stampa_step9(esiti)
         stampa(esiti, opzioni.k)
         quote = spiegabilita(esiti, casi, opzioni.k)
@@ -574,8 +599,28 @@ def main() -> None:
             print(f"\nBootstrap su {opzioni.bootstrap} ricampionamenti dei ricoveri...")
             incertezza = bootstrap(esiti, opzioni.k, opzioni.bootstrap, coppie=coppie)
             _stampa_incertezza(esiti, incertezza, opzioni.k)
-        _scrivi(opzioni.uscita, esiti, opzioni.k, incertezza,
-                {"pieghe": opzioni.pieghe, "casi": len(casi), "spiegabilita": quote})
+        extra = {"pieghe": opzioni.pieghe, "casi": len(casi), "spiegabilita": quote}
+        if esito_llm is not None and esito_llm not in esiti:
+            # L'LLM copre un sottoinsieme: tutti i ranker ristretti a quello,
+            # cosi' il confronto e' appaiato sugli stessi ricoveri.
+            chiavi = set(esito_llm.bersagli)
+            ridotti = [esito_da_proiezioni(e.sigla, e.nome,
+                                           {x: o for x, o in e.ordini.items() if x in chiavi},
+                                           {x: b for x, b in e.bersagli.items() if x in chiavi},
+                                           opzioni.k) for e in esiti] + [esito_llm]
+            print(f"\nSOTTOINSIEME CON RISPOSTA LLM IN CACHE: {len(chiavi)} ricoveri")
+            stampa_step9(ridotti)
+            stampa(ridotti, opzioni.k)
+            if opzioni.bootstrap:
+                inc = bootstrap(ridotti, opzioni.k, opzioni.bootstrap,
+                                coppie=[("llm_rem", "freq"), ("llm_rem", "ibr"),
+                                        ("llm_rem", "simb"), ("ibr", "freq")])
+                _stampa_incertezza(ridotti, inc, opzioni.k)
+                extra["sottoinsieme_llm"] = {
+                    "ricoveri": len(chiavi),
+                    "risultati": {e.sigla: misura(e.ordini, e.bersagli) for e in ridotti},
+                    "incertezza": inc}
+        _scrivi(opzioni.uscita, esiti, opzioni.k, incertezza, extra)
         return
 
     addestramento, prova = dividi(casi, opzioni.quota_prova)

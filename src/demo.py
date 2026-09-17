@@ -32,7 +32,7 @@ quello che il sistema sa fare, non di piu'.
 ## Che cosa la demo non e'
 
 Non e' un dispositivo medico e non e' una validazione clinica. Il ranker e'
-misurato contro *una* decisione presa da *un* medico su 244 ricoveri; il §1 di
+misurato contro *una* decisione presa da *un* medico su 841 ricoveri; il §1 di
 `docs/09_ranker.md` spiega perche' la precisione di quella misura non e'
 interpretabile come correttezza.
 """
@@ -569,7 +569,7 @@ def esegui(anamnesi: str, terapia: str, motore: str = "deterministico",
 
     titolo("Questa non e' una validazione clinica", "-")
     paragrafo("Il ranker e' misurato contro UNA decisione presa da UN medico su "
-              "244 ricoveri. Una proposta non prescritta non e' per forza un "
+              "841 ricoveri. Una proposta non prescritta non e' per forza un "
               "errore, e una prescritta e non proposta non e' per forza una "
               "svista. Vedi `docs/09_ranker.md` §1.")
 
