@@ -72,9 +72,8 @@ mcp>=2.0
 # `_schema_per_ollama`, in un punto solo.
 ollama>=0.4
 
-# --- Step successivi (da scommentare quando lo step viene implementato) -------
-# networkx         # step 7bis: conversione dei sottografi per la visualizzazione
-# pyvis            # step 7bis: resa HTML interattiva dei sottografi
-# matplotlib       # step 11: figure statiche e tabelle dei risultati
-# scikit-learn     # step 6/11: metriche di accordo e valutazione
-# pandas           # step 11: tabelle dei risultati
+# La figura del grafo di conoscenza (`kb_build.py --figura`): networkx per il
+# grafo bipartito condizioni-classi, matplotlib per il PNG. Niente pyvis: una
+# pagina HTML interattiva non si stampa nella relazione.
+networkx>=3.0
+matplotlib>=3.8

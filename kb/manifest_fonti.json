@@ -53,5 +53,16 @@
       "sha256": "a10b3d800ef4be5e693df41475408dc080dfaf7a2b4b9b2026ecbdd5349e8330",
       "scaricato_il": "2026-09-02T16:35:53+00:00"
     }
-  ]
+  ],
+  "conoscenza": {
+    "file": "kb/conoscenza.ttl",
+    "generato_il": "2026-09-17T10:37:04+00:00",
+    "indicazioni": 27,
+    "controindicazioni": 12,
+    "triple": 805,
+    "curatela": "manuale, una fonte puntuale per regola (ESC, RCP AIFA/EMA)",
+    "codici_senza_etichetta": [
+      "O09"
+    ]
+  }
 }

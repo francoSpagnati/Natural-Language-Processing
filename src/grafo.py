@@ -81,17 +81,14 @@ from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, RDF, RDFS, SKOS, XSD
 
 from confronto import CARTELLE, Gruppo, Menzione, _carica_da, carica, raggruppa, ripulisci
+from conoscenza import ATC, BASE, CT, ICD  # gli stessi nodi di kb/conoscenza.ttl
 from risolutori import RisolutoreATC
 
 RADICE = Path(__file__).resolve().parent.parent
 
-BASE = "https://example.org/terapia-cardiaca/"
-CT = Namespace(BASE + "schema#")
 RICOVERO = Namespace(BASE + "ricovero/")
 MENZIONE = Namespace(BASE + "menzione/")
 ASSERZIONE = Namespace(BASE + "asserzione/")
-ATC = Namespace(BASE + "atc/")
-ICD = Namespace(BASE + "icd10/")
 PIPELINE = Namespace(BASE + "pipeline/")
 PROV = Namespace("http://www.w3.org/ns/prov#")
 

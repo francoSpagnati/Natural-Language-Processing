@@ -217,6 +217,7 @@ risposta è salvato dentro la risposta. Chi rilancia deve nominare il modello
 | `silver_labels.py`, `ner_train.py`, `ner_infer.py` | 5 | etichette silver e riconoscitore neurale |
 | `confronto.py`, `rianalizza.py` | 6 | confronto fra pipeline e fra corse |
 | `riferimento.py` | 6b | il riferimento annotato e il richiamo |
+| `kb_build.py`, `conoscenza.py` | 7 | scrive e legge `kb/conoscenza.ttl`: le regole che ranker e filtro usano |
 | `grafo.py`, `interroga.py` | 7 | grafo RDF con provenienza, interrogazioni SPARQL |
 | `filtro.py` | 8 | filtro simbolico, tre esiti, regole con fonte |
 | `ranker.py`, `valuta_ranker.py` | 9 | tre ranker + due linee di base, valutazione |

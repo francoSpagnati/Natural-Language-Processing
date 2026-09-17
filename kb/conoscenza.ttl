@@ -1,0 +1,971 @@
+@prefix atc: <https://example.org/terapia-cardiaca/atc/> .
+@prefix ct: <https://example.org/terapia-cardiaca/schema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix icd: <https://example.org/terapia-cardiaca/icd10/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/A10BA02-N18.4+N18.5> a ct:Controindicazione ;
+    ct:condizione icd:N18.4,
+        icd:N18.5 ;
+    ct:esito "vietato" ;
+    ct:farmaco atc:A10BA02 ;
+    ct:motivo "Metformina in insufficienza renale grave: rischio di acidosi lattica."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/RCP-della-metformina--AIFA-EMA---sezione-4-3--soglia-di-filtrato-glomerulare-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/B01A-I60+I61+I62> a ct:Controindicazione ;
+    ct:condizione icd:I60,
+        icd:I61,
+        icd:I62 ;
+    ct:esito "vietato" ;
+    ct:farmaco atc:B01A ;
+    ct:fattoNonEstratto "storicita' della condizione: ConText la calcola, ma lo schema non ha un campo per registrarla e finisce in una stringa di provenienza"@it ;
+    ct:motivo "Antitrombotico in emorragia intracranica: rischio di risanguinamento. Vale per l'emorragia in atto o recente; un'emorragia remota e' una cautela, non un divieto."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/RCP-degli-anticoagulanti-orali--AIFA-EMA---sezione-4-3--ESC-2020--Guidelines-for-atrial-fibrillation-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/C01BD01-E05+E03> a ct:Controindicazione ;
+    ct:condizione icd:E03,
+        icd:E05 ;
+    ct:esito "da_verificare" ;
+    ct:farmaco atc:C01BD01 ;
+    ct:motivo "Amiodarone in tireopatia: il farmaco contiene iodio e altera la funzione tiroidea; richiede monitoraggio o alternativa."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/RCP-dell-amiodarone--AIFA-EMA---sezioni-4-3-e-4-4-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/C03A-M10> a ct:Controindicazione ;
+    ct:condizione icd:M10 ;
+    ct:esito "da_verificare" ;
+    ct:farmaco atc:C03A ;
+    ct:motivo "Diuretico tiazidico in gotta: riduce l'escrezione di acido urico e puo' precipitare un attacco."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/RCP-dei-tiazidici--AIFA-EMA---sezione-4-4-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/C07-I44.1+I44.2+I44.3> a ct:Controindicazione ;
+    ct:condizione icd:I44.1,
+        icd:I44.2,
+        icd:I44.3 ;
+    ct:esito "vietato" ;
+    ct:farmaco atc:C07 ;
+    ct:fattoNonEstratto "presenza di pacemaker o defibrillatore (ICD-10 Z95.0)"@it ;
+    ct:motivo "Betabloccante in blocco atrioventricolare di grado avanzato: rischio di bradicardia grave e asistolia. La controindicazione cade se il paziente porta un pacemaker."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/Riassunto-delle-Caratteristiche-del-Prodotto-dei-betabloccanti--AIFA-EMA---sezione-4-3-Controindicazioni-> ;
+    ct:revocataDa icd:Z95,
+        icd:Z95.0 .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/C07-J45+J44> a ct:Controindicazione ;
+    ct:condizione icd:J44,
+        icd:J45 ;
+    ct:esito "da_verificare" ;
+    ct:farmaco atc:C07 ;
+    ct:motivo "Betabloccante in asma o broncopneumopatia: rischio di broncospasmo. I cardioselettivi sono spesso tollerati, quindi la decisione e' clinica."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-the-management-of-elevated-blood-pressure-and-hypertension--sezione-sui-betabloccanti-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/C08D-I50> a ct:Controindicazione ;
+    ct:condizione icd:I50 ;
+    ct:esito "vietato" ;
+    ct:farmaco atc:C08D ;
+    ct:motivo "Calcioantagonista non diidropiridinico (verapamil, diltiazem) in scompenso cardiaco a frazione di eiezione ridotta: effetto inotropo negativo."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-the-diagnosis-and-treatment-of-acute-and-chronic-heart-failure--raccomandazioni-sui-farmaci-da-evitare-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/C09-I70.1> a ct:Controindicazione ;
+    ct:condizione icd:I70.1 ;
+    ct:esito "vietato" ;
+    ct:farmaco atc:C09 ;
+    ct:motivo "ACE-inibitore o sartano in stenosi bilaterale delle arterie renali: rischio di insufficienza renale acuta."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/RCP-degli-ACE-inibitori--AIFA-EMA---sezione-4-3-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/C09-O00+O09+O10+O11+O12+O13+O14+O15+O16+O20+O21> a ct:Controindicazione ;
+    ct:condizione icd:O00,
+        icd:O09,
+        icd:O10,
+        icd:O11,
+        icd:O12,
+        icd:O13,
+        icd:O14,
+        icd:O15,
+        icd:O16,
+        icd:O20,
+        icd:O21 ;
+    ct:esito "vietato" ;
+    ct:farmaco atc:C09 ;
+    ct:motivo "ACE-inibitore o sartano in gravidanza: tossicita' fetale documentata nel secondo e terzo trimestre."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/RCP-degli-ACE-inibitori-e-dei-sartani--AIFA-EMA---sezione-4-3-e-4-6-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/C10AA-K70+K71+K72+K74> a ct:Controindicazione ;
+    ct:condizione icd:K70,
+        icd:K71,
+        icd:K72,
+        icd:K74 ;
+    ct:esito "da_verificare" ;
+    ct:farmaco atc:C10AA ;
+    ct:motivo "Statina in epatopatia attiva: richiede valutazione della funzione epatica prima e durante il trattamento."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/RCP-delle-statine--AIFA-EMA---sezione-4-3-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/M01A-I50> a ct:Controindicazione ;
+    ct:condizione icd:I50 ;
+    ct:esito "vietato" ;
+    ct:farmaco atc:M01A ;
+    ct:motivo "Antinfiammatorio non steroideo in scompenso cardiaco: ritenzione idrica e peggioramento dello scompenso."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--farmaci-da-evitare-> .
+
+<https://example.org/terapia-cardiaca/kb/controindicazione/M01A-N18.4+N18.5> a ct:Controindicazione ;
+    ct:condizione icd:N18.4,
+        icd:N18.5 ;
+    ct:esito "vietato" ;
+    ct:farmaco atc:M01A ;
+    ct:motivo "Antinfiammatorio non steroideo in insufficienza renale cronica avanzata: ulteriore riduzione della filtrazione glomerulare."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/RCP-dei-FANS--AIFA-EMA---sezione-4-3-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/A02BC-B01A> a ct:Indicazione ;
+    ct:classeRaccomandazione "IIa" ;
+    ct:farmaco atc:A02BC ;
+    ct:fattoNonEstratto "rischio emorragico gastrointestinale: richiede anamnesi di ulcera, eta' e uso concomitante di FANS"@it ;
+    ct:motivo "Inibitore di pompa protonica in paziente in terapia antitrombotica: riduce il rischio di sanguinamento gastrointestinale. La linea guida la raccomanda in classe I nei pazienti ad alto rischio emorragico, che questo sistema non sa identificare."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-acute-coronary-syndromes--e-ESC-2024--Guidelines-for-atrial-fibrillation--prevenzione-del-sanguinamento-gastrointestinale-> ;
+    ct:terapiaRichiesta atc:B01A .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/A10BA-E10+E11+E13+E14> a ct:Indicazione ;
+    ct:classeRaccomandazione "IIa" ;
+    ct:condizione icd:E10,
+        icd:E11,
+        icd:E13,
+        icd:E14 ;
+    ct:farmaco atc:A10BA ;
+    ct:motivo "Metformina come terapia di fondo del diabete di tipo 2."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-cardiovascular-disease-in-patients-with-diabetes--controllo-glicemico-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/A10BJ-E10+E11+E13+E14> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:E10,
+        icd:E11,
+        icd:E13,
+        icd:E14 ;
+    ct:farmaco atc:A10BJ ;
+    ct:motivo "Agonista del recettore del GLP-1 nel diabete di tipo 2 con malattia cardiovascolare accertata."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-cardiovascular-disease-in-patients-with-diabetes-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/A10BK-E10+E11+E13+E14> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:E10,
+        icd:E11,
+        icd:E13,
+        icd:E14 ;
+    ct:farmaco atc:A10BK ;
+    ct:motivo "Inibitore di SGLT2 nel diabete di tipo 2 con malattia cardiovascolare accertata: beneficio cardiovascolare indipendente dal controllo glicemico."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-the-management-of-cardiovascular-disease-in-patients-with-diabetes-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/A10BK-I50> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I50 ;
+    ct:farmaco atc:A10BK ;
+    ct:motivo "Inibitore di SGLT2 nello scompenso, indipendentemente dal diabete. Quarto pilastro, aggiunto dall'aggiornamento del 2023."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Focused-update-of-the-2021-heart-failure-guidelines--raccomandazioni-su-dapagliflozin-ed-empagliflozin-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/A10BK-N18> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:N18 ;
+    ct:farmaco atc:A10BK ;
+    ct:motivo "Inibitore di SGLT2 nella malattia renale cronica: rallenta la progressione del danno renale."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-cardiovascular-disease-in-patients-with-diabetes--sezione-sulla-malattia-renale-cronica-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/B01AA-I48> a ct:Indicazione ;
+    ct:classeRaccomandazione "IIa" ;
+    ct:condizione icd:I48 ;
+    ct:farmaco atc:B01AA ;
+    ct:motivo "Antagonista della vitamina K quando l'anticoagulante diretto e' controindicato: protesi valvolare meccanica, stenosi mitralica reumatica."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-atrial-fibrillation--scelta-dell-anticoagulante-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/B01AC-I20+I21+I22+I23+I24+I25+I63+I65+I66+I70+I73> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I20,
+        icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I24,
+        icd:I25,
+        icd:I63,
+        icd:I65,
+        icd:I66,
+        icd:I70,
+        icd:I73 ;
+    ct:farmaco atc:B01AC ;
+    ct:motivo "Antiaggregante piastrinico nella malattia aterosclerotica accertata."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-the-management-of-chronic-coronary-syndromes--terapia-antitrombotica-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/B01AF-I48> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I48 ;
+    ct:farmaco atc:B01AF ;
+    ct:fattoNonEstratto "punteggio CHA2DS2-VA: richiede eta' e sesso, che lo schema non contiene"@it ;
+    ct:motivo "Anticoagulante orale diretto nella fibrillazione atriale: prevenzione del cardioembolismo. Preferito agli antagonisti della vitamina K."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-the-management-of-atrial-fibrillation--raccomandazioni-sulla-prevenzione-del-tromboembolismo-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C01AA-I48> a ct:Indicazione ;
+    ct:classeRaccomandazione "IIa" ;
+    ct:condizione icd:I48 ;
+    ct:farmaco atc:C01AA ;
+    ct:motivo "Digossina per il controllo della frequenza, in aggiunta o quando i betabloccanti non bastano."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-atrial-fibrillation--controllo-della-frequenza-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C01BD-I48> a ct:Indicazione ;
+    ct:classeRaccomandazione "IIa" ;
+    ct:condizione icd:I48 ;
+    ct:farmaco atc:C01BD ;
+    ct:motivo "Amiodarone per il mantenimento del ritmo sinusale nei pazienti in cui si sceglie la strategia di controllo del ritmo."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-atrial-fibrillation--controllo-del-ritmo-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C03AA-I10+I11+I12+I13+I15> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15 ;
+    ct:farmaco atc:C03AA ;
+    ct:motivo "Diuretico tiazidico o simil-tiazidico come farmaco di prima linea."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-hypertension--trattamento-farmacologico-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C03CA-I50> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I50 ;
+    ct:farmaco atc:C03CA ;
+    ct:motivo "Diuretico dell'ansa per il controllo della congestione: migliora i sintomi, non la sopravvivenza."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--trattamento-della-congestione-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C03DA-I50> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I50 ;
+    ct:farmaco atc:C03DA ;
+    ct:motivo "Antagonista del recettore mineralcorticoide. Terzo pilastro."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--terapia-dell-HFrEF-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C07AB-I10+I11+I12+I13+I15> a ct:Indicazione ;
+    ct:classeRaccomandazione "IIa" ;
+    ct:condizione icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15 ;
+    ct:farmaco atc:C07AB ;
+    ct:motivo "Betabloccante nell'ipertensione: non di prima linea in assenza di un'indicazione specifica, ma indicato quando coesistono cardiopatia ischemica, scompenso o fibrillazione atriale."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-hypertension--ruolo-dei-betabloccanti-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C07AB-I21+I22+I23+I25.2> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I25.2 ;
+    ct:farmaco atc:C07AB ;
+    ct:motivo "Betabloccante dopo infarto miocardico."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-the-management-of-acute-coronary-syndromes--terapia-a-lungo-termine-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C07AB-I48> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I48 ;
+    ct:farmaco atc:C07AB ;
+    ct:motivo "Betabloccante per il controllo della frequenza nella fibrillazione atriale."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-atrial-fibrillation--controllo-della-frequenza-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C07AB-I50> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I50 ;
+    ct:farmaco atc:C07AB ;
+    ct:motivo "Betabloccante nello scompenso a frazione di eiezione ridotta, in paziente stabile. Secondo pilastro."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--terapia-dell-HFrEF-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C08CA-I10+I11+I12+I13+I15> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15 ;
+    ct:farmaco atc:C08CA ;
+    ct:motivo "Calcioantagonista diidropiridinico come farmaco di prima linea, tipicamente in associazione a un bloccante del sistema renina-angiotensina."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-hypertension--trattamento-farmacologico-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C09A-I50> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I50 ;
+    ct:farmaco atc:C09A ;
+    ct:fattoNonEstratto "frazione di eiezione: nessuna pipeline la estrae, quindi HFrEF e HFpEF non sono distinguibili"@it ;
+    ct:motivo "ACE-inibitore nello scompenso a frazione di eiezione ridotta: riduce mortalita' e ricoveri. Primo dei quattro pilastri."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-the-diagnosis-and-treatment-of-acute-and-chronic-heart-failure--terapia-farmacologica-dell-HFrEF-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C09AA-I10+I11+I12+I13+I15> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15 ;
+    ct:farmaco atc:C09AA ;
+    ct:motivo "ACE-inibitore come farmaco di prima linea nell'ipertensione."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-the-management-of-elevated-blood-pressure-and-hypertension--strategia-di-trattamento-farmacologico-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C09AA-I21+I22+I23+I25.2> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I25.2 ;
+    ct:farmaco atc:C09AA ;
+    ct:motivo "ACE-inibitore dopo infarto miocardico, in particolare con disfunzione ventricolare sinistra."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-acute-coronary-syndromes--terapia-a-lungo-termine-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C09C-I50> a ct:Indicazione ;
+    ct:classeRaccomandazione "IIa" ;
+    ct:condizione icd:I50 ;
+    ct:farmaco atc:C09C ;
+    ct:motivo "Sartano come alternativa all'ACE-inibitore quando questo non e' tollerato, tipicamente per tosse."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--alternative-all-ACE-inibitore-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C09CA-I10+I11+I12+I13+I15> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15 ;
+    ct:farmaco atc:C09CA ;
+    ct:motivo "Sartano come farmaco di prima linea nell'ipertensione, alternativo all'ACE-inibitore."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-hypertension--trattamento-farmacologico-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C09DX04-I50> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:I50 ;
+    ct:farmaco atc:C09DX04 ;
+    ct:fattoNonEstratto "persistenza dei sintomi in terapia ottimale"@it ;
+    ct:motivo "Sacubitril/valsartan in sostituzione dell'ACE-inibitore nei pazienti che restano sintomatici."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--terapia-dell-HFrEF-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C10AA-I20+I21+I22+I23+I24+I25+I63+I65+I66+I67+I70+I73+E78> a ct:Indicazione ;
+    ct:classeRaccomandazione "I" ;
+    ct:condizione icd:E78,
+        icd:I20,
+        icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I24,
+        icd:I25,
+        icd:I63,
+        icd:I65,
+        icd:I66,
+        icd:I67,
+        icd:I70,
+        icd:I73 ;
+    ct:farmaco atc:C10AA ;
+    ct:motivo "Statina ad alta intensita' nella malattia aterosclerotica accertata e nella dislipidemia: riduzione del colesterolo LDL."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-EAS-2019--Guidelines-for-the-management-of-dyslipidaemias--raccomandazioni-sul-trattamento-ipolipemizzante-> .
+
+<https://example.org/terapia-cardiaca/kb/indicazione/C10BA-I20+I21+I22+I23+I24+I25+I70+E78> a ct:Indicazione ;
+    ct:classeRaccomandazione "IIa" ;
+    ct:condizione icd:E78,
+        icd:I20,
+        icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I24,
+        icd:I25,
+        icd:I70 ;
+    ct:farmaco atc:C10BA ;
+    ct:fattoNonEstratto "valore del colesterolo LDL: non e' nello schema, quindi non si sa se l'obiettivo sia raggiunto"@it ;
+    ct:motivo "Associazione con ezetimibe quando la statina da sola non porta il colesterolo LDL all'obiettivo."@it ;
+    ct:recommendedBy <https://example.org/terapia-cardiaca/kb/linea_guida/ESC-EAS-2019--Guidelines-for-dyslipidaemias--terapia-di-associazione-> .
+
+atc:A02BC a ct:Drug ;
+    rdfs:label "inibitori della pompa acida"@it ;
+    skos:notation "A02BC" ;
+    ct:atcCode "A02BC" .
+
+atc:A10BA a ct:Drug ;
+    rdfs:label "biguanidi"@it ;
+    skos:notation "A10BA" ;
+    ct:atcCode "A10BA" ;
+    ct:hasIndication icd:E10,
+        icd:E11,
+        icd:E13,
+        icd:E14 .
+
+atc:A10BA02 a ct:Drug ;
+    rdfs:label "metformina"@it ;
+    skos:notation "A10BA02" ;
+    ct:atcCode "A10BA02" ;
+    ct:hasContraindication icd:N18.4,
+        icd:N18.5 .
+
+atc:A10BJ a ct:Drug ;
+    rdfs:label "analoghi del recettore glp-1"@it ;
+    skos:notation "A10BJ" ;
+    ct:atcCode "A10BJ" ;
+    ct:hasIndication icd:E10,
+        icd:E11,
+        icd:E13,
+        icd:E14 .
+
+atc:B01AA a ct:Drug ;
+    rdfs:label "antagonisti della vitamina k"@it ;
+    skos:notation "B01AA" ;
+    ct:atcCode "B01AA" ;
+    ct:hasIndication icd:I48 .
+
+atc:B01AC a ct:Drug ;
+    rdfs:label "antiaggreganti piastrinici, esclusa l'eparina"@it ;
+    skos:notation "B01AC" ;
+    ct:atcCode "B01AC" ;
+    ct:hasIndication icd:I20,
+        icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I24,
+        icd:I25,
+        icd:I63,
+        icd:I65,
+        icd:I66,
+        icd:I70,
+        icd:I73 .
+
+atc:B01AF a ct:Drug ;
+    rdfs:label "inibitori del fattore xa diretto"@it ;
+    skos:notation "B01AF" ;
+    ct:atcCode "B01AF" ;
+    ct:hasIndication icd:I48 .
+
+atc:C01AA a ct:Drug ;
+    rdfs:label "glicosidi digitalici"@it ;
+    skos:notation "C01AA" ;
+    ct:atcCode "C01AA" ;
+    ct:hasIndication icd:I48 .
+
+atc:C01BD a ct:Drug ;
+    rdfs:label "antiaritmici, classe iii"@it ;
+    skos:notation "C01BD" ;
+    ct:atcCode "C01BD" ;
+    ct:hasIndication icd:I48 .
+
+atc:C01BD01 a ct:Drug ;
+    rdfs:label "amiodarone"@it ;
+    skos:notation "C01BD01" ;
+    ct:atcCode "C01BD01" ;
+    ct:hasContraindication icd:E03,
+        icd:E05 .
+
+atc:C03A a ct:Drug ;
+    rdfs:label "diuretici ad azione diuretica minore, tiazidi"@it ;
+    skos:notation "C03A" ;
+    ct:atcCode "C03A" ;
+    ct:hasContraindication icd:M10 .
+
+atc:C03AA a ct:Drug ;
+    rdfs:label "tiazidi, non associate"@it ;
+    skos:notation "C03AA" ;
+    ct:atcCode "C03AA" ;
+    ct:hasIndication icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15 .
+
+atc:C03CA a ct:Drug ;
+    rdfs:label "sulfonamidi, non associate"@it ;
+    skos:notation "C03CA" ;
+    ct:atcCode "C03CA" ;
+    ct:hasIndication icd:I50 .
+
+atc:C03DA a ct:Drug ;
+    rdfs:label "antagonisti dell'aldosterone"@it ;
+    skos:notation "C03DA" ;
+    ct:atcCode "C03DA" ;
+    ct:hasIndication icd:I50 .
+
+atc:C08CA a ct:Drug ;
+    rdfs:label "derivati diidropiridinici"@it ;
+    skos:notation "C08CA" ;
+    ct:atcCode "C08CA" ;
+    ct:hasIndication icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15 .
+
+atc:C08D a ct:Drug ;
+    rdfs:label "calcioantagonisti selettivi con effetto cardiaco diretto"@it ;
+    skos:notation "C08D" ;
+    ct:atcCode "C08D" ;
+    ct:hasContraindication icd:I50 .
+
+atc:C09A a ct:Drug ;
+    rdfs:label "inibitori dell'enzima di conversione dell'angiotensina (ace), non associati"@it ;
+    skos:notation "C09A" ;
+    ct:atcCode "C09A" ;
+    ct:hasIndication icd:I50 .
+
+atc:C09C a ct:Drug ;
+    rdfs:label "antagonisti dell'angiotensina ii"@it ;
+    skos:notation "C09C" ;
+    ct:atcCode "C09C" ;
+    ct:hasIndication icd:I50 .
+
+atc:C09CA a ct:Drug ;
+    rdfs:label "antagonisti dell'angiotensina ii, non associati"@it ;
+    skos:notation "C09CA" ;
+    ct:atcCode "C09CA" ;
+    ct:hasIndication icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15 .
+
+atc:C09DX04 a ct:Drug ;
+    rdfs:label "sacubitril e valsartan"@it ;
+    skos:notation "C09DX04" ;
+    ct:atcCode "C09DX04" ;
+    ct:hasIndication icd:I50 .
+
+atc:C10BA a ct:Drug ;
+    rdfs:label "inibitori dell''hmg coa reduttasi in associazione con altre sostanze modificatrici dei lipidi"@it ;
+    skos:notation "C10BA" ;
+    ct:atcCode "C10BA" ;
+    ct:hasIndication icd:E78,
+        icd:I20,
+        icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I24,
+        icd:I25,
+        icd:I70 .
+
+icd:Z95 a ct:Condition ;
+    rdfs:label "Presenza di impianti e innesti cardiaci e vascolari"@it ;
+    skos:notation "Z95" .
+
+icd:Z95.0 a ct:Condition ;
+    rdfs:label "Presenza di dispositivi cardiaci elettronici"@it ;
+    skos:notation "Z95.0" .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--alternative-all-ACE-inibitore-> a ct:Guideline ;
+    dcterms:source "ESC 2021, Guidelines for heart failure, alternative all'ACE-inibitore." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--farmaci-da-evitare-> a ct:Guideline ;
+    dcterms:source "ESC 2021, Guidelines for heart failure, farmaci da evitare." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--trattamento-della-congestione-> a ct:Guideline ;
+    dcterms:source "ESC 2021, Guidelines for heart failure, trattamento della congestione." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-the-diagnosis-and-treatment-of-acute-and-chronic-heart-failure--raccomandazioni-sui-farmaci-da-evitare-> a ct:Guideline ;
+    dcterms:source "ESC 2021, Guidelines for the diagnosis and treatment of acute and chronic heart failure, raccomandazioni sui farmaci da evitare." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-the-diagnosis-and-treatment-of-acute-and-chronic-heart-failure--terapia-farmacologica-dell-HFrEF-> a ct:Guideline ;
+    dcterms:source "ESC 2021, Guidelines for the diagnosis and treatment of acute and chronic heart failure, terapia farmacologica dell'HFrEF." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Focused-update-of-the-2021-heart-failure-guidelines--raccomandazioni-su-dapagliflozin-ed-empagliflozin-> a ct:Guideline ;
+    dcterms:source "ESC 2023, Focused update of the 2021 heart failure guidelines, raccomandazioni su dapagliflozin ed empagliflozin." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-acute-coronary-syndromes--e-ESC-2024--Guidelines-for-atrial-fibrillation--prevenzione-del-sanguinamento-gastrointestinale-> a ct:Guideline ;
+    dcterms:source "ESC 2023, Guidelines for acute coronary syndromes, e ESC 2024, Guidelines for atrial fibrillation, prevenzione del sanguinamento gastrointestinale." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-acute-coronary-syndromes--terapia-a-lungo-termine-> a ct:Guideline ;
+    dcterms:source "ESC 2023, Guidelines for acute coronary syndromes, terapia a lungo termine." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-cardiovascular-disease-in-patients-with-diabetes-> a ct:Guideline ;
+    dcterms:source "ESC 2023, Guidelines for cardiovascular disease in patients with diabetes." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-cardiovascular-disease-in-patients-with-diabetes--controllo-glicemico-> a ct:Guideline ;
+    dcterms:source "ESC 2023, Guidelines for cardiovascular disease in patients with diabetes, controllo glicemico." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-cardiovascular-disease-in-patients-with-diabetes--sezione-sulla-malattia-renale-cronica-> a ct:Guideline ;
+    dcterms:source "ESC 2023, Guidelines for cardiovascular disease in patients with diabetes, sezione sulla malattia renale cronica." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-the-management-of-acute-coronary-syndromes--terapia-a-lungo-termine-> a ct:Guideline ;
+    dcterms:source "ESC 2023, Guidelines for the management of acute coronary syndromes, terapia a lungo termine." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2023--Guidelines-for-the-management-of-cardiovascular-disease-in-patients-with-diabetes-> a ct:Guideline ;
+    dcterms:source "ESC 2023, Guidelines for the management of cardiovascular disease in patients with diabetes." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-atrial-fibrillation--controllo-del-ritmo-> a ct:Guideline ;
+    dcterms:source "ESC 2024, Guidelines for atrial fibrillation, controllo del ritmo." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-atrial-fibrillation--scelta-dell-anticoagulante-> a ct:Guideline ;
+    dcterms:source "ESC 2024, Guidelines for atrial fibrillation, scelta dell'anticoagulante." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-the-management-of-atrial-fibrillation--raccomandazioni-sulla-prevenzione-del-tromboembolismo-> a ct:Guideline ;
+    dcterms:source "ESC 2024, Guidelines for the management of atrial fibrillation, raccomandazioni sulla prevenzione del tromboembolismo." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-the-management-of-chronic-coronary-syndromes--terapia-antitrombotica-> a ct:Guideline ;
+    dcterms:source "ESC 2024, Guidelines for the management of chronic coronary syndromes, terapia antitrombotica." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-EAS-2019--Guidelines-for-dyslipidaemias--terapia-di-associazione-> a ct:Guideline ;
+    dcterms:source "ESC/EAS 2019, Guidelines for dyslipidaemias, terapia di associazione." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-EAS-2019--Guidelines-for-the-management-of-dyslipidaemias--raccomandazioni-sul-trattamento-ipolipemizzante-> a ct:Guideline ;
+    dcterms:source "ESC/EAS 2019, Guidelines for the management of dyslipidaemias, raccomandazioni sul trattamento ipolipemizzante." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-hypertension--ruolo-dei-betabloccanti-> a ct:Guideline ;
+    dcterms:source "ESC/ESH 2024, Guidelines for hypertension, ruolo dei betabloccanti." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-the-management-of-elevated-blood-pressure-and-hypertension--sezione-sui-betabloccanti-> a ct:Guideline ;
+    dcterms:source "ESC/ESH 2024, Guidelines for the management of elevated blood pressure and hypertension, sezione sui betabloccanti." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-the-management-of-elevated-blood-pressure-and-hypertension--strategia-di-trattamento-farmacologico-> a ct:Guideline ;
+    dcterms:source "ESC/ESH 2024, Guidelines for the management of elevated blood pressure and hypertension, strategia di trattamento farmacologico." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/RCP-degli-ACE-inibitori--AIFA-EMA---sezione-4-3-> a ct:Guideline ;
+    dcterms:source "RCP degli ACE-inibitori (AIFA/EMA), sezione 4.3." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/RCP-degli-ACE-inibitori-e-dei-sartani--AIFA-EMA---sezione-4-3-e-4-6-> a ct:Guideline ;
+    dcterms:source "RCP degli ACE-inibitori e dei sartani (AIFA/EMA), sezione 4.3 e 4.6." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/RCP-degli-anticoagulanti-orali--AIFA-EMA---sezione-4-3--ESC-2020--Guidelines-for-atrial-fibrillation-> a ct:Guideline ;
+    dcterms:source "RCP degli anticoagulanti orali (AIFA/EMA), sezione 4.3; ESC 2020, Guidelines for atrial fibrillation." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/RCP-dei-FANS--AIFA-EMA---sezione-4-3-> a ct:Guideline ;
+    dcterms:source "RCP dei FANS (AIFA/EMA), sezione 4.3." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/RCP-dei-tiazidici--AIFA-EMA---sezione-4-4-> a ct:Guideline ;
+    dcterms:source "RCP dei tiazidici (AIFA/EMA), sezione 4.4." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/RCP-dell-amiodarone--AIFA-EMA---sezioni-4-3-e-4-4-> a ct:Guideline ;
+    dcterms:source "RCP dell'amiodarone (AIFA/EMA), sezioni 4.3 e 4.4." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/RCP-della-metformina--AIFA-EMA---sezione-4-3--soglia-di-filtrato-glomerulare-> a ct:Guideline ;
+    dcterms:source "RCP della metformina (AIFA/EMA), sezione 4.3, soglia di filtrato glomerulare." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/RCP-delle-statine--AIFA-EMA---sezione-4-3-> a ct:Guideline ;
+    dcterms:source "RCP delle statine (AIFA/EMA), sezione 4.3." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/Riassunto-delle-Caratteristiche-del-Prodotto-dei-betabloccanti--AIFA-EMA---sezione-4-3-Controindicazioni-> a ct:Guideline ;
+    dcterms:source "Riassunto delle Caratteristiche del Prodotto dei betabloccanti (AIFA/EMA), sezione 4.3 Controindicazioni." .
+
+atc:B01A a ct:Drug ;
+    rdfs:label "antitrombotici"@it ;
+    skos:notation "B01A" ;
+    ct:atcCode "B01A" ;
+    ct:hasContraindication icd:I60,
+        icd:I61,
+        icd:I62 .
+
+atc:C07 a ct:Drug ;
+    rdfs:label "betabloccanti"@it ;
+    skos:notation "C07" ;
+    ct:atcCode "C07" ;
+    ct:hasContraindication icd:I44.1,
+        icd:I44.2,
+        icd:I44.3,
+        icd:J44,
+        icd:J45 .
+
+atc:C09 a ct:Drug ;
+    rdfs:label "sostanze ad azione sul sistema renina-angiotensina"@it ;
+    skos:notation "C09" ;
+    ct:atcCode "C09" ;
+    ct:hasContraindication icd:I70.1,
+        icd:O00,
+        icd:O09,
+        icd:O10,
+        icd:O11,
+        icd:O12,
+        icd:O13,
+        icd:O14,
+        icd:O15,
+        icd:O16,
+        icd:O20,
+        icd:O21 .
+
+atc:C09AA a ct:Drug ;
+    rdfs:label "inibitori dell'enzima di conversione dell'angiotensina (ace), non associati"@it ;
+    skos:notation "C09AA" ;
+    ct:atcCode "C09AA" ;
+    ct:hasIndication icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15,
+        icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I25.2 .
+
+atc:C10AA a ct:Drug ;
+    rdfs:label "inibitori della hmg coa riduttasi"@it ;
+    skos:notation "C10AA" ;
+    ct:atcCode "C10AA" ;
+    ct:hasContraindication icd:K70,
+        icd:K71,
+        icd:K72,
+        icd:K74 ;
+    ct:hasIndication icd:E78,
+        icd:I20,
+        icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I24,
+        icd:I25,
+        icd:I63,
+        icd:I65,
+        icd:I66,
+        icd:I67,
+        icd:I70,
+        icd:I73 .
+
+atc:M01A a ct:Drug ;
+    rdfs:label "farmaci antinfiammatori e antireumatici, non steroidei"@it ;
+    skos:notation "M01A" ;
+    ct:atcCode "M01A" ;
+    ct:hasContraindication icd:I50,
+        icd:N18.4,
+        icd:N18.5 .
+
+icd:E03 a ct:Condition ;
+    rdfs:label "Altro ipotiroidismo"@it ;
+    skos:notation "E03" .
+
+icd:E05 a ct:Condition ;
+    rdfs:label "Tireotossicosi [ipertiroidismo]"@it ;
+    skos:notation "E05" .
+
+icd:I44.1 a ct:Condition ;
+    rdfs:label "Blocco atrioventricolare di secondo grado"@it ;
+    skos:notation "I44.1" .
+
+icd:I44.2 a ct:Condition ;
+    rdfs:label "Blocco atrioventricolare completo"@it ;
+    skos:notation "I44.2" .
+
+icd:I44.3 a ct:Condition ;
+    rdfs:label "Altro e non specificato blocco atrioventricolare"@it ;
+    skos:notation "I44.3" .
+
+icd:I60 a ct:Condition ;
+    rdfs:label "Emorragia subaracnoidea"@it ;
+    skos:notation "I60" .
+
+icd:I61 a ct:Condition ;
+    rdfs:label "Emorragia intracerebrale"@it ;
+    skos:notation "I61" .
+
+icd:I62 a ct:Condition ;
+    rdfs:label "Altre emorragie intracraniche non traumatiche"@it ;
+    skos:notation "I62" .
+
+icd:I67 a ct:Condition ;
+    rdfs:label "Altre malattie cerebrovascolari"@it ;
+    skos:notation "I67" .
+
+icd:I70.1 a ct:Condition ;
+    rdfs:label "Aterosclerosi dell’arteria renale"@it ;
+    skos:notation "I70.1" .
+
+icd:J44 a ct:Condition ;
+    rdfs:label "Altre pneumopatie croniche ostruttive"@it ;
+    skos:notation "J44" .
+
+icd:J45 a ct:Condition ;
+    rdfs:label "Asma"@it ;
+    skos:notation "J45" .
+
+icd:K70 a ct:Condition ;
+    rdfs:label "Epatopatia alcolica"@it ;
+    skos:notation "K70" .
+
+icd:K71 a ct:Condition ;
+    rdfs:label "Epatopatia tossica"@it ;
+    skos:notation "K71" .
+
+icd:K72 a ct:Condition ;
+    rdfs:label "Insufficienza epatica, non classificata altrove"@it ;
+    skos:notation "K72" .
+
+icd:K74 a ct:Condition ;
+    rdfs:label "Fibrosi e cirrosi epatica"@it ;
+    skos:notation "K74" .
+
+icd:M10 a ct:Condition ;
+    rdfs:label "Gotta"@it ;
+    skos:notation "M10" .
+
+icd:N18 a ct:Condition ;
+    rdfs:label "Malattia renale cronica"@it ;
+    skos:notation "N18" .
+
+icd:O00 a ct:Condition ;
+    rdfs:label "Gravidanza ectopica"@it ;
+    skos:notation "O00" .
+
+icd:O09 a ct:Condition ;
+    skos:notation "O09" .
+
+icd:O10 a ct:Condition ;
+    rdfs:label "Ipertensione preesistente complicante la gravidanza, il parto e il puerperio"@it ;
+    skos:notation "O10" .
+
+icd:O11 a ct:Condition ;
+    rdfs:label "Pre-eclampsia sovrapposta a ipertensione cronica"@it ;
+    skos:notation "O11" .
+
+icd:O12 a ct:Condition ;
+    rdfs:label "Edema e proteinuria gestazionali [indotte da gravidanza] senza ipertensione"@it ;
+    skos:notation "O12" .
+
+icd:O13 a ct:Condition ;
+    rdfs:label "Ipertensione gestazionale [indotta da gravidanza]"@it ;
+    skos:notation "O13" .
+
+icd:O14 a ct:Condition ;
+    rdfs:label "Pre-eclampsia"@it ;
+    skos:notation "O14" .
+
+icd:O15 a ct:Condition ;
+    rdfs:label "Eclampsia"@it ;
+    skos:notation "O15" .
+
+icd:O16 a ct:Condition ;
+    rdfs:label "Ipertensione materna, non specificata"@it ;
+    skos:notation "O16" .
+
+icd:O20 a ct:Condition ;
+    rdfs:label "Emorragia nella fase iniziale di gravidanza"@it ;
+    skos:notation "O20" .
+
+icd:O21 a ct:Condition ;
+    rdfs:label "Iperemesi gravidica"@it ;
+    skos:notation "O21" .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2024--Guidelines-for-atrial-fibrillation--controllo-della-frequenza-> a ct:Guideline ;
+    dcterms:source "ESC 2024, Guidelines for atrial fibrillation, controllo della frequenza." .
+
+atc:A10BK a ct:Drug ;
+    rdfs:label "inibitori del co-trasportatore sglt-2"@it ;
+    skos:notation "A10BK" ;
+    ct:atcCode "A10BK" ;
+    ct:hasIndication icd:E10,
+        icd:E11,
+        icd:E13,
+        icd:E14,
+        icd:I50,
+        icd:N18 .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-2021--Guidelines-for-heart-failure--terapia-dell-HFrEF-> a ct:Guideline ;
+    dcterms:source "ESC 2021, Guidelines for heart failure, terapia dell'HFrEF." .
+
+<https://example.org/terapia-cardiaca/kb/linea_guida/ESC-ESH-2024--Guidelines-for-hypertension--trattamento-farmacologico-> a ct:Guideline ;
+    dcterms:source "ESC/ESH 2024, Guidelines for hypertension, trattamento farmacologico." .
+
+atc:C07AB a ct:Drug ;
+    rdfs:label "betabloccanti, selettivi"@it ;
+    skos:notation "C07AB" ;
+    ct:atcCode "C07AB" ;
+    ct:hasIndication icd:I10,
+        icd:I11,
+        icd:I12,
+        icd:I13,
+        icd:I15,
+        icd:I21,
+        icd:I22,
+        icd:I23,
+        icd:I25.2,
+        icd:I48,
+        icd:I50 .
+
+icd:E78 a ct:Condition ;
+    rdfs:label "Disturbi del metabolismo delle lipoproteine e altre dislipidemie"@it ;
+    skos:notation "E78" .
+
+icd:I25.2 a ct:Condition ;
+    rdfs:label "Infarto miocardico pregresso"@it ;
+    skos:notation "I25.2" .
+
+icd:I63 a ct:Condition ;
+    rdfs:label "Infarto cerebrale"@it ;
+    skos:notation "I63" .
+
+icd:I65 a ct:Condition ;
+    rdfs:label "Occlusione e stenosi di arterie precerebrali, senza infarto cerebrale"@it ;
+    skos:notation "I65" .
+
+icd:I66 a ct:Condition ;
+    rdfs:label "Occlusione e stenosi di arterie cerebrali, senza infarto cerebrale"@it ;
+    skos:notation "I66" .
+
+icd:I73 a ct:Condition ;
+    rdfs:label "Altre malattie vascolari periferiche"@it ;
+    skos:notation "I73" .
+
+icd:N18.4 a ct:Condition ;
+    rdfs:label "Malattia renale cronica, stadio 4"@it ;
+    skos:notation "N18.4" .
+
+icd:N18.5 a ct:Condition ;
+    rdfs:label "Malattia renale cronica, stadio 5"@it ;
+    skos:notation "N18.5" .
+
+icd:E10 a ct:Condition ;
+    rdfs:label "Diabete mellito tipo 1"@it ;
+    skos:notation "E10" .
+
+icd:E11 a ct:Condition ;
+    rdfs:label "Diabete mellito tipo 2"@it ;
+    skos:notation "E11" .
+
+icd:E13 a ct:Condition ;
+    rdfs:label "Altro tipo di diabete mellito specificato"@it ;
+    skos:notation "E13" .
+
+icd:E14 a ct:Condition ;
+    rdfs:label "Diabete mellito, non specificato"@it ;
+    skos:notation "E14" .
+
+icd:I20 a ct:Condition ;
+    rdfs:label "Angina pectoris"@it ;
+    skos:notation "I20" .
+
+icd:I24 a ct:Condition ;
+    rdfs:label "Altre cardiopatie ischemiche acute"@it ;
+    skos:notation "I24" .
+
+icd:I25 a ct:Condition ;
+    rdfs:label "Cardiopatia ischemica cronica"@it ;
+    skos:notation "I25" .
+
+icd:I70 a ct:Condition ;
+    rdfs:label "Aterosclerosi"@it ;
+    skos:notation "I70" .
+
+icd:I10 a ct:Condition ;
+    rdfs:label "Ipertensione essenziale (primaria) (primitiva)"@it ;
+    skos:notation "I10" .
+
+icd:I11 a ct:Condition ;
+    rdfs:label "Cardiopatia ipertensiva"@it ;
+    skos:notation "I11" .
+
+icd:I12 a ct:Condition ;
+    rdfs:label "Malattia renale ipertensiva"@it ;
+    skos:notation "I12" .
+
+icd:I13 a ct:Condition ;
+    rdfs:label "Malattia ipertensiva cardiaca e renale"@it ;
+    skos:notation "I13" .
+
+icd:I15 a ct:Condition ;
+    rdfs:label "Ipertensione secondaria"@it ;
+    skos:notation "I15" .
+
+icd:I21 a ct:Condition ;
+    rdfs:label "Infarto miocardico acuto"@it ;
+    skos:notation "I21" .
+
+icd:I22 a ct:Condition ;
+    rdfs:label "Infarto miocardico recidivante"@it ;
+    skos:notation "I22" .
+
+icd:I23 a ct:Condition ;
+    rdfs:label "Alcune complicanze in atto a seguito di infarto miocardico acuto"@it ;
+    skos:notation "I23" .
+
+icd:I48 a ct:Condition ;
+    rdfs:label "Fibrillazione e flutter atriali"@it ;
+    skos:notation "I48" .
+
+icd:I50 a ct:Condition ;
+    rdfs:label "Insufficienza cardiaca"@it ;
+    skos:notation "I50" .
+

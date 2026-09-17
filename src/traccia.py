@@ -247,6 +247,7 @@ def traccia_raccomandazione(g: Graph, classe_atc: str, caso, simbolico) -> dict:
         condizioni = sorted(c for c in caso.condizioni
                             if any(c.startswith(p) for p in ind.icd))
         anelli.append({
+            "nodo": str(ind.uri),          # il nodo in kb/conoscenza.ttl
             "classe_raccomandazione": ind.classe_racc,
             "motivo": ind.motivo,
             "fonte": ind.fonte,
@@ -276,6 +277,7 @@ def stampa_traccia(traccia: dict, nome_classe: str = "") -> None:
         print(f"    └─ indicazione, classe {ind['classe_raccomandazione']}")
         print(f"       │  {ind['motivo']}")
         print(f"       │  fonte: {ind['fonte']}")
+        print(f"       │  nodo:  {ind['nodo']}")
         if ind["fatto_non_estratto"]:
             print(f"       │  fatto che il sistema NON estrae: "
                   f"{ind['fatto_non_estratto']}")

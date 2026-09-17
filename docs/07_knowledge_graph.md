@@ -1,7 +1,7 @@
 # Step 7 — Il knowledge graph, e la provenienza come struttura
 
 **Stato:** completato.
-**Riproducibilità:** `python3 src/grafo.py && python3 src/interroga.py`
+**Riproducibilità:** `python3 src/kb_build.py --figura` (conoscenza), `python3 src/grafo.py && python3 src/interroga.py` (provenienza)
 
 Lo step 6bis ha misurato per la prima volta il **richiamo** delle tre pipeline, e
 il risultato decide la forma di questo step. Sulle condizioni: il gazetteer 19,5%,
@@ -13,6 +13,54 @@ in cui tre descrizioni parziali e in parte contraddittorie possono convivere sen
 che qualcuno debba scegliere fra loro **prima** di sapere quale sia giusta. La
 scelta resta possibile, ma diventa una domanda da porre al grafo, non un
 irreversibile già consumato in fase di caricamento.
+
+---
+
+## 0. Due grafi, non uno: la conoscenza e la provenienza
+
+Il brief §3.3 chiede un grafo di **conoscenza clinica** — `Drug`, `Condition`,
+`Guideline`, `hasIndication`, `hasContraindication`, `recommendedBy` — in un
+Turtle versionato in `kb/`, scritto da uno script di import rieseguibile. È
+[`kb/conoscenza.ttl`](../kb/conoscenza.ttl), 805 triple, prodotto da
+[`src/kb_build.py`](../src/kb_build.py) e letto da
+[`src/conoscenza.py`](../src/conoscenza.py). **Il ranker e il filtro prendono
+le regole da lì**: 27 indicazioni e 12 controindicazioni, ciascuna con motivo,
+classe di raccomandazione o esito, e un nodo `Guideline` con la citazione. Un
+test verifica che il Turtle nel repository sia identico a quello che lo script
+rigenererebbe, così il motore non ha una copia privata della conoscenza.
+
+Il resto di questo documento descrive il secondo grafo, quello della
+**provenienza** (`data/processed/grafo.ttl`, 1,2 M triple, non versionato):
+che cosa ogni pipeline ha letto in ogni referto. I due condividono i nodi
+`icd:` e `atc:` — stesso spazio di nomi — e la traccia dello step 9ter li
+percorre insieme: dalla regola in `kb/conoscenza.ttl` al codice ICD, dal codice
+alle menzioni nel referto.
+
+```
+kb/conoscenza.ttl                           data/processed/grafo.ttl
+kb:indicazione/C03DA-I50                    ric:10086915
+  ct:farmaco     atc:C03DA                    ct:haAsserzione  ass:…
+  ct:condizione  icd:I50  ◄──── stesso nodo ────  ct:concetto  icd:I50
+  ct:classeRaccomandazione "I"                    prov:wasDerivedFrom men:… (pipe:A, 21–39)
+  ct:recommendedBy kb:linea_guida/ESC-2021-…
+```
+
+![Il grafo di conoscenza: condizioni ICD-10 e classi ATC](img/conoscenza.png)
+
+**Perché la curatela è manuale, misurato.** Il brief chiede di popolare il
+grafo «primariamente da fonti esterne» e di valutarne la copertura. La sonda
+`kb_build.py --sonda-wikidata` (17 settembre 2026, numeri nel manifest): dei
+439 principi attivi risolti ad ATC, **372** hanno una voce Wikidata con quel
+codice (P267); **273** hanno almeno una «condizione trattata» (P2175, 1 820
+coppie); **158** almeno un'interazione (P769, 4 372 coppie). La copertura c'è,
+ma manca ciò che rende una regola usabile qui: la classe di raccomandazione, il
+documento citabile, e un codice ICD-10 per la condizione — lo step 1 aveva già
+misurato che solo 343 malattie su 1 177 con etichetta italiana ne hanno uno.
+Le 39 regole restano quindi una **mappatura manuale dichiarata** con fonte
+puntuale, come il brief prevede per il layer delle linee guida; le
+**interazioni farmaco-farmaco non ci sono**, e l'assenza è dichiarata: con 4 372
+coppie Wikidata a livello di sostanza sarebbe la prima estensione, con lo stesso
+script di import.
 
 ---
 

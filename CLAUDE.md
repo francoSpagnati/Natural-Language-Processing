@@ -38,6 +38,8 @@ src/extract_b.py          step 4   pipeline B, con modello linguistico
 src/extract_c.py          step 5   pipeline C, NER + entity linking
 src/confronto.py          step 6   confronto fra le tre pipeline
 src/riferimento.py        step 6b  riferimento annotato a mano
+src/kb_build.py           step 7   scrive kb/conoscenza.ttl: 27 indicazioni, 12 controindicazioni
+src/conoscenza.py         step 7   legge il Turtle; ranker e filtro prendono le regole da qui
 src/grafo.py              step 7   knowledge graph RDF con provenienza
 src/filtro.py             step 8   filtro di sicurezza simbolico
 src/ranker.py             step 9   i tre ranker + due linee di base

@@ -54,16 +54,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 
+from conoscenza import (  # noqa: F401
+    PRINCIPIO_DEL_FATTO_MANCANTE, REGOLE_CONTROINDICAZIONE, Controindicazione, Esito,
+)
+
 RADICE = Path(__file__).resolve().parent.parent
-
-
-class Esito(str, Enum):
-    AMMESSO = "ammesso"
-    DA_VERIFICARE = "da_verificare"
-    VIETATO = "vietato"
 
 
 @dataclass(frozen=True)
@@ -162,132 +159,16 @@ R_PROVENIENZA_DEBOLE = Regola(
 # completa e mantenuta. La struttura del filtro non cambierebbe: cambierebbe
 # solo il contenuto di questa costante, ed e' il motivo per cui e' isolata qui.
 
-@dataclass(frozen=True)
-class Controindicazione:
-    atc: str              # prefisso ATC del farmaco (qualunque livello)
-    icd: tuple[str, ...]  # prefissi ICD-10 della condizione
-    esito: Esito
-    motivo: str
-    fonte: str
-    # Fatti che, se presenti, tolgono o attenuano la controindicazione: un
-    # pacemaker rende sicuro un betabloccante in blocco atrioventricolare.
-    revocata_da: tuple[str, ...] = ()
-    # Perche' questa regola NON puo' emettere un divieto con i dati attuali.
-    # Vedi `PRINCIPIO_DEL_FATTO_MANCANTE`.
-    fatto_non_estratto: str | None = None
 
-
-# IL PRINCIPIO CHE LO STEP 8 HA RESO NECESSARIO
+# LE CONTROINDICAZIONI
 #
-# Una regola la cui applicazione corretta richiede un fatto che il sistema non
-# sa stabilire **non puo' emettere un divieto**. Puo' segnalare, non decidere.
-#
-# Non e' prudenza generica: e' una conseguenza misurata. La regola
-# «betabloccante in blocco atrioventricolare» ha bloccato 14 prescrizioni reali,
-# e in **12 su 14** il referto nomina un pacemaker o un defibrillatore — che
-# rende quella terapia sicura. Un divieto con l'86% di falsi blocchi non e' un
-# presidio di sicurezza: e' un guasto che nega terapie.
-#
-# Il fatto mancante non e' un difetto di estrazione. `Z95.0 Presenza di
-# dispositivi cardiaci elettronici` esiste nella terminologia, ma **nessuna
-# delle tre pipeline lo estrae**, e per una ragione di progetto: un dispositivo
-# non e' una malattia, e tutte e tre cercano diagnosi. Il filtro ha scoperto che
-# lo strato di sicurezza ha bisogno di fatti che nessuno degli strati sotto era
-# stato progettato per produrre.
-PRINCIPIO_DEL_FATTO_MANCANTE = (
-    "Regola declassata: la sua applicazione corretta richiede un fatto che "
-    "nessuna pipeline estrae. Segnala, non vieta."
-)
+# Stanno nel grafo di conoscenza `kb/conoscenza.ttl` (scritto da `kb_build.py`,
+# letto da `conoscenza.py`), dodici regole con la fonte puntuale — RCP AIFA/EMA
+# sezione 4.3 o linee guida ESC. Sono una mappatura manuale dichiarata, non
+# una base di conoscenza completa: il filtro non cambierebbe sostituendola.
+# Il principio del fatto mancante e' descritto in `conoscenza.py`.
 
 
-REGOLE_CONTROINDICAZIONE: tuple[Controindicazione, ...] = (
-    Controindicazione(
-        "C07", ("J45", "J44"), Esito.DA_VERIFICARE,
-        "Betabloccante in asma o broncopneumopatia: rischio di broncospasmo. "
-        "I cardioselettivi sono spesso tollerati, quindi la decisione e' clinica.",
-        "ESC/ESH 2024, Guidelines for the management of elevated blood pressure "
-        "and hypertension, sezione sui betabloccanti.",
-    ),
-    Controindicazione(
-        "C07", ("I44.1", "I44.2", "I44.3"), Esito.VIETATO,
-        "Betabloccante in blocco atrioventricolare di grado avanzato: rischio di "
-        "bradicardia grave e asistolia. La controindicazione cade se il paziente "
-        "porta un pacemaker.",
-        "Riassunto delle Caratteristiche del Prodotto dei betabloccanti "
-        "(AIFA/EMA), sezione 4.3 Controindicazioni.",
-        revocata_da=("Z95.0", "Z95"),
-        fatto_non_estratto="presenza di pacemaker o defibrillatore (ICD-10 Z95.0)",
-    ),
-    Controindicazione(
-        "C08D", ("I50",), Esito.VIETATO,
-        "Calcioantagonista non diidropiridinico (verapamil, diltiazem) in "
-        "scompenso cardiaco a frazione di eiezione ridotta: effetto inotropo "
-        "negativo.",
-        "ESC 2021, Guidelines for the diagnosis and treatment of acute and "
-        "chronic heart failure, raccomandazioni sui farmaci da evitare.",
-    ),
-    Controindicazione(
-        "M01A", ("I50",), Esito.VIETATO,
-        "Antinfiammatorio non steroideo in scompenso cardiaco: ritenzione idrica "
-        "e peggioramento dello scompenso.",
-        "ESC 2021, Guidelines for heart failure, farmaci da evitare.",
-    ),
-    Controindicazione(
-        "M01A", ("N18.4", "N18.5"), Esito.VIETATO,
-        "Antinfiammatorio non steroideo in insufficienza renale cronica "
-        "avanzata: ulteriore riduzione della filtrazione glomerulare.",
-        "RCP dei FANS (AIFA/EMA), sezione 4.3.",
-    ),
-    Controindicazione(
-        "C09", ("O00", "O09", "O10", "O11", "O12", "O13", "O14", "O15",
-                "O16", "O20", "O21"), Esito.VIETATO,
-        "ACE-inibitore o sartano in gravidanza: tossicita' fetale documentata "
-        "nel secondo e terzo trimestre.",
-        "RCP degli ACE-inibitori e dei sartani (AIFA/EMA), sezione 4.3 e 4.6.",
-    ),
-    Controindicazione(
-        "C09", ("I70.1",), Esito.VIETATO,
-        "ACE-inibitore o sartano in stenosi bilaterale delle arterie renali: "
-        "rischio di insufficienza renale acuta.",
-        "RCP degli ACE-inibitori (AIFA/EMA), sezione 4.3.",
-    ),
-    Controindicazione(
-        "A10BA02", ("N18.4", "N18.5"), Esito.VIETATO,
-        "Metformina in insufficienza renale grave: rischio di acidosi lattica.",
-        "RCP della metformina (AIFA/EMA), sezione 4.3, soglia di filtrato "
-        "glomerulare.",
-    ),
-    Controindicazione(
-        "B01A", ("I60", "I61", "I62"), Esito.VIETATO,
-        "Antitrombotico in emorragia intracranica: rischio di risanguinamento. "
-        "Vale per l'emorragia in atto o recente; un'emorragia remota e' una "
-        "cautela, non un divieto.",
-        "RCP degli anticoagulanti orali (AIFA/EMA), sezione 4.3; ESC 2020, "
-        "Guidelines for atrial fibrillation.",
-        fatto_non_estratto=(
-            "storicita' della condizione: ConText la calcola, ma lo schema non "
-            "ha un campo per registrarla e finisce in una stringa di provenienza"
-        ),
-    ),
-    Controindicazione(
-        "C01BD01", ("E05", "E03"), Esito.DA_VERIFICARE,
-        "Amiodarone in tireopatia: il farmaco contiene iodio e altera la "
-        "funzione tiroidea; richiede monitoraggio o alternativa.",
-        "RCP dell'amiodarone (AIFA/EMA), sezioni 4.3 e 4.4.",
-    ),
-    Controindicazione(
-        "C10AA", ("K70", "K71", "K72", "K74"), Esito.DA_VERIFICARE,
-        "Statina in epatopatia attiva: richiede valutazione della funzione "
-        "epatica prima e durante il trattamento.",
-        "RCP delle statine (AIFA/EMA), sezione 4.3.",
-    ),
-    Controindicazione(
-        "C03A", ("M10",), Esito.DA_VERIFICARE,
-        "Diuretico tiazidico in gotta: riduce l'escrezione di acido urico e puo' "
-        "precipitare un attacco.",
-        "RCP dei tiazidici (AIFA/EMA), sezione 4.4.",
-    ),
-)
 
 
 # ---------------------------------------------------------------------------
