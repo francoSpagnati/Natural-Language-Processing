@@ -28,8 +28,7 @@ sys.path.insert(0, str(RADICE / "src"))
 
 import mcp_server  # noqa: E402
 
-# Testo sintetico: niente di questo viene da un referto. La regola di privacy del
-# progetto vale anche per i test, e `src/privacy.py` li controlla.
+# Testo sintetico.
 ANAMNESI = ("Scompenso cardiaco con frazione di eiezione ridotta. Segue cura "
             "per ipertensione arteriosa dal 2004.")
 TERAPIA = "Furosemide 25 mg; Ramipril 5 mg"

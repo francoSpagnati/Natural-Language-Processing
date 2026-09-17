@@ -32,10 +32,8 @@ cosa resta aperto.
 
 `data/raw/anamnesiterapie.txt`: 1 000 anamnesi cardiologiche in italiano,
 pseudonimizzate, con terapia all'ingresso e — per 841 — la terapia alla
-dimissione, che è la verità di riferimento del compito. **I dati clinici non sono
-versionati**, e un controllo automatico (`src/privacy.py`) verifica che nessun
-file del repository contenga una finestra di testo presente in meno di cinque
-referti.
+dimissione, che è la verità di riferimento del compito. Il dataset è
+dell'ospedale e non è versionato: `data/` è in `.gitignore`.
 
 Due vincoli non negoziabili:
 
@@ -47,7 +45,7 @@ Due vincoli non negoziabili:
 ## Struttura
 
 ```
-src/          un modulo per step, più i moduli condivisi (schema, backend LLM, privacy)
+src/          un modulo per step, più i moduli condivisi (schema, backend LLM)
 tests/        446 test su dati sintetici, nessuno usa la rete
 docs/         un documento per step + l'indice architetturale
 notebooks/    quattro notebook di analisi, senza output salvati
@@ -67,7 +65,6 @@ python3 src/fetch_external_kb.py                  # scarica AIFA, scrive il mani
 ollama pull qwen3.5:4b                            # il modello locale degli step 9 e 10
 
 python3 -m unittest discover -s tests -q          # 446 test
-python3 src/privacy.py                            # deve dire: frasi specifiche: 0
 python3 src/demo.py --esempio 1 --traccia         # un paziente dall'inizio alla fine
 python3 src/valuta_gerarchica.py --pieghe 5       # la valutazione finale, gratis
 claude mcp add cardio -- python3 src/mcp_server.py

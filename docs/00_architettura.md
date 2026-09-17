@@ -84,8 +84,7 @@ essere contestata da un clinico riga per riga.
 Notebook: [`01_analisi_esplorativa`](../notebooks/01_analisi_esplorativa.ipynb)
 (step 0), [`02_confronto_pipeline`](../notebooks/02_confronto_pipeline.ipynb)
 (step 6), [`03_knowledge_graph`](../notebooks/03_knowledge_graph.ipynb) (step 7),
-[`04_ranker`](../notebooks/04_ranker.ipynb) (step 9). Nessuno porta output
-salvati: il testo clinico non entra nel repository.
+[`04_ranker`](../notebooks/04_ranker.ipynb) (step 9).
 
 ---
 
@@ -161,9 +160,9 @@ Più una manutenzione: **la chiave OpenRouter va ruotata a fine progetto**, perc
    Sistematico, WHO ATC/DDD. Una voce non coperta si marca, non si riempie.
 3. **Si conserva tutto.** Le voci non risolte restano marcate: servono a vedere
    che cosa è stato mancato.
-4. **Il testo clinico non esce.** Non nel repository (`src/privacy.py`: nessuna
-   finestra di 40 caratteri in meno di 5 referti), non nelle triple del grafo,
-   non in una risposta MCP.
+4. **Il dataset non si versiona.** È dell'ospedale, pseudonimizzato ma non
+   nostro da ridistribuire: `data/` è in `.gitignore`, e il server MCP lavora
+   sul testo che riceve, non su un archivio.
 5. **Sicurezza sempre simbolica.** Il filtro non impara dal dataset e non chiede
    a un modello.
 6. **Tre esiti, non due.** Ammesso / da verificare / vietato: un falso blocco
@@ -180,7 +179,6 @@ Più una manutenzione: **la chiave OpenRouter va ruotata a fine progetto**, perc
 
 ```bash
 python3 -m unittest discover -s tests -q          # 446 test, nessuna rete
-python3 src/privacy.py                            # deve dire: frasi specifiche: 0
 python3 src/demo.py --esempio 1 --traccia         # un paziente dall'inizio alla fine
 python3 src/valuta_ranker.py                      # step 9 senza LLM, gratis
 python3 src/valuta_gerarchica.py                  # step 11 con bootstrap, gratis
@@ -219,7 +217,6 @@ risposta è salvato dentro la risposta. Chi rilancia deve nominare il modello
 | `silver_labels.py`, `ner_train.py`, `ner_infer.py` | 5 | etichette silver e riconoscitore neurale |
 | `confronto.py`, `rianalizza.py` | 6 | confronto fra pipeline e fra corse |
 | `riferimento.py` | 6b | il riferimento annotato e il richiamo |
-| `privacy.py` | 6b | nessun testo clinico nei file versionati, anche non tracciati |
 | `grafo.py`, `interroga.py` | 7 | grafo RDF con provenienza, interrogazioni SPARQL |
 | `filtro.py` | 8 | filtro simbolico, tre esiti, regole con fonte |
 | `ranker.py`, `valuta_ranker.py` | 9 | tre ranker + due linee di base, valutazione |

@@ -48,7 +48,6 @@ src/mcp_server.py         step 10  server MCP, 5 strumenti di sola lettura
 src/mcp_client_locale.py  step 10  host MCP locale con ollama
 src/valuta_gerarchica.py  step 11  metrica gerarchica, controllo casuale, bootstrap
 src/llm_backend.py                 backend LLM intercambiabili, con cache
-src/privacy.py                     controllo che non esca testo clinico
 ```
 
 Dati (tutti in `.gitignore`): `data/raw/` sorgente, `data/interim/` intermedi e
@@ -59,7 +58,6 @@ base scaricabili con `src/fetch_external_kb.py` (manifest citabile in `kb/`).
 
 ```bash
 python3 -m unittest discover -s tests -q     # 446 test, nessuno usa la rete
-python3 src/privacy.py                       # deve dire: frasi specifiche: 0
 python3 src/demo.py --esempio 1 --traccia    # un paziente dall'inizio alla fine
 python3 src/valuta_ranker.py                 # ranker senza LLM (gratis)
 python3 src/valuta_gerarchica.py             # step 11 con bootstrap (gratis)

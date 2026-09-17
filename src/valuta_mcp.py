@@ -12,8 +12,7 @@ con l'esito atteso, e il modello locale le affronta una per una. Si conta:
 Il modello e' `qwen3.5:4b` via ollama: costa zero, e la valutazione della skill
 `mcp-builder` la prevede con l'API Anthropic, che qui non si usa.
 
-Le anamnesi sono sintetiche e passano il controllo di privacy del progetto: in
-un file versionato non entra testo dei referti.
+Le anamnesi sono sintetiche.
 
 ## Uso
 

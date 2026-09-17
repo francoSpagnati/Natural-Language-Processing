@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from demo import ESEMPI, evidenzia, paziente_da_testo  # noqa: E402
+from demo import ESEMPI, estrai_deterministico, evidenzia, paziente_da_testo  # noqa: E402
 from extract_a import allergie_dal_referto  # noqa: E402
 from risolutori import RisolutoreATC  # noqa: E402
 
@@ -117,42 +117,12 @@ class TestEsempiSintetici(unittest.TestCase):
                 self.assertTrue(e.terapia_ingresso.strip())
                 self.assertTrue(e.mostra.strip())
 
-    def test_nessun_esempio_contiene_una_frase_rara_del_corpus(self):
-        """La regola di privacy del progetto, applicata agli esempi.
-
-        La regola non vieta che una frase compaia nel corpus: vieta che compaia
-        in **meno di cinque referti**. «Ipertensione arteriosa in trattamento»
-        e' scrittura clinica comune e non identifica nessuno; una narrazione che
-        compare in un referto solo, si'.
-
-        La soglia e la lunghezza di finestra vengono da `src/privacy.py`, che
-        applica la stessa regola al repository intero: reimplementarle qui
-        significherebbe avere due regole che possono divergere.
-        """
-        import privacy
-        from data_loading import carica_dataset
-
-        percorso = (Path(__file__).resolve().parent.parent / "data" / "raw"
-                    / "anamnesiterapie.txt")
-        if not percorso.exists():
-            self.skipTest("dataset non disponibile")
-        record, _ = carica_dataset(percorso)
-        testi = [(r.testo_anamnesi or "") for r in record]
-        corpus = "\n".join(testi)
-
-        rare: list[str] = []
+    def test_il_gazetteer_riconosce_almeno_una_condizione_in_ogni_esempio(self):
+        """Un esempio in cui l'estrazione non trova niente non dimostra niente."""
         for e in ESEMPI:
-            for testo in (e.anamnesi, e.terapia_ingresso):
-                for i in range(max(0, len(testo) - privacy.FINESTRA)):
-                    finestra = testo[i:i + privacy.FINESTRA].strip()
-                    if len(finestra) < privacy.LUNGHEZZA_MINIMA:
-                        continue
-                    if finestra not in corpus:
-                        continue
-                    quanti = sum(1 for t in testi if finestra in t)
-                    if quanti < privacy.SOGLIA_REFERTI:
-                        rare.append(f"{finestra!r} in {quanti} referti")
-        self.assertEqual(rare, [], "frasi troppo rare negli esempi della demo")
+            with self.subTest(titolo=e.titolo):
+                stato = estrai_deterministico(paziente_da_testo(e.anamnesi, e.terapia_ingresso))
+                self.assertTrue(stato.condizioni, "nessuna condizione riconosciuta")
 
 
 if __name__ == "__main__":

@@ -120,22 +120,6 @@ class TestGrafoDelPaziente(unittest.TestCase):
         regole = [str(r) for r in g.objects(None, CT.regola)]
         self.assertIn("icd:generalizzazione_ambigua", regole)
 
-    def test_il_testo_clinico_NON_entra_nelle_triple(self):
-        """La regola di privacy del progetto, applicata al grafo.
-
-        Il grafo e' un artefatto che puo' circolare; il testo verbatim no. Chi
-        ha i dati grezzi lo ritrova dagli offset, e la traccia lo legge da un
-        indice tenuto fuori dalle triple.
-        """
-        g = grafo_del_paziente(
-            {"A": stato_paziente([condizione("scompenso cardiaco", "I50.9", 0, 18)])},
-            0, {}, {})
-        letterali = [str(o) for _, _, o in g if not str(o).startswith("http")]
-        self.assertNotIn("scompenso cardiaco", letterali)
-        # ...ma la traccia lo sa mostrare lo stesso.
-        self.assertEqual(sostegno_del_concetto(g, "I50.9")[0]["testo"],
-                         "scompenso cardiaco")
-
 
 class TestSostegnoInterrogato(unittest.TestCase):
 

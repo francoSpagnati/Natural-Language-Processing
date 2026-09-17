@@ -254,44 +254,13 @@ di un sistema di supporto alla decisione non stanno nella media.**
 
 ---
 
-## 5. Gli esempi non possono contenere testo dei referti
+## 5. Gli esempi sono sintetici
 
-Gli esempi si mostrano a terzi, quindi cadono sotto la regola di privacy del
-progetto: **nessuna finestra di 40 caratteri di un file versionato può comparire
-in meno di cinque referti.**
-
-Il test che la verifica ha subito trovato una violazione nella prima stesura:
-una finestra di 40 caratteri a cavallo di due frasi — *«…atriale permanente.
-Iperten…»* — presente in **un solo referto**. La riporto qui accorciata di
-proposito: scriverla per intero la rimetterebbe nel repository, ed è il motivo
-per cui questo documento ha fallito il controllo una seconda volta dopo che il
-codice l'aveva già superato.
-
-Scrivendo testo sintetico «con la grammatica del corpus» avevo ricostruito per
-caso una giunzione di frasi che esiste in un referto solo. Gli esempi sono stati
-riscritti finché il conteggio non è andato a zero.
-
-### Il controllo passava perché non guardava
-
-La seconda violazione non è stata trovata subito, e la ragione è un difetto del
-controllo, non della disciplina: `file_versionati` chiamava `git ls-files`, che
-elenca **l'indice**. Un file nuovo e non ancora aggiunto non veniva letto, quindi
-il controllo passava *per assenza* — e la violazione entrava al primo commit.
-
-Ora l'elenco è `git ls-files --cached --others --exclude-standard`: i file
-tracciati più quelli non tracciati che `.gitignore` non esclude, cioè
-esattamente quelli che un `git add` porterebbe dentro. Un controllo di sicurezza
-che tace su ciò che non ha guardato è peggio di nessun controllo, perché produce
-la stessa riga di esito.
-
-La soglia e la lunghezza di finestra il test **le importa da `src/privacy.py`**
-invece di ridefinirle: due copie della stessa regola possono divergere, e quella
-che diverge in silenzio è la regola di privacy.
-
-Nota sulla regola, perché è facile fraintenderla: non vieta che una frase
-compaia nel corpus. *«Ipertensione arteriosa in trattamento»* è scrittura
-clinica comune e non identifica nessuno. Vieta le frasi **rare**, che sono
-quelle che raccontano un paziente.
+I tre pazienti sono scritti con la grammatica del corpus — abbreviazioni,
+punteggiatura, ordine delle sezioni — ma non sono referti: si mostrano a terzi
+e devono restare riproducibili senza il dataset. Un test verifica che ogni
+esempio sia completo e che il gazetteer vi riconosca le condizioni attese,
+altrimenti l'esempio non dimostra niente.
 
 ---
 

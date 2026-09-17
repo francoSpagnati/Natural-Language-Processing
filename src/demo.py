@@ -74,10 +74,8 @@ LARGHEZZA = 78
 # ---------------------------------------------------------------------------
 # I pazienti d'esempio
 #
-# TUTTI SINTETICI. Scritti con la grammatica del corpus — le abbreviazioni, la
-# punteggiatura, l'ordine delle sezioni — ma nessuno di questi testi compare nel
-# dataset, e `src/privacy.py` lo verifica meccanicamente sul repository intero.
-# Ogni esempio e' costruito per mostrare **una** capacita' del sistema.
+# Tutti sintetici, scritti con la grammatica del corpus — le abbreviazioni, la
+# punteggiatura, l'ordine delle sezioni. Ogni esempio e' costruito per mostrare **una** capacita' del sistema.
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
