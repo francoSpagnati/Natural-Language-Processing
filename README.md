@@ -142,7 +142,7 @@ perché una regola di sicurezza deve poter essere contestata da un clinico.
 | esposizione | `mcp_server`, `mcp_client_locale`, `valuta_mcp` | 10 |
 | valutazione | `valuta_gerarchica` | 11 |
 
-Ogni modulo ha il suo file di test; 471 test, nessuno usa la rete.
+Ogni modulo ha il suo file di test; 472 test, nessuno usa la rete.
 
 ---
 
@@ -575,7 +575,7 @@ python3 -m spacy download it_core_news_sm
 python3 src/fetch_external_kb.py                  # AIFA, con manifest in kb/
 ollama pull qwen3.5:4b                            # il modello locale (step 9 e 10)
 
-python3 -m unittest discover -s tests -q          # 471 test, nessuna rete
+python3 -m unittest discover -s tests -q          # 472 test, nessuna rete
 python3 src/demo.py --esempio 1 --traccia         # un paziente dall'inizio alla fine
 python3 src/demo.py --interattivo                 # la tua anamnesi da tastiera
 python3 src/kb_build.py --figura                  # rigenera kb/conoscenza.ttl e la figura
@@ -596,7 +596,7 @@ OpenRouter sta in `.env.local`, mai nel codice.
 
 ```text
 src/          un modulo per step, più schema, backend LLM, conoscenza
-tests/        471 test su dati sintetici
+tests/        472 test su dati sintetici
 docs/         un documento per step, l'indice, la guida al codice, il brief, le figure
 kb/           conoscenza.ttl (il grafo clinico) e manifest_fonti.json
 notebooks/    quattro notebook di analisi, senza output salvati

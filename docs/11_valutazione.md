@@ -17,7 +17,7 @@ Codice: [`src/valuta_gerarchica.py`](../src/valuta_gerarchica.py).
 
 - **Compito**: le 2 075 classi ATC aggiunte alla dimissione su 841 ricoveri
   (le sole aggiunte, non la terapia intera: copiare l'ingresso fa già 63,6%).
-- **Unità**: la classe a 5 caratteri (`C07AB`); nel §9 la sostanza a 7.
+- **Unità**: la classe a 5 caratteri (`C07AB`); nel §6 la sostanza a 7.
 - **Validazione incrociata a 5 pieghe**: pieghe deterministiche per hash del
   ricovero (`ranker.pieghe`), il ranker impara sulle altre quattro, l'insieme
   candidato è ricostruito a ogni piega (nessuna classe presente solo nella
@@ -45,7 +45,7 @@ Codice: [`src/valuta_gerarchica.py`](../src/valuta_gerarchica.py).
 | simbolico, 27 indicazioni ESC | 15,8% | 23,7% | 29,2% | 13,6% | 0,185 | [21,5%, 25,8%] | 28,6% |
 | frequenza, non guarda il paziente | 32,6% | 47,5% | 65,2% | 26,5% | 0,402 | [44,8%, 50,3%] | **45,5%** |
 | **ibrido** | **36,8%** | **48,5%** | **67,2%** | 26,6% | **0,425** | [45,7%, 51,1%] | 44,8% |
-| `deepseek-v4.1-flash` (§10) | 15,8% | 21,7% | 33,7% | 12,0% | 0,205 | [19,4%, 24,0%] | 24,5% |
+| `deepseek-v4.1-flash` (§9) | 15,8% | 21,7% | 33,7% | 12,0% | 0,205 | [19,4%, 24,0%] | 24,5% |
 
 | differenza appaiata | richiamo@5 | hF | |
 | --- | --- | --- | --- |

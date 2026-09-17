@@ -6,7 +6,7 @@ collegano, che cosa ogni step ha trovato e che cosa resta aperto; il dettaglio
 [`README.md`](../README.md); il codice è spiegato in
 [`guida_al_codice.md`](guida_al_codice.md); il brief è in [`brief.md`](brief.md).
 
-**Stato: tutti i dodici step sono completati.** 471 test, nessuno usa la rete.
+**Stato: tutti i dodici step sono completati.** 472 test, nessuno usa la rete.
 
 ---
 
@@ -161,7 +161,7 @@ piccola non è un risultato.
 ## 7. Come si riproduce
 
 ```bash
-python3 -m unittest discover -s tests -q          # 471 test, nessuna rete
+python3 -m unittest discover -s tests -q          # 472 test, nessuna rete
 python3 src/demo.py --esempio 1 --traccia         # un paziente dall'inizio alla fine
 python3 src/kb_build.py --figura                  # il grafo di conoscenza e la figura
 python3 src/valuta_gerarchica.py --pieghe 5       # step 11 (gratis); --sostanza, --cartella-b, --llm openrouter

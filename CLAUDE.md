@@ -60,7 +60,7 @@ base scaricabili con `src/fetch_external_kb.py` (manifest citabile in `kb/`).
 ## Comandi
 
 ```bash
-python3 -m unittest discover -s tests -q     # 471 test, nessuno usa la rete
+python3 -m unittest discover -s tests -q     # 472 test, nessuno usa la rete
 python3 src/demo.py --esempio 1 --traccia    # un paziente dall'inizio alla fine
 python3 src/valuta_ranker.py                 # ranker senza LLM (gratis)
 python3 src/valuta_gerarchica.py --pieghe 5  # step 11: 5 pieghe + bootstrap (gratis); --sostanza per l'unita' a 7
