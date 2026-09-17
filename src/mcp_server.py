@@ -169,6 +169,15 @@ def _confeziona(esito: dict, quante: int, terapia_ingresso: str = "") -> dict:
                     "classi piu' frequenti del reparto. Il gazetteer riconosce "
                     "le forme scritte per esteso: «ipertensione arteriosa» si', "
                     "«iperteso» no.")
+    senza_codice = [a["allergene"] for a in esito["allergie"]
+                    if a.get("categoria") == "principi attivi" and not a.get("codice_atc")]
+    if senza_codice:
+        note.append("Allergia dichiarata a un principio attivo che il sistema NON ha "
+                    f"saputo codificare: {', '.join(senza_codice)}. Il filtro di "
+                    "sicurezza confronta codici ATC: su questa allergia non ha "
+                    "potuto dire niente, quindi le proposte non la tengono in conto. "
+                    "Va verificata a mano (acronimi e nomi fuori dal vocabolario "
+                    "del corpus, per esempio «ASA» o «aspirina», non risolvono).")
     if terapia_ingresso.strip() and not farmaci:
         note.append("Nessun farmaco riconosciuto nella terapia. Il parser "
                     "vuole DUE cose: le voci separate da punto e virgola, e "

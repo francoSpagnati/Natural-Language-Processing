@@ -124,7 +124,7 @@ una.
 
 | Cosa | Vocabolario | Stato |
 |---|---|---|
-| Provenienza | **PROV-O**, `prov:Entity` / `Activity` / `Agent`, `prov:wasDerivedFrom`, `prov:wasAttributedTo` | W3C Recommendation, 30 aprile 2013 |
+| Provenienza | **PROV-O**, `prov:Entity` / `Activity` / `Agent`, `prov:wasDerivedFrom`, `prov:wasAttributedTo` | W3C Recommendation, 30 aprile 2013, <https://www.w3.org/TR/prov-o/> |
 | Terminologie | **SKOS**, `skos:Concept`, `skos:ConceptScheme`, `skos:broader`, `skos:notation` | W3C Recommendation, 18 agosto 2009 |
 | Citazione delle fonti | **DCMI Metadata Terms**, `dcterms:source`, `dcterms:description` | DCMI, standard ISO 15836 |
 

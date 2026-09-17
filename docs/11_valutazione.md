@@ -106,7 +106,7 @@ si misura la sovrapposizione fra antenati proposti e antenati veri.
 Riferimento: S. Kiritchenko, S. Matwin, F. Famili, *Functional annotation of
 genes using hierarchical text categorization*, BioLINK SIG 2005; ripreso in
 C. N. Silla Jr., A. A. Freitas, *A survey of hierarchical classification across
-different application domains*, DMKD 22(1–2), 2011.
+different application domains*, Data Mining and Knowledge Discovery 22(1–2), 2011, doi:10.1007/s10618-010-0175-9.
 
 | ranker | hP | hR | hF |
 |---|---|---|---|

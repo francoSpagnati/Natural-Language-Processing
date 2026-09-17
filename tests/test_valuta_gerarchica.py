@@ -275,3 +275,25 @@ class TestLaValidazioneIncrociata(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLaSpiegabilita(unittest.TestCase):
+    """Una proposta e' «motivata» se almeno un'indicazione ESC scatta per quel
+    paziente. La frequenza non guarda il paziente, quindi le sue proposte sono
+    motivate solo per coincidenza; lo si conta, non lo si afferma."""
+
+    def test_conta_le_motivate_fra_tutte_e_fra_le_centrate(self):
+        from conoscenza import Indicazione
+        from ranker import RankerSimbolico
+        from valuta_gerarchica import Esito, spiegabilita
+
+        regole = (Indicazione("C03DA", ("I50",), "I", "m", "f"),)
+        casi = [Caso(1, frozenset({"I50.9"}), frozenset(), frozenset(),
+                     frozenset({"C03DA", "A02BC"}))]
+        esito = Esito("x", "x", {}, {}, {},
+                      {1: ["C03DA", "A02BC", "C07AB"]},
+                      {1: frozenset({"C03DA", "A02BC"})})
+        q = spiegabilita([esito], casi, k=3, simbolico=RankerSimbolico(regole))["x"]
+        self.assertEqual((q["proposte"], q["motivate"]), (3, 1))
+        self.assertEqual((q["centri"], q["centri_motivati"]), (2, 1))
+        self.assertAlmostEqual(q["quota_centri_motivati"], 0.5)

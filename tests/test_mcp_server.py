@@ -348,3 +348,15 @@ class TestCercaCodice(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAllergiaNonCodificata(unittest.TestCase):
+
+    def test_un_allergene_senza_codice_e_dichiarato_fatto_mancante(self) -> None:
+        """«ASA» non risolve: il filtro non puo' dirne niente, e la risposta lo
+        dice invece di proporre come se l'allergia non ci fosse."""
+        r = mcp_server.proponi_terapia(
+            "Cardiopatia ischemica cronica. Allergie e intolleranze: Principi attivi (ASA)",
+            "", quante=2)
+        self.assertTrue(any("ASA" in n and "codificare" in n
+                            for n in r.get("fatti_mancanti", [])))

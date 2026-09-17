@@ -76,6 +76,7 @@ NOMI_LIVELLO = {
     3: "2o - gruppo terapeutico",
     4: "3o - gruppo farmacologico",
     5: "4o - sottogruppo chimico",
+    7: "5o - sostanza",
 }
 
 
@@ -397,6 +398,84 @@ def stampa_step9(esiti: Sequence[Esito]) -> None:
               f"{m['richiamo@10']:7.1%} {m['precisione@5']:7.1%} {m['MAP']:7.3f}")
 
 
+def spiegabilita(esiti: Sequence[Esito], casi: Sequence[Caso], k: int = 5,
+                 simbolico: RankerSimbolico | None = None) -> dict[str, dict]:
+    """Quante proposte portano una ragione citabile, e quante fra quelle centrate.
+
+    Il ranker ibrido non e' misurabilmente migliore della frequenza sul
+    richiamo (§7). Quello che lo distingue e' un'altra cosa, e va contata
+    invece che affermata: per ogni proposta fra le prime k, ha almeno
+    un'indicazione ESC che scatta su questo paziente? La frequenza per
+    costruzione non ne ha: propone senza guardare il paziente. Si contano
+    separatamente le proposte **centrate** (prescritte davvero), perche' e' li'
+    che una motivazione vale: una proposta sbagliata e motivata resta sbagliata.
+    """
+    simbolico = simbolico or RankerSimbolico()
+    per_enc = {c.enc_oid: c for c in casi}
+    fuori = {}
+    for e in esiti:
+        proposte = motivate = centri = centri_motivati = 0
+        for enc, ordine in e.ordini.items():
+            caso, veri = per_enc[enc], e.bersagli.get(enc, frozenset())
+            for cls in ordine[:k]:
+                ha_motivo = bool(simbolico.motivazioni(caso, cls))
+                proposte += 1
+                motivate += ha_motivo
+                if cls in veri:
+                    centri += 1
+                    centri_motivati += ha_motivo
+        fuori[e.sigla] = {
+            "proposte": proposte, "motivate": motivate,
+            "quota_motivate": motivate / proposte if proposte else 0.0,
+            "centri": centri, "centri_motivati": centri_motivati,
+            "quota_centri_motivati": centri_motivati / centri if centri else 0.0,
+        }
+    return fuori
+
+
+def _stampa_spiegabilita(esiti: Sequence[Esito], quote: dict[str, dict], k: int) -> None:
+    print(f"\nPROPOSTE CON UN'INDICAZIONE CITABILE (prime {k})")
+    print(f"{'ranker':36}{'proposte':>10}{'motivate':>10}{'centri':>9}{'motivati':>10}")
+    for e in esiti:
+        q = quote[e.sigla]
+        print(f"{e.nome[:35]:36}{q['proposte']:>10}{q['quota_motivate']:>9.1%} "
+              f"{q['centri']:>8}{q['quota_centri_motivati']:>9.1%}")
+
+
+def _llm_su_tutti(casi: Sequence[Caso], opzioni) -> Esito:
+    """Il ranker LLM remoto su tutti i casi, con un tetto di spesa."""
+    from llm_backend import BackendOpenRouter
+    from ranker import RankerLLM, nomi_icd
+
+    if opzioni.llm != ["openrouter"]:
+        raise SystemExit("con --pieghe il ranker LLM e' solo quello remoto (--llm openrouter)")
+    kwargs: dict = {"ragionamento": "no"}
+    if opzioni.modello:
+        kwargs["modello"] = opzioni.modello
+    backend = BackendOpenRouter(**kwargs)
+    tetto = opzioni.tetto_dollari
+
+    def rapporto(n, enc, risposta, secondi):
+        if n % 50 == 0 or not risposta.da_cache and n <= 3:
+            print(f"  llm {n}/{len(casi)}  enc {enc}  cache={risposta.da_cache}  "
+                  f"speso {r_llm.costo:.4f} $")
+        if r_llm.costo > tetto:
+            raise SystemExit(f"tetto di spesa superato: {r_llm.costo:.4f} $ > {tetto} $")
+
+    r_llm = RankerLLM(backend, nomi_icd(), nomi_atc(), rapporto=rapporto)
+    addestramento, _ = dividi(casi, opzioni.quota_prova)
+    candidati = insieme_candidato(addestramento)
+    tutti = sorted(casi, key=lambda c: c.enc_oid)
+    print(f"Ranker LLM ({backend.modello}) su {len(tutti)} casi, {len(candidati)} "
+          f"candidati della divisione singola, tetto {tetto} $ ...")
+    ordini, bersagli = proiezioni(r_llm, tutti, candidati)
+    print(f"  chiamate {r_llm.chiamate}, token {r_llm.token}, costo {r_llm.costo:.4f} $, "
+          f"codici scartati {r_llm.scartati}")
+    e = esito_da_proiezioni("llm_rem", f"modello linguistico ({backend.modello})",
+                            ordini, bersagli, opzioni.k)
+    return e
+
+
 def stampa(esiti: Sequence[Esito], k: int) -> None:
     print(f"\nRICHIAMO@{k} SULLE AGGIUNTE, PER LIVELLO ATC")
     print(f"{'ranker':36}" + "".join(f"{NOMI_LIVELLO[n][:12]:>13}" for n in LIVELLI))
@@ -422,10 +501,10 @@ def stampa(esiti: Sequence[Esito], k: int) -> None:
         print(f"{e.nome[:35]:36}{g['hP']:8.1%} {g['hR']:8.1%} {g['hF']:8.1%}")
 
     print(f"\nDOVE CADONO LE PROPOSTE NON ESATTE (prime {k})")
-    print(f"{'ranker':36}{'nulla':>9}{'1o liv':>9}{'2o liv':>9}{'3o liv':>9}")
+    print(f"{'ranker':36}{'nulla':>9}" + "".join(f"{f'{n}o liv':>9}" for n in range(1, len(LIVELLI))))
     for e in esiti:
         q = e.famiglia["quote"]
-        print(f"{e.nome[:35]:36}" + "".join(f"{q[n]:8.1%} " for n in range(4)))
+        print(f"{e.nome[:35]:36}" + "".join(f"{q[n]:8.1%} " for n in range(len(LIVELLI))))
 
 
 def main() -> None:
@@ -451,7 +530,23 @@ def main() -> None:
                                 "escluso: servirebbero chiamate nuove.")
     argomenti.add_argument("--bootstrap", type=int, default=1000,
                            help="Giri di bootstrap sui ricoveri (0 per saltarlo).")
+    argomenti.add_argument("--tetto-dollari", type=float, default=0.45,
+                           help="Con --pieghe e --llm openrouter: la corsa si ferma "
+                                "se la spesa supera questo tetto.")
+    argomenti.add_argument("--sostanza", action="store_true",
+                           help="Unita' = sostanza (ATC a 7 caratteri, il 5o livello "
+                                "del brief) invece della classe a 5. Aggiunge il "
+                                "livello 7 alla tabella.")
     opzioni = argomenti.parse_args()
+
+    if opzioni.sostanza:
+        # `classe()` legge la costante a ogni chiamata: basta cambiarla prima di
+        # caricare i casi, e candidati, bersagli e proposte sono tutti a 7.
+        import ranker
+        ranker.LIVELLO_CLASSE = 7
+        global LIVELLI
+        LIVELLI = (1, 3, 4, 5, 7)
+        print("Unita': la sostanza (7 caratteri).")
 
     casi = carica_casi(opzioni.cartella_b)
 
@@ -461,17 +556,26 @@ def main() -> None:
         print(f"Casi: {len(casi)}, validazione incrociata a {opzioni.pieghe} "
               f"pieghe: ogni ricovero misurato una volta come prova.")
         esiti = valuta_incrociata(fabbriche, casi, opzioni.pieghe, opzioni.k)
+        coppie = [("ibr", "freq"), ("ibr", "simb"), ("freq", "simb")]
+        if opzioni.llm:
+            # Il ranker LLM non impara dai casi: le pieghe non gli servono.
+            # Si misura su TUTTI gli 841 con l'insieme candidato della divisione
+            # singola, cosi' le 244 risposte gia' pagate arrivano dalla cache e
+            # si pagano solo le altre 597. Ogni ricovero e' misurato una volta,
+            # come per gli altri ranker, e le differenze appaiate sono lecite.
+            esiti.append(_llm_su_tutti(casi, opzioni))
+            coppie += [("llm_rem", "freq"), ("llm_rem", "ibr"), ("llm_rem", "simb")]
         stampa_step9(esiti)
         stampa(esiti, opzioni.k)
+        quote = spiegabilita(esiti, casi, opzioni.k)
+        _stampa_spiegabilita(esiti, quote, opzioni.k)
         incertezza = None
         if opzioni.bootstrap:
             print(f"\nBootstrap su {opzioni.bootstrap} ricampionamenti dei ricoveri...")
-            incertezza = bootstrap(esiti, opzioni.k, opzioni.bootstrap,
-                                   coppie=[("ibr", "freq"), ("ibr", "simb"),
-                                           ("freq", "simb")])
+            incertezza = bootstrap(esiti, opzioni.k, opzioni.bootstrap, coppie=coppie)
             _stampa_incertezza(esiti, incertezza, opzioni.k)
         _scrivi(opzioni.uscita, esiti, opzioni.k, incertezza,
-                {"pieghe": opzioni.pieghe, "casi": len(casi)})
+                {"pieghe": opzioni.pieghe, "casi": len(casi), "spiegabilita": quote})
         return
 
     addestramento, prova = dividi(casi, opzioni.quota_prova)

@@ -232,3 +232,39 @@ dipendono le decisioni cliniche.
 | il solo gazetteer non basta a vietare | un divieto poggerebbe sulla pipeline con la precisione più bassa |
 | la **fonte** viaggia nel verdetto | una regola che non dice su cosa si basa non è contestabile da un clinico |
 | un divieto vince su un dubbio, un dubbio non declassa un divieto | l'ordine degli esiti diventerebbe dipendente dall'ordine delle regole |
+
+---
+
+## 10. Il richiamo del filtro, misurato su casi avversari
+
+Il §6 misura la **precisione** (quante volte il filtro blocca a vuoto) sulle
+prescrizioni reali. Il **richiamo** — quante controindicazioni vere lascia
+passare — non ha una verità di riferimento, e il vincolo di questo step vieta
+di ricavarla dal dataset. Si è quindi fatto l'unico esperimento possibile:
+venti casi scritti apposta per ingannarlo, attraversati **con l'estrazione
+deterministica**, cioè come li incontra un utente della demo o del server MCP
+([`tests/test_filtro_avversario.py`](../tests/test_filtro_avversario.py)).
+
+| il filtro coglie | 14 su 20 |
+|---|---|
+| allergia scritta per esteso, in maiuscolo, con nome commerciale AIFA, con due allergeni | vietato |
+| stessa sostanza a un altro codice ATC (analgesico vs antiaggregante) | da verificare, non vietato |
+| condizione negata, condizione del familiare, sezione «non note» | ammesso |
+| blocco AV, gotta, duplicazione di classe | da verificare |
+| verapamil o FANS in scompenso | **da verificare, non vietato**: la regola dice vietato, ma il solo gazetteer non basta a vietare (§9). Con il motore deterministico nessuna condizione produce un divieto: solo l'allergia |
+
+| il filtro manca | 6 su 20 — restano nel test come `expectedFailure`, con la causa |
+|---|---|
+| allergene come acronimo («ASA») | nessuna fonte citabile lo risolve |
+| allergene con nome commerciale mai visto nel corpus («aspirina») | il vocabolario chiuso è lo scope (brief §3.1); per un filtro di sicurezza è il limite più serio di quella scelta |
+| allergia scritta in prosa fuori dalla sezione | la regex legge la sottosezione strutturata; in prosa diventa la condizione T78.4 |
+| «asma bronchiale», «emorragia cerebrale» | non nel vocabolario chiuso delle condizioni: la regola c'è, il fatto non arriva |
+| «insufficienza renale stadio 4» | il gazetteer arriva a N18, la regola della metformina vuole N18.4–5 |
+
+Due cose ne seguono. **Un allergene non codificato è un fatto mancante**, e
+ora il server MCP lo dichiara come tale invece di proporre come se l'allergia
+non ci fosse. E il richiamo del filtro è limitato dall'estrazione, non dalle
+regole: cinque dei sei casi mancati sono un termine che il vocabolario chiuso
+non conosce. È la stessa conclusione dello step 6bis (richiamo del gazetteer
+19,5%), vista dal lato della sicurezza.
+

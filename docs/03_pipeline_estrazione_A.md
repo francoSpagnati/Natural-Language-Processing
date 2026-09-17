@@ -65,6 +65,8 @@ statistico, che su prosa clinica abbreviata è inaffidabile.
 
 ### 3.2 ConText adattato all'italiano, con marcatori ricavati dal corpus
 
+> L'algoritmo è di Harkema, Dowling, Thornblade e Chapman, *ConText: an algorithm for determining negation, experiencer, and temporal status from clinical reports*, Journal of Biomedical Informatics 42(5), 2009, doi:10.1016/j.jbi.2009.05.002. Qui è riscritto da zero per l'italiano: i marcatori e gli ambiti sono ricavati dal corpus, non tradotti.
+
 medspaCy e scispaCy non sono utilizzabili: i loro marcatori sono scritti per
 l'inglese, e `denies`, `no evidence of`, `rule out` in un referto italiano non
 compaiono mai. L'algoritmo però si trasferisce: ogni marcatore apre un **ambito**

@@ -1,7 +1,7 @@
 # Step 5 — Pipeline C: NER + Entity Linking
 
 **Stato:** completato.
-**Riproducibilità:** `python3 src/silver_labels.py && python3 src/ner_train.py && python3 src/extract_c.py`
+**Riproducibilità:** `python3 src/sonda_ner_preaddestrato.py` (la prova sul pre-addestrato), poi `python3 src/silver_labels.py && python3 src/ner_train.py && python3 src/extract_c.py`
 
 Terza e ultima pipeline di estrazione. La domanda a cui risponde è precisa: **un
 modello a token addestrato sulle annotazioni della pipeline A riesce a trovare
@@ -10,10 +10,58 @@ non aggiungerebbe nulla — e anche quello sarebbe un risultato da riportare.
 
 ---
 
+## 0. Che cos'è un NER, e perché va addestrato
+
+Un modello NER (*Named Entity Recognition*) legge il testo e marca gli
+intervalli che sono entità di un certo tipo — qui `DRUG` e `CONDITION`. A
+differenza del gazetteer (che cerca stringhe di un elenco) e del modello
+linguistico (che risponde a un prompt), un NER è un classificatore di token:
+per ogni parola decide «inizio di entità / dentro / fuori». Per farlo deve
+aver **visto esempi etichettati**: bioBIT, il modello di base usato qui, è un
+BERT addestrato su testo biomedico italiano, che conosce la lingua ma non sa
+che cosa sia un farmaco finché non lo si addestra.
+
+Le etichette possono essere **gold** (scritte a mano da un annotatore) o
+**silver** (prodotte automaticamente da un altro sistema). Il brief esclude
+l'annotazione manuale e prescrive testualmente la seconda via: *«fine-tuning
+di un modello NER italiano… usando come training set silver le annotazioni
+prodotte dalla pipeline A su tutto il dataset (weak supervision)»*. È quello
+che questo step fa. La domanda che ne segue — se un modello addestrato su
+etichette del gazetteer possa trovare più del gazetteer — è la §1.
+
+### Prima: esiste un NER clinico italiano già addestrato?
+
+Il brief chiede di verificarlo prima di addestrare. Cercato su Hugging Face il
+17 settembre 2026 («italian medical ner», filtro *token-classification*): **un
+solo modello italiano**, [`HUMADEX/italian_medical_ner`](https://huggingface.co/HUMADEX/italian_medical_ner)
+— BERT base, supervisione debole su testo clinico tradotto, etichette
+`PROBLEM` / `TEST` / `TREATMENT`, Apache 2.0 (Sallauka et al. 2025,
+doi:10.3390/app15105585). Nessuno con etichette farmaco/condizione ancorate a
+un vocabolario. Eseguito sui 25 referti del riferimento annotato con la stessa
+funzione di valutazione delle tre pipeline
+([`src/sonda_ner_preaddestrato.py`](../src/sonda_ner_preaddestrato.py)):
+
+| sul riferimento, 25 referti | attese | trovate | precisione | richiamo | F1 |
+|---|---|---|---|---|---|
+| `PROBLEM` → condizioni | 559 | 932 | 31,0% | **51,7%** | 38,8% |
+| `TREATMENT` → farmaci in prosa | 60 | 967 | 3,6% | 58,3% | 6,8% |
+| *per confronto:* A gazetteer, condizioni | 559 | 136 | 80,1% | 19,5% | 31,4% |
+| *per confronto:* C su silver, condizioni | 559 | 136 | 81,6% | 19,9% | 31,9% |
+
+Vede **due volte e mezzo** le condizioni del gazetteer, ma due su tre di ciò
+che marca non è una condizione attesa, e `TREATMENT` copre qualunque
+intervento (967 menzioni per 60 farmaci). Soprattutto **non collega a nulla**:
+restituisce intervalli, non codici, e lo step 5 §3 mostra che il collegamento
+per similarità ortografica sbaglia 3 volte su 6. Un pre-addestrato generico
+sposta il problema dal riconoscimento al linking senza risolverlo; il
+fine-tuning su silver resta la via del brief, con il risultato negativo che
+segue.
+
+---
+
 ## 1. Le etichette silver
 
-Il brief esclude l'annotazione manuale. Le etichette di addestramento vengono
-quindi dall'uscita della pipeline A: **1 000 referti, 7 649 menzioni**, tutte
+Le etichette di addestramento vengono dall'uscita della pipeline A: **1 000 referti, 7 649 menzioni**, tutte
 con offset che ritagliano esattamente il testo dichiarato (verificato: le
 annotazioni incoerenti verrebbero scartate, e non ce n'è nessuna).
 
@@ -58,7 +106,7 @@ da `dbmdz/bert-base-italian-xxl-cased` e prosegue il pre-addestramento su un
 corpus biomedico italiano ottenuto traducendo abstract di PubMed.
 
 > Buonocore et al., *Localizing in-domain adaptation of transformer-based
-> biomedical language models*, Journal of Biomedical Informatics, 2023.
+> biomedical language models*, Journal of Biomedical Informatics 144, 2023, doi:10.1016/j.jbi.2023.104431.
 > Modello: <https://huggingface.co/IVN-RIN/bioBIT>
 
 Il lessico dei referti — patologie, principi attivi, abbreviazioni cliniche — è
