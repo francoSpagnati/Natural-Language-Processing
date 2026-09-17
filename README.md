@@ -586,7 +586,8 @@ python3 src/valuta_mcp.py                         # le dieci domande (ollama, ~1
 ```
 
 Il dataset va in `data/raw/anamnesiterapie.txt`; il PDF ICD-10 in
-`data/external/`. Le corse con modello linguistico sono in cache per impronta
+`data/external/`. Questa relazione è anche in [`docs/relazione.pdf`](docs/relazione.pdf)
+(resa di questo file con `markdown-it` e Chrome headless). Le corse con modello linguistico sono in cache per impronta
 di richiesta: rieseguire una valutazione non chiama il modello. La chiave
 OpenRouter sta in `.env.local`, mai nel codice.
 

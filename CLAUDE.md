@@ -36,6 +36,7 @@ src/normalize_drugs.py    step 2b  farmaco -> ATC
 src/extract_a.py          step 3   pipeline A, deterministica
 src/extract_b.py          step 4   pipeline B, con modello linguistico
 src/extract_c.py          step 5   pipeline C, NER + entity linking
+src/sonda_ner_preaddestrato.py step 5 il NER clinico italiano pre-addestrato sui 25 referti del riferimento
 src/confronto.py          step 6   confronto fra le tre pipeline
 src/riferimento.py        step 6b  riferimento annotato a mano
 src/kb_build.py           step 7   scrive kb/conoscenza.ttl: 27 indicazioni, 12 controindicazioni
