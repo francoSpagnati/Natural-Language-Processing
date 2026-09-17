@@ -59,6 +59,8 @@ sys.path.insert(0, str(RADICE / "src"))
 from mcp.server.mcpserver import MCPServer  # noqa: E402
 from mcp.types import ToolAnnotations  # noqa: E402
 
+from schema import StatoPaziente  # noqa: E402
+
 mcp = MCPServer(
     name="cardio_mcp",
     instructions=(
@@ -106,6 +108,80 @@ def _analisi(anamnesi: str, terapia_ingresso: str, con_traccia: bool) -> dict:
                               con_traccia=con_traccia)
 
 
+def _confeziona(esito: dict, quante: int, terapia_ingresso: str = "") -> dict:
+    """La risposta del server a partire dall'esito della catena.
+
+    Condivisa dai due tool di proposta: quello a testo (estrae, poi entra qui)
+    e quello a stato paziente (entra direttamente qui, come il brief §3.2
+    prevede: lo stato strutturato e' l'unico input del motore).
+    """
+    condizioni = [c for c in esito["condizioni"] if c["codice"]]
+    farmaci = esito["farmaci"]
+
+    # Il fondamento di ogni proposta, detto a parole invece che dedotto
+    # dall'assenza di un campo. Un modello conversazionale che riceve una
+    # proposta con `motivo: null` tende a **riempire il vuoto** con una
+    # motivazione propria: misurato su questo server, `qwen3.5:4b` ha inventato
+    # un «profilo nefroprotettivo» e ha chiamato A02BC «betabloccante
+    # selettivo». Dire in chiaro che la proposta non ha una regola e' l'unica
+    # difesa che il server puo' offrire, perche' la prosa finale non e' sua.
+    proposte = []
+    for p in esito["proposte"][:quante]:
+        proposte.append({
+            **p,
+            "fondamento": ("indicazione citata" if p["classe_raccomandazione"]
+                           else "co-occorrenza misurata nel corpus"),
+            **({} if p["classe_raccomandazione"] else {
+                "attenzione": ("Nessuna linea guida sostiene questa proposta: "
+                               "viene dalla frequenza con cui in questo reparto "
+                               "la classe compare insieme a questi fatti. Non "
+                               "attribuirle una motivazione clinica che il "
+                               "sistema non ha dato."),
+            }),
+        })
+
+    fuori = {
+        "ranker": "ibrido",
+        "condizioni": condizioni,
+        "farmaci_ingresso": farmaci,
+        "allergie": esito["allergie"],
+        "candidati_ammessi": esito["candidati_ammessi"],
+        "candidati_totali": esito["candidati_totali"],
+        "proposte": proposte,
+        "avvertenza": (
+            "Ordinamento del ranker ibrido (indicazioni ESC + co-occorrenza): "
+            "richiamo@5 del 48,5% sulle aggiunte reali, validazione incrociata "
+            "a 5 pieghe su 841 ricoveri; un contatore di frequenza fa 47,5%, "
+            "indistinguibile. Il 40,4% delle prescrizioni di dimissione non e' "
+            "cardiologia e nessuna linea guida cardiologica la regola: "
+            "un'assenza qui non e' una controindicazione."
+        ),
+    }
+
+    # Il principio del fatto mancante, che lo step 8 ha incontrato tre volte:
+    # una risposta la cui premessa e' fallita non si presenta come se fosse
+    # valida. Se non e' stato estratto nulla, le proposte sono il tasso di base
+    # del reparto e non hanno niente a che vedere con questo paziente.
+    note: list[str] = []
+    if not condizioni:
+        note.append("Nessuna condizione codificata dal testo: le proposte qui "
+                    "sotto NON sono specifiche per questo paziente, sono le "
+                    "classi piu' frequenti del reparto. Il gazetteer riconosce "
+                    "le forme scritte per esteso: «ipertensione arteriosa» si', "
+                    "«iperteso» no.")
+    if terapia_ingresso.strip() and not farmaci:
+        note.append("Nessun farmaco riconosciuto nella terapia. Il parser "
+                    "vuole DUE cose: le voci separate da punto e virgola, e "
+                    "**la dose dentro ogni voce**. `Furosemide, Ramipril` non "
+                    "viene letto, e nemmeno `Furosemide; Ramipril`: serve "
+                    "`Furosemide 25 mg; Ramipril 5 mg`. E' il formato del campo "
+                    "«terapia all'ingresso» da cui il parser e' stato ricavato, "
+                    "dove la dose c'e' sempre.")
+    if note:
+        fuori["fatti_mancanti"] = note
+    return fuori
+
+
 @mcp.tool(
     name="cardio_proponi_terapia",
     annotations=SOLA_LETTURA,
@@ -138,69 +214,35 @@ def proponi_terapia(anamnesi: str, terapia_ingresso: str = "",
         quante: quante proposte restituire (1-15).
     """
     quante = max(1, min(int(quante), 15))
-    esito = _analisi(anamnesi, terapia_ingresso, False)
-    condizioni = [c for c in esito["condizioni"] if c["codice"]]
-    farmaci = esito["farmaci"]
+    return _confeziona(_analisi(anamnesi, terapia_ingresso, False), quante,
+                       terapia_ingresso)
 
-    # Il fondamento di ogni proposta, detto a parole invece che dedotto
-    # dall'assenza di un campo. Un modello conversazionale che riceve una
-    # proposta con `motivo: null` tende a **riempire il vuoto** con una
-    # motivazione propria: misurato su questo server, `qwen3.5:4b` ha inventato
-    # un «profilo nefroprotettivo» e ha chiamato A02BC «betabloccante
-    # selettivo». Dire in chiaro che la proposta non ha una regola e' l'unica
-    # difesa che il server puo' offrire, perche' la prosa finale non e' sua.
-    proposte = []
-    for p in esito["proposte"][:quante]:
-        proposte.append({
-            **p,
-            "fondamento": ("indicazione citata" if p["classe_raccomandazione"]
-                           else "co-occorrenza misurata nel corpus"),
-            **({} if p["classe_raccomandazione"] else {
-                "attenzione": ("Nessuna linea guida sostiene questa proposta: "
-                               "viene dalla frequenza con cui in questo reparto "
-                               "la classe compare insieme a questi fatti. Non "
-                               "attribuirle una motivazione clinica che il "
-                               "sistema non ha dato."),
-            }),
-        })
 
-    fuori = {
-        "condizioni": condizioni,
-        "farmaci_ingresso": farmaci,
-        "allergie": esito["allergie"],
-        "candidati_ammessi": esito["candidati_ammessi"],
-        "candidati_totali": esito["candidati_totali"],
-        "proposte": proposte,
-        "avvertenza": (
-            "Ordinamento misurato: richiamo@5 del 53,1% sulle aggiunte reali di "
-            "244 ricoveri. Il 40,4% delle prescrizioni di dimissione non e' "
-            "cardiologia e nessuna linea guida cardiologica la regola: "
-            "un'assenza qui non e' una controindicazione."
-        ),
-    }
+@mcp.tool(
+    name="cardio_proponi_da_stato",
+    annotations=SOLA_LETTURA,
+    description=(
+        "Come `cardio_proponi_terapia`, ma l'ingresso e' uno stato paziente "
+        "gia' strutturato (`StatoPaziente`: condizioni con codice ICD-10 e "
+        "stato affermato/negato, farmaci con codice ATC e momento, allergie), "
+        "cioe' l'uscita di una delle tre pipeline di estrazione del progetto. "
+        "Salta l'estrazione ed entra direttamente nel filtro di sicurezza e "
+        "nel ranker. Usalo quando hai gia' i codici; se hai solo il testo usa "
+        "`cardio_proponi_terapia`. Restituisce le proposte con il fondamento "
+        "e il ranker usato. Non e' una prescrizione."
+    ),
+)
+def proponi_da_stato(stato_paziente: StatoPaziente, quante: int = 6) -> dict:
+    """Propone le classi ATC da aggiungere, a partire da uno stato strutturato.
 
-    # Il principio del fatto mancante, che lo step 8 ha incontrato tre volte:
-    # una risposta la cui premessa e' fallita non si presenta come se fosse
-    # valida. Se non e' stato estratto nulla, le proposte sono il tasso di base
-    # del reparto e non hanno niente a che vedere con questo paziente.
-    note: list[str] = []
-    if not condizioni:
-        note.append("Nessuna condizione codificata dal testo: le proposte qui "
-                    "sotto NON sono specifiche per questo paziente, sono le "
-                    "classi piu' frequenti del reparto. Il gazetteer riconosce "
-                    "le forme scritte per esteso: «ipertensione arteriosa» si', "
-                    "«iperteso» no.")
-    if terapia_ingresso.strip() and not farmaci:
-        note.append("Nessun farmaco riconosciuto nella terapia. Il parser "
-                    "vuole DUE cose: le voci separate da punto e virgola, e "
-                    "**la dose dentro ogni voce**. `Furosemide, Ramipril` non "
-                    "viene letto, e nemmeno `Furosemide; Ramipril`: serve "
-                    "`Furosemide 25 mg; Ramipril 5 mg`. E' il formato del campo "
-                    "«terapia all'ingresso» da cui il parser e' stato ricavato, "
-                    "dove la dose c'e' sempre.")
-    if note:
-        fuori["fatti_mancanti"] = note
-    return fuori
+    Args:
+        stato_paziente: lo stato paziente nello schema del progetto.
+        quante: quante proposte restituire (1-15).
+    """
+    quante = max(1, min(int(quante), 15))
+    esito = _catena().analizza_stati({stato_paziente.pipeline.value[0]: stato_paziente},
+                                     quante=8)
+    return _confeziona(esito, quante)
 
 
 @mcp.tool(

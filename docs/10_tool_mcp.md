@@ -70,15 +70,28 @@ rosso arriva prima del dato spedito.
 
 ---
 
-## 2. I cinque strumenti
+## 2. I sei strumenti
 
 | strumento | risponde a |
 |---|---|
-| `cardio_proponi_terapia` | «che cosa aggiungeresti alla dimissione?» |
+| `cardio_proponi_terapia` | «che cosa aggiungeresti alla dimissione?» — dal **testo** |
+| `cardio_proponi_da_stato` | la stessa domanda — da uno **`StatoPaziente`** già codificato |
 | `cardio_sostegno_del_concetto` | **«da dove viene questo fatto?»** |
 | `cardio_verifica_sicurezza` | «questo farmaco si può dare a questo paziente?» |
 | `cardio_cerca_codice` | «che cos'è `C03DA`?» / «qual è il codice dei sartani?» |
 | `cardio_statistiche_corpus` | «quanto è affidabile quello che mi stai dicendo?» |
+
+**Due ingressi per la stessa proposta.** Il brief §3.5 fissa la firma del tool
+come `suggest_cardiac_therapy(patient_state: PatientState)`: lo stato
+strutturato — uscita di una delle tre pipeline — è l'unico input del motore.
+`cardio_proponi_da_stato` è quella firma: prende uno `StatoPaziente` Pydantic
+(lo schema JSON lo genera l'SDK dal modello, con `CondizioneEstratta`,
+`FarmacoEstratto`, `AllergiaEstratta`) e salta l'estrazione. Il tool a testo
+esiste perché un modello conversazionale davanti a un'anamnesi non ha una
+pipeline di estrazione: estrae con il motore deterministico e poi entra nello
+stesso punto — `demo.analizza_stati` — e un test verifica che i due percorsi
+diano le stesse proposte. Entrambi dichiarano `ranker: ibrido` nella risposta.
+Lo stesso confine è nella demo: `python3 src/demo.py --stato <file.json>`.
 
 `cardio_sostegno_del_concetto` è quello per cui lo step 9ter aveva lasciato la
 nota di disegno: *«da dove viene questo fatto» è esattamente la domanda che un
@@ -313,7 +326,7 @@ la ragione è registrata in
 
 Quattro corse non sono una misura. Qui le domande sono scritte **prima** di
 eseguirle — [`src/valuta_mcp.py`](../src/valuta_mcp.py) — ciascuna con lo
-strumento atteso e se un testo clinico va passato. Coprono i cinque strumenti, i
+strumento atteso e se un testo clinico va passato. Coprono i cinque strumenti a testo, i
 due stili di scrittura (prosa e telegrafico), due casi di sicurezza e una
 domanda fuori ambito. Si conta: strumento giusto al primo colpo, testo passato
 intatto, risposta arrivata. Modello `qwen3.5:4b`, zero denaro.

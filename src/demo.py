@@ -420,7 +420,21 @@ def analizza(anamnesi: str, terapia: str, motore: str = "deterministico",
     stati = {"A": estrai_deterministico(record)}
     if motore != "deterministico":
         stati["B"] = estrai_con_modello(record, motore, modello)
-    stato = stati.get("B", stati["A"])
+    return {"motore": motore, "anamnesi": anamnesi, "terapia_ingresso": terapia,
+            **analizza_stati(stati, quante, con_traccia)}
+
+
+def analizza_stati(stati: dict, quante: int = 6, con_traccia: bool = False) -> dict:
+    """La catena dallo stato paziente in poi: filtro, ranker, traccia.
+
+    E' il confine che il brief fissa (§3.2): lo stato strutturato e' l'unico
+    input del motore. Da qui in avanti non importa quale pipeline lo abbia
+    prodotto, e il tool MCP `cardio_proponi_da_stato` entra esattamente qui.
+    `stati` mappa la sigla della pipeline allo `StatoPaziente`; se ce n'e' piu'
+    di uno, il motore usa B (la piu' completa, step 6bis) e il grafo li tiene
+    tutti.
+    """
+    stato = stati.get("B") or next(iter(stati.values()))
 
     condizioni = [{"codice": c.codice, "testo": c.testo_grezzo, "agenti": ["demo"]}
                   for c in stato.condizioni
@@ -473,9 +487,6 @@ def analizza(anamnesi: str, terapia: str, motore: str = "deterministico",
             break
 
     return {
-        "motore": motore,
-        "anamnesi": anamnesi,
-        "terapia_ingresso": terapia,
         "condizioni": [{
             "testo": c.testo_grezzo, "codice": c.codice,
             "stato": c.stato.value, "soggetto": c.soggetto.value,
@@ -598,6 +609,9 @@ def main() -> None:
                                 "parole di quale referto, viste da quale "
                                 "pipeline, viene ogni proposta. Interroga il "
                                 "knowledge graph dello step 7 in SPARQL.")
+    argomenti.add_argument("--stato", type=Path, default=None,
+                           help="uno StatoPaziente in JSON (l'uscita di una pipeline): "
+                                "salta l'estrazione ed entra nel motore; stampa JSON")
     argomenti.add_argument("--json", action="store_true",
                            help="Stampa il risultato come JSON invece che come "
                                 "rapporto leggibile.")
@@ -614,6 +628,16 @@ def main() -> None:
         for i, e in enumerate(ESEMPI, 1):
             print(f"  {i}. {e.titolo}")
             paragrafo(f"mostra: {e.mostra}", "     ")
+        return
+
+    if opzioni.stato:
+        import json
+
+        from schema import StatoPaziente
+
+        stato = StatoPaziente.model_validate_json(opzioni.stato.read_text(encoding="utf-8"))
+        print(json.dumps(analizza_stati({stato.pipeline.value[0]: stato}, opzioni.quante,
+                                        opzioni.traccia), ensure_ascii=False, indent=1))
         return
 
     if opzioni.interattivo:

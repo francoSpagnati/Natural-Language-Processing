@@ -46,7 +46,7 @@ src/ranker.py             step 9   i tre ranker + due linee di base
 src/valuta_ranker.py      step 9   valutazione contro la terapia reale
 src/demo.py               step 9b  demo end-to-end
 src/traccia.py            step 9c  traccia di provenienza via SPARQL
-src/mcp_server.py         step 10  server MCP, 5 strumenti di sola lettura
+src/mcp_server.py         step 10  server MCP, 6 strumenti di sola lettura (testo o StatoPaziente)
 src/mcp_client_locale.py  step 10  host MCP locale con ollama
 src/valuta_gerarchica.py  step 11  metrica gerarchica, controllo casuale, bootstrap
 src/llm_backend.py                 backend LLM intercambiabili, con cache

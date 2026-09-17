@@ -79,12 +79,12 @@ class TestLeDuePromesseStrutturali(unittest.TestCase):
 
 class TestGliStrumentiSonoRegistrati(unittest.TestCase):
 
-    def test_i_cinque_strumenti_ci_sono_col_prefisso(self) -> None:
+    def test_i_sei_strumenti_ci_sono_col_prefisso(self) -> None:
         nomi = {s.name for s in strumenti()}
         self.assertEqual(nomi, {
-            "cardio_proponi_terapia", "cardio_sostegno_del_concetto",
-            "cardio_verifica_sicurezza", "cardio_cerca_codice",
-            "cardio_statistiche_corpus"})
+            "cardio_proponi_terapia", "cardio_proponi_da_stato",
+            "cardio_sostegno_del_concetto", "cardio_verifica_sicurezza",
+            "cardio_cerca_codice", "cardio_statistiche_corpus"})
         for nome in nomi:
             self.assertTrue(nome.startswith("cardio_"))
 
@@ -94,6 +94,29 @@ class TestGliStrumentiSonoRegistrati(unittest.TestCase):
             with self.subTest(strumento=s.name):
                 self.assertTrue((s.description or "").strip())
                 self.assertGreater(len(s.description), 80)
+
+
+class TestProponiDaStato(unittest.TestCase):
+    """Il tool a stato paziente del brief §3.5: Pydantic in ingresso, il
+    motore entra dopo l'estrazione."""
+
+    def test_lo_schema_di_ingresso_e_quello_di_StatoPaziente(self) -> None:
+        s = next(t for t in strumenti() if t.name == "cardio_proponi_da_stato")
+        proprieta = s.input_schema["properties"]["stato_paziente"]
+        definizioni = s.input_schema.get("$defs", {})
+        self.assertIn("StatoPaziente", str(proprieta) + str(definizioni))
+        self.assertIn("CondizioneEstratta", definizioni)
+
+    def test_uno_stato_gia_codificato_produce_le_stesse_proposte_del_testo(self) -> None:
+        """Estrarre e poi entrare nel motore == entrare nel motore con lo
+        stato estratto: la catena non ha un secondo percorso."""
+        import demo
+        stato = demo.estrai_deterministico(demo.paziente_da_testo(ANAMNESI, TERAPIA))
+        da_stato = mcp_server.proponi_da_stato(stato, quante=4)
+        da_testo = mcp_server.proponi_terapia(ANAMNESI, TERAPIA, quante=4)
+        self.assertEqual([p["classe_atc"] for p in da_stato["proposte"]],
+                         [p["classe_atc"] for p in da_testo["proposte"]])
+        self.assertEqual(da_stato["ranker"], "ibrido")
 
 
 class TestProponiTerapia(unittest.TestCase):

@@ -78,7 +78,7 @@ essere contestata da un clinico riga per riga.
 | 9 | [`09_ranker.md`](09_ranker.md) | copiare l'ingresso fa 63,6%; sulle aggiunte (divisione singola) ibrido 53,1%, contatore 49,5%, LLM 24,0% |
 | 9b | [`09b_demo.md`](09b_demo.md) | demo su pazienti nuovi; tre difetti trovati solo end-to-end |
 | 9c | [`09c_traccia.md`](09c_traccia.md) | «da dove viene questo fatto» risposto in SPARQL; 12,43 ms contro 0,073 µs |
-| 10 | [`10_tool_mcp.md`](10_tool_mcp.md) | 5 strumenti di sola lettura, 2 client; il corpus non passa di qui |
+| 10 | [`10_tool_mcp.md`](10_tool_mcp.md) | 6 strumenti di sola lettura (a testo e a stato paziente), 2 client; il corpus non passa di qui |
 | 11 | [`11_valutazione.md`](11_valutazione.md) | i 4–7 punti erano aritmetica; bootstrap e 5 pieghe: ibrido e frequenza indistinguibili |
 
 Notebook: [`01_analisi_esplorativa`](../notebooks/01_analisi_esplorativa.ipynb)
