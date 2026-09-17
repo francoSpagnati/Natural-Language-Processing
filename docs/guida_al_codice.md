@@ -180,7 +180,7 @@ sottosezione «Allergie e intolleranze», più lo stato della sezione).
                              token_ragionamento, tentativi, da_cache, secondi, costo
 class BackendLLM:            genera(richiesta) -> Risposta       # interfaccia
 class BackendOllama, BackendOpenRouter, BackendGemini, BackendFittizio
-class CacheRisposte:         leggi(impronta) · scrivi(impronta, risposta)   # data/interim/cache_llm/
+class CacheRisposte:         leggi(impronta, modello) · scrivi(impronta, risposta)   # data/interim/cache_llm/
 ERRORI_DI_RETE, ErroreRitentabile, ErroreQuotaGiornaliera, ErroreLLM
 chiave_api(nome) -> str      # dall'ambiente o da .env.local
 ```
@@ -218,8 +218,8 @@ termine e punteggio nella provenienza, perché sbaglia 3 volte su 6.
 ```python
 class RisolutoreATC:  risolvi(nome) -> (codice, StatoNormalizzazione, fonte)
                       risolvi_menzione(menzione) -> (codice, stato, fonte, forma_usata)
-class RisolutoreICD:  risolvi(testo, concetto=None) -> EsitoICD(codice, stato, concetto, candidati, metodo)
-                      categoria(concetto)          # il ripiego a tre caratteri, vincolato
+class RisolutoreICD:  risolvi(testo) -> EsitoICD(codice, stato, concetto, candidati, metodo)
+                      categoria(codice)            # la categoria a tre caratteri di un codice
 soggetto_della_menzione(testo_campo, inizio, fine) -> Soggetto
 ```
 
