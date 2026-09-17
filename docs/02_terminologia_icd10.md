@@ -1,6 +1,6 @@
 # Step 2 (parte 1) — Terminologia ICD-10 italiana
 
-**Stato:** completato. La decisione del § 6 è stata presa come proposto: il
+**Stato:** completato. La decisione del sez. 6 è stata presa come proposto: il
 collegamento delle condizioni ai codici sta negli step 3 e 5
 (`src/entity_linking.py`), dove ci sono negazione e riconoscimento.
 **Riproducibilità:** `python3 src/extract_icd10.py`
@@ -23,7 +23,7 @@ dentro `src/extract_icd10.py` e finisce nel JSON prodotto.
 **Perché partire da un PDF.** Non è la strada che si sceglierebbe potendo, ma è
 l'unica fonte verificata che soddisfi entrambi i vincoli del progetto: essere
 autorevole e citabile, ed essere **in italiano** come i referti. Le alternative
-sono state misurate, non ipotizzate (vedi `docs/01`, § 6): Wikidata copre 8 dei
+sono state misurate, non ipotizzate (vedi `docs/01`, sez. 6): Wikidata copre 8 dei
 20 termini cardiologici che servono, SNOMED CT non è licenziabile in Italia.
 Il PDF è generato da Word, non scansionato, quindi l'estrazione è deterministica
 e ripetibile — non un OCR probabilistico.
@@ -159,7 +159,7 @@ preliminare**.
 
 Per i farmaci il discorso resta diverso e la strada dello step 2 è valida: sono
 elencati in campi semi-strutturati, e il collegamento nome → ATC è una vera
-normalizzazione da tabella (§ 4 di `docs/01`).
+normalizzazione da tabella (sez. 4 di `docs/01`).
 
 ## 6. Decisione richiesta (presa: vedi Stato)
 

@@ -638,7 +638,7 @@ def pieghe(casi: Sequence[Caso], quante: int = 5,
             impronta = hashlib.sha256(f"{seme}:{caso.enc_oid}".encode()).hexdigest()
             fuori[int(impronta[:8], 16) % quante].append(caso)
         return fuori
-    # Stratificate per condizione principale (brief §4): dentro ogni strato i
+    # Stratificate per condizione principale (brief sez. 4): dentro ogni strato i
     # casi vanno nelle pieghe a turno, in ordine di impronta, cosi' ogni piega
     # ha la stessa quota di scompensi, fibrillazioni, ipertesi e «altro».
     def strato(caso: Caso) -> str:

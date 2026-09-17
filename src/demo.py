@@ -32,7 +32,7 @@ quello che il sistema sa fare, non di piu'.
 ## Che cosa la demo non e'
 
 Non e' un dispositivo medico e non e' una validazione clinica. Il ranker e'
-misurato contro *una* decisione presa da *un* medico su 841 ricoveri; il §1 di
+misurato contro *una* decisione presa da *un* medico su 841 ricoveri; il sez. 1 di
 `docs/09_ranker.md` spiega perche' la precisione di quella misura non e'
 interpretabile come correttezza.
 """
@@ -427,7 +427,7 @@ def analizza(anamnesi: str, terapia: str, motore: str = "deterministico",
 def analizza_stati(stati: dict, quante: int = 6, con_traccia: bool = False) -> dict:
     """La catena dallo stato paziente in poi: filtro, ranker, traccia.
 
-    E' il confine che il brief fissa (§3.2): lo stato strutturato e' l'unico
+    E' il confine che il brief fissa (sez. 3.2): lo stato strutturato e' l'unico
     input del motore. Da qui in avanti non importa quale pipeline lo abbia
     prodotto, e il tool MCP `cardio_proponi_da_stato` entra esattamente qui.
     `stati` mappa la sigla della pipeline allo `StatoPaziente`; se ce n'e' piu'
@@ -571,7 +571,7 @@ def esegui(anamnesi: str, terapia: str, motore: str = "deterministico",
     paragrafo("Il ranker e' misurato contro UNA decisione presa da UN medico su "
               "841 ricoveri. Una proposta non prescritta non e' per forza un "
               "errore, e una prescritta e non proposta non e' per forza una "
-              "svista. Vedi `docs/09_ranker.md` §1.")
+              "svista. Vedi `docs/09_ranker.md` sez. 1.")
 
 
 def main() -> None:

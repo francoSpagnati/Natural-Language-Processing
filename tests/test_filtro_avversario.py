@@ -11,7 +11,7 @@ cioe' come lo incontra un utente della demo o del server MCP.
 
 I casi che il filtro manca restano qui come `expectedFailure`, con la causa:
 sono la misura del richiamo, non un difetto da nascondere. Il conteggio e'
-nel doc 8, §10.
+nel doc 8, sez. 10.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ class TestAllergiaNelleSueGrafie(unittest.TestCase):
     @unittest.expectedFailure
     def test_nome_commerciale_fuori_dal_vocabolario_chiuso(self):
         """Fallisce: «Aspirina» e' in AIFA ma non e' mai comparsa nei campi di
-        terapia del corpus, e il vocabolario chiuso (brief §3.1) e' lo scope.
+        terapia del corpus, e il vocabolario chiuso (brief sez. 3.1) e' lo scope.
         Per un filtro di sicurezza e' il limite piu' serio di questa scelta."""
         self.assertIs(verdetto(ISCHEMICA + "Allergie e intolleranze: Principi attivi "
                                "(aspirina)", ASA), Esito.VIETATO)

@@ -41,7 +41,7 @@ che indichi un ricovero), e un test la fissa.
 | `cardio_cerca_codice` | «che cos'è `C03DA`?», «il codice dei sartani?» |
 | `cardio_statistiche_corpus` | «quanto è affidabile quello che mi dici?» — solo aggregati |
 
-**Due ingressi per la stessa proposta.** Il brief §3.5 fissa la firma
+**Due ingressi per la stessa proposta.** Il brief sez. 3.5 fissa la firma
 `suggest_cardiac_therapy(patient_state)`: lo stato strutturato è l'unico
 input del motore. `cardio_proponi_da_stato` è quella firma, con lo schema
 JSON generato dall'SDK dal modello Pydantic `StatoPaziente`. Il tool a testo

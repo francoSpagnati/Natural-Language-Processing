@@ -112,7 +112,7 @@ def _confeziona(esito: dict, quante: int, terapia_ingresso: str = "") -> dict:
     """La risposta del server a partire dall'esito della catena.
 
     Condivisa dai due tool di proposta: quello a testo (estrae, poi entra qui)
-    e quello a stato paziente (entra direttamente qui, come il brief §3.2
+    e quello a stato paziente (entra direttamente qui, come il brief sez. 3.2
     prevede: lo stato strutturato e' l'unico input del motore).
     """
     condizioni = [c for c in esito["condizioni"] if c["codice"]]
@@ -150,9 +150,9 @@ def _confeziona(esito: dict, quante: int, terapia_ingresso: str = "") -> dict:
         "proposte": proposte,
         "avvertenza": (
             "Ordinamento del ranker ibrido (indicazioni ESC + co-occorrenza): "
-            "richiamo@5 del 48,5% sulle aggiunte reali, validazione incrociata "
-            "a 5 pieghe su 841 ricoveri; un contatore di frequenza fa 47,5%, "
-            "indistinguibile. Il 40,4% delle prescrizioni di dimissione non e' "
+            "F1 56,9 a livello di sostanza contro la terapia di dimissione reale, "
+            "validazione incrociata a 5 pieghe su 841 ricoveri; un contatore di "
+            "frequenza fa 56,2, alla pari. Il 40,4% delle prescrizioni di dimissione non e' "
             "cardiologia e nessuna linea guida cardiologica la regola: "
             "un'assenza qui non e' una controindicazione."
         ),

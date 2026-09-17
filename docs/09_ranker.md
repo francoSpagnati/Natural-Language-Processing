@@ -110,23 +110,24 @@ peso 1 il richiamo@5 varia di meno di un punto, a peso 8 perde dieci punti.
 | `qwen3.5:4b`, locale | 14,2% | 19,7% | 27,6% | — | 0,178 |
 
 Su questa divisione l'ibrido batteva la frequenza su tutte le metriche, di
-2–3,6 punti, «coerenti». **Rivisto allo step 11**: con la validazione
-incrociata su tutti gli 841 ricoveri il vantaggio scende a un punto (48,5%
-contro 47,5%), intervallo [−1,5%, +3,4%]: a livello di classe i due sono
-**indistinguibili**, e questa divisione era un campione favorevole a chi
-impara. A livello di sostanza, invece, l'ibrido è avanti di 4–9 punti. Vedi
-[`11_valutazione.md`](11_valutazione.md) §7 e §10.
+2–3,6 punti, «coerenti». **Rivisto allo step 11**, con la misura finale del
+brief (precisione, richiamo e F1 per livello ATC, validazione incrociata su
+tutti gli 841 ricoveri): ibrido e frequenza sono **alla pari a ogni livello**
+(differenze fra −3 e +1 punti di F1), e questa divisione era un campione
+favorevole a chi impara. L'ibrido resta avanti solo nel centrare *almeno una*
+aggiunta (top-5). Vedi [`11_valutazione.md`](11_valutazione.md) sez. 3 e 4.
 
 **Il simbolico perde anche quando ha ragione.** Un paziente con aterosclerosi
 riceve dal simbolico `C10AA` statina, classe I; il medico ha prescritto
 `C10BA`, statina in associazione. Stessa famiglia, contata come errore. Da
-qui la metrica gerarchica dello step 11 — che ha poi mostrato che quei punti
-li guadagna anche un ranker casuale.
+qui la misura per livello ATC dello step 11, che dà credito fino al 3°
+livello — e che ha mostrato che il simbolico ha la precisione più alta di
+tutti, con il richiamo più basso.
 
 **I modelli linguistici perdono contro il contatore**, e la ragione è
 misurabile: fra le prime cinque proposte, l'84,5% di `deepseek` e l'82,6% di
 `qwen` sono classi cardiovascolari (l'ibrido: 74,3%). Sono ottimi ranker di
-linee guida, e prendono in pieno il tetto del §4: nessuna linea guida dice di
+linee guida, e prendono in pieno il tetto della sez. 4: nessuna linea guida dice di
 aggiungere un gastroprotettore, e in questo reparto lo si aggiunge 209 volte.
 
 ## 8. Il filtro non toglie niente, e la ragione è corretta
@@ -181,4 +182,4 @@ contesto; il sintomo era lentezza, non errore. Con il tetto: da oltre 240 s a
   incompleta.
 * Frazione di eiezione, punteggio CHA₂DS₂-VA e valori di laboratorio restano
   i tre fatti che più limitano le regole.
-* La precisione non è interpretabile come correttezza (§1).
+* La precisione non è interpretabile come correttezza (sez. 1).

@@ -1,14 +1,10 @@
-"""La metrica gerarchica dello step 11, e le sue trappole.
+"""La misura dello step 11 — P, R e F1 per livello ATC — e le sue trappole.
 
-Una metrica nuova e' un pezzo di codice che produce numeri che nessuno puo'
-controllare a occhio: se sbaglia, sbaglia in silenzio e la conclusione dello
-step e' falsa. Questi test fissano il comportamento su esempi calcolati a mano,
-comprese **due proprieta' controintuitive** che ho scoperto misurando e che
-vanno protette dalla prossima «semplificazione»:
-
-1. troncare i codici puo' **abbassare** il richiamo, non solo alzarlo;
-2. il ranker casuale guadagna anche lui salendo di livello, ed e' il motivo per
-   cui senza la sua riga le altre tabelle non dimostrano niente.
+Una metrica e' un pezzo di codice che produce numeri che nessuno controlla a
+occhio: se sbaglia, sbaglia in silenzio e la conclusione dello step e' falsa.
+Questi test la fissano su esempi calcolati a mano, compresa una proprieta'
+controintuitiva: troncare i codici puo' **abbassare** una misura, non solo
+alzarla, e il ranker casuale guadagna anche lui salendo di livello.
 """
 
 from __future__ import annotations
@@ -20,110 +16,124 @@ from pathlib import Path
 RADICE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RADICE / "src"))
 
+import ranker as modulo_ranker  # noqa: E402
 from ranker import Caso, RankerFrequenza, pieghe  # noqa: E402
 from valuta_gerarchica import (  # noqa: E402
-    LIVELLI, Esito, RankerCasuale, antenati, bootstrap, errori_di_famiglia,
-    intervallo, misure_gerarchiche, profondita_comune, richiamo_per_livello,
-    valuta_incrociata,
+    Esito, RankerCasuale, bootstrap, esempio_svolto, esito_da_proiezioni,
+    intervallo, livelli_misurabili, misure_per_livello, precisione_richiamo_f1,
+    spiegabilita, terapia_proposta, top_k_per_livello, valuta_incrociata,
 )
 
 
-class TestLAlberoATC(unittest.TestCase):
-    """I livelli non sono inventati: sono quelli del registro AIFA."""
-
-    def test_gli_antenati_di_una_classe(self) -> None:
-        self.assertEqual(antenati("C07AB"), ("C", "C07", "C07A", "C07AB"))
-
-    def test_un_codice_piu_corto_ha_meno_antenati(self) -> None:
-        """Meno specifico davvero, non per un errore di troncamento."""
-        self.assertEqual(antenati("C07"), ("C", "C07"))
-
-    def test_profondita_fra_due_statine(self) -> None:
-        """Il caso che ha motivato lo step: statina semplice contro associata."""
-        self.assertEqual(profondita_comune("C10AA", "C10BA"), 2)   # C, C10
-
-    def test_profondita_fra_apparati_diversi(self) -> None:
-        self.assertEqual(profondita_comune("C10AA", "A02BC"), 0)
-
-    def test_profondita_massima_e_identita(self) -> None:
-        self.assertEqual(profondita_comune("C07AB", "C07AB"), len(LIVELLI))
+def caso(enc: int, ingresso: set[str], dimissione: set[str],
+         condizioni: set[str] = frozenset({"I50.9"})) -> Caso:
+    return Caso(enc, frozenset(condizioni), frozenset(ingresso), frozenset(),
+                frozenset(dimissione))
 
 
-class TestIlRichiamoPerLivello(unittest.TestCase):
+class TestLaMisuraSuUnInsieme(unittest.TestCase):
+
+    def test_calcolata_a_mano(self) -> None:
+        # proposti {C07, C03}, veri {C07, C10}: un comune su due e due.
+        p, r, f = precisione_richiamo_f1({"C07", "C03"}, {"C07", "C10"})
+        self.assertEqual((p, r, f), (0.5, 0.5, 0.5))
+
+    def test_nessuna_proposta_vale_zero_non_un_errore(self) -> None:
+        self.assertEqual(precisione_richiamo_f1(set(), {"C07"}), (0.0, 0.0, 0.0))
+
+    def test_la_terapia_proposta_continua_l_ingresso(self) -> None:
+        c = caso(1, {"A02BC"}, {"A02BC", "C07AB"})
+        self.assertEqual(terapia_proposta(c, ["C07AB", "C03DA", "C10AA"], 2),
+                         {"A02BC", "C07AB", "C03DA"})
+
+
+class TestLaMisuraPerLivello(unittest.TestCase):
+    """L'unita' e' la classe (5 caratteri): quattro livelli misurabili."""
+
+    def setUp(self) -> None:
+        modulo_ranker.LIVELLO_CLASSE = 5
+
+    def test_i_livelli_seguono_l_unita(self) -> None:
+        self.assertEqual(livelli_misurabili(), (1, 3, 4, 5))
+        modulo_ranker.LIVELLO_CLASSE = 7
+        self.assertEqual(livelli_misurabili(), (1, 3, 4, 5, 7))
+        modulo_ranker.LIVELLO_CLASSE = 5
 
     def test_salendo_di_livello_una_quasi_giusta_diventa_giusta(self) -> None:
-        ordini = {1: ["C10AA"]}
-        bersagli = {1: frozenset({"C10BA"})}
-        self.assertEqual(richiamo_per_livello(ordini, bersagli, 5, 5), 0.0)
-        self.assertEqual(richiamo_per_livello(ordini, bersagli, 3, 5), 1.0)
+        # Proposta C10AA (statina), prescritta C10BA (statina in associazione):
+        # sbagliata al 4o livello, giusta al 2o (C10).
+        casi = {1: caso(1, set(), {"C10BA"})}
+        m = misure_per_livello({1: ["C10AA"]}, casi, 5)
+        self.assertEqual(m[5]["F1"], 0.0)
+        self.assertEqual(m[3]["F1"], 1.0)
 
-    def test_troncare_puo_ABBASSARE_il_richiamo(self) -> None:
-        """La trappola, misurata su 15 ricoveri di prova reali.
-
-        `C03CA` (diuretici dell'ansa) e `C03DA` (antialdosteronici) collassano
-        entrambi in `C03`. Due bersagli distinti centrati diventano **un solo**
-        bersaglio centrato, e il denominatore scende da 4 a 3: 2/4 = 50% diventa
-        1/3 = 33%.
-
-        E' la ragione per cui il richiamo troncato da solo non basta e servono
-        anche le metriche sugli antenati: chi guardasse solo la prima tabella
-        concluderebbe che la metrica gerarchica e' sempre piu' generosa, e non
-        e' vero.
-        """
-        ordini = {1: ["C03CA", "C03DA"]}
-        bersagli = {1: frozenset({"C03CA", "C03DA", "A10BK", "N02BF"})}
-        self.assertEqual(richiamo_per_livello(ordini, bersagli, 5, 5), 0.5)
-        self.assertAlmostEqual(richiamo_per_livello(ordini, bersagli, 3, 5),
-                               1 / 3)
+    def test_troncare_puo_ABBASSARE_la_precisione(self) -> None:
+        """Due proposte distinte al 4o livello (C10AA, C10BA) contro due
+        prescrizioni identiche: al 4o P = 1; al 2o le proposte collassano in
+        {C10} e i veri pure, P resta 1. Ma con veri {C10AA, C07AB} e proposte
+        {C10AA, C10BA}: al 4o P = 1/2, R = 1/2; al 2o proposte {C10}, veri
+        {C10, C07}: P = 1, R = 1/2. Il richiamo non sale, la precisione si'.
+        Il punto del test: la misura per livello non e' monotona per
+        costruzione, quindi va calcolata, non dedotta."""
+        casi = {1: caso(1, set(), {"C10AA", "C07AB"})}
+        m = misure_per_livello({1: ["C10AA", "C10BA"]}, casi, 5)
+        self.assertEqual((m[5]["P"], m[5]["R"]), (0.5, 0.5))
+        self.assertEqual((m[3]["P"], m[3]["R"]), (1.0, 0.5))
 
     def test_il_taglio_a_k_avviene_prima_del_troncamento(self) -> None:
-        """Troncare e poi deduplicare regalerebbe proposte dentro la stessa k."""
-        ordini = {1: ["C03CA", "C03DA", "C07AB"]}       # k=2 -> C03CA, C03DA
-        bersagli = {1: frozenset({"C07AB"})}
-        self.assertEqual(richiamo_per_livello(ordini, bersagli, 3, 2), 0.0)
+        # Con k = 1 la seconda proposta non entra, anche se al 1o livello
+        # collasserebbe nella prima.
+        casi = {1: caso(1, set(), {"C07AB"})}
+        m = misure_per_livello({1: ["C10AA", "C07AB"]}, casi, 1)
+        self.assertEqual(m[5]["R"], 0.0)
 
-    def test_un_ricovero_senza_bersagli_non_conta(self) -> None:
-        """Contarlo misurerebbe l'assenza di una domanda, non una risposta."""
-        ordini = {1: ["C07AB"], 2: ["C07AB"]}
-        bersagli = {1: frozenset({"C07AB"}), 2: frozenset()}
-        self.assertEqual(richiamo_per_livello(ordini, bersagli, 5, 5), 1.0)
+    def test_ogni_ricovero_pesa_uno(self) -> None:
+        casi = {1: caso(1, set(), {"C07AB"}), 2: caso(2, set(), {"C07AB", "C03DA", "C10AA"})}
+        m = misure_per_livello({1: ["C07AB"], 2: ["C07AB"]}, casi, 5)
+        # ricovero 1: R = 1; ricovero 2: R = 1/3; media 2/3, non 2/4.
+        self.assertAlmostEqual(m[5]["R"], 2 / 3)
 
-
-class TestLeMetricheGerarchiche(unittest.TestCase):
-
-    def test_calcolate_a_mano(self) -> None:
-        # proposta C10AA -> antenati {C, C10, C10A, C10AA}
-        # bersaglio C10BA -> antenati {C, C10, C10B, C10BA}
-        # comuni = {C, C10} = 2; hP = 2/4, hR = 2/4
-        ordini = {1: ["C10AA"]}
-        bersagli = {1: frozenset({"C10BA"})}
-        g = misure_gerarchiche(ordini, bersagli, 5)
-        self.assertAlmostEqual(g["hP"], 0.5)
-        self.assertAlmostEqual(g["hR"], 0.5)
-        self.assertAlmostEqual(g["hF"], 0.5)
-
-    def test_una_proposta_di_un_altro_apparato_non_prende_credito(self) -> None:
-        g = misure_gerarchiche({1: ["A02BC"]}, {1: frozenset({"C10BA"})}, 5)
-        self.assertEqual(g["hP"], 0.0)
-        self.assertEqual(g["hR"], 0.0)
-
-    def test_la_proposta_esatta_prende_tutto(self) -> None:
-        g = misure_gerarchiche({1: ["C10BA"]}, {1: frozenset({"C10BA"})}, 5)
-        self.assertEqual(g["hF"], 1.0)
+    def test_la_continuita_conta_nella_proposta(self) -> None:
+        """Un ranker che non propone niente prende comunque il credito
+        dell'ingresso continuato: e' il pavimento della continuita'."""
+        casi = {1: caso(1, {"A02BC", "C07AB"}, {"A02BC", "C07AB", "C10AA"})}
+        m = misure_per_livello({1: []}, casi, 5)
+        self.assertEqual(m[5]["P"], 1.0)
+        self.assertAlmostEqual(m[5]["R"], 2 / 3)
 
 
-class TestGliErroriDiFamiglia(unittest.TestCase):
+class TestLaVersioneTopK(unittest.TestCase):
 
-    def test_riconosce_la_quasi_giusta(self) -> None:
-        esito = errori_di_famiglia({1: ["C10AA"]},
-                                   {1: frozenset({"C10BA"})}, 5)
-        self.assertEqual(esito["proposte_non_esatte"], 1)
-        self.assertEqual(esito["quote"][2], 1.0)      # condivide C e C10
+    def setUp(self) -> None:
+        modulo_ranker.LIVELLO_CLASSE = 5
 
-    def test_la_proposta_esatta_non_e_un_errore(self) -> None:
-        esito = errori_di_famiglia({1: ["C10BA"]},
-                                   {1: frozenset({"C10BA"})}, 5)
-        self.assertEqual(esito["proposte_non_esatte"], 0)
+    def test_basta_una_proposta_centrata(self) -> None:
+        casi = {1: caso(1, set(), {"C07AB", "C10AA"}), 2: caso(2, set(), {"C03DA"})}
+        t = top_k_per_livello({1: ["A02BC", "C10AA"], 2: ["C07AB"]}, casi, 2)
+        self.assertEqual(t[5], 0.5)
+
+    def test_usa_la_chiave_del_dizionario_non_l_enc_oid(self) -> None:
+        """Il bootstrap rinumera i ricoveri: lo stesso paziente puo' comparire
+        due volte con chiavi diverse, e la misura deve seguire la chiave."""
+        c = caso(99, set(), {"C07AB"})
+        t = top_k_per_livello({0: ["C07AB"], 1: ["A02BC"]}, {0: c, 1: c}, 5)
+        self.assertEqual(t[5], 0.5)
+
+    def test_un_ricovero_senza_aggiunte_non_conta(self) -> None:
+        casi = {1: caso(1, {"C07AB"}, {"C07AB"}), 2: caso(2, set(), {"C03DA"})}
+        t = top_k_per_livello({1: [], 2: ["C03DA"]}, casi, 5)
+        self.assertEqual(t[5], 1.0)
+
+
+class TestLEsempioSvolto(unittest.TestCase):
+
+    def test_riporta_i_conti_di_ogni_livello(self) -> None:
+        modulo_ranker.LIVELLO_CLASSE = 5
+        casi = {7: caso(7, {"A02BC"}, {"A02BC", "C07AB"})}
+        e = esito_da_proiezioni("ibr", "ibrido", {7: ["C07AB", "C03DA"]}, casi, 2)
+        testo = esempio_svolto(e, 7, 2)
+        self.assertIn("ricovero 7", testo)
+        self.assertIn("P 67% R 100% F1 80%", testo)
 
 
 class TestIlRankerCasuale(unittest.TestCase):
@@ -160,9 +170,12 @@ class TestIlRankerCasuale(unittest.TestCase):
 class TestLIncertezza(unittest.TestCase):
     """Il bootstrap: quali differenze sopravvivono al campione."""
 
+    def setUp(self) -> None:
+        modulo_ranker.LIVELLO_CLASSE = 5
+
     def esito(self, sigla: str, proposte: dict[int, list[str]]) -> Esito:
-        bersagli = {enc: frozenset({"C07AB"}) for enc in proposte}
-        return Esito(sigla, sigla, {}, {}, {}, proposte, bersagli)
+        casi = {enc: caso(enc, set(), {"C07AB"}) for enc in proposte}
+        return esito_da_proiezioni(sigla, sigla, proposte, casi, 5)
 
     def test_i_percentili_di_una_distribuzione_nota(self) -> None:
         valori = [float(x) for x in range(100)]
@@ -183,7 +196,7 @@ class TestLIncertezza(unittest.TestCase):
         esiti = [self.esito("ibr", {i: ["C07AB"] for i in range(30)}),
                  self.esito("freq", {i: ["A02BC"] for i in range(30)})]
         esito = bootstrap(esiti, 5, giri=200)
-        basso, _ = esito["differenze_appaiate"]["ibr-freq"]["hF"]
+        basso, _ = esito["differenze_appaiate"]["ibr-freq"][5]
         self.assertGreater(basso, 0)
 
     def test_le_coppie_da_confrontare_sono_esplicite(self) -> None:
@@ -270,11 +283,8 @@ class TestLaValidazioneIncrociata(unittest.TestCase):
                 return []
 
         esiti = valuta_incrociata([Memorizza], self.casi(), 5, 5)
-        self.assertEqual(esiti[0].richiamo[5], 0.0)
+        self.assertEqual(esiti[0].top_k[5], 0.0)
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestLaSpiegabilita(unittest.TestCase):
@@ -285,15 +295,13 @@ class TestLaSpiegabilita(unittest.TestCase):
     def test_conta_le_motivate_fra_tutte_e_fra_le_centrate(self):
         from conoscenza import Indicazione
         from ranker import RankerSimbolico
-        from valuta_gerarchica import Esito, spiegabilita
 
         regole = (Indicazione("C03DA", ("I50",), "I", "m", "f"),)
         casi = [Caso(1, frozenset({"I50.9"}), frozenset(), frozenset(),
                      frozenset({"C03DA", "A02BC"}))]
-        esito = Esito("x", "x", {}, {}, {},
-                      {1: ["C03DA", "A02BC", "C07AB"]},
-                      {1: frozenset({"C03DA", "A02BC"})})
-        q = spiegabilita([esito], casi, k=3, simbolico=RankerSimbolico(regole))["x"]
+        esito = esito_da_proiezioni("x", "x", {1: ["C03DA", "A02BC", "C07AB"]},
+                                    {1: casi[0]}, 3)
+        q = spiegabilita([esito], k=3, simbolico=RankerSimbolico(regole))["x"]
         self.assertEqual((q["proposte"], q["motivate"]), (3, 1))
         self.assertEqual((q["centri"], q["centri_motivati"]), (2, 1))
         self.assertAlmostEqual(q["quota_centri_motivati"], 0.5)
@@ -308,3 +316,7 @@ class TestLePiegheStratificate(unittest.TestCase):
         quote = [sum(1 for c in p if "I50.9" in c.condizioni) for p in parti]
         self.assertEqual(quote, [10] * 5)
         self.assertEqual(sorted(c.enc_oid for p in parti for c in p), list(range(200)))
+
+
+if __name__ == "__main__":
+    unittest.main()

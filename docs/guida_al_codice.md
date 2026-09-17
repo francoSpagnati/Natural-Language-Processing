@@ -67,7 +67,7 @@ le condizioni candidate dalla prosa (`costruisci_vocabolario_farmaci`,
 (`carica_indici_aifa`, `conferma_principio_attivo`) e scrive
 `data/interim/vocabolario_farmaci.json` (1 329 voci) e
 `vocabolario_condizioni.json` (249 candidate). Il vocabolario chiuso è lo
-**scope** del progetto (brief §3.1): definisce quali farmaci contano, non le
+**scope** del progetto (brief sez. 3.1): definisce quali farmaci contano, non le
 loro relazioni.
 
 ### `extract_icd10.py` — la terminologia ICD-10 (step 2)
@@ -142,7 +142,7 @@ linguistico riceve: senza campi per i codici (un test lo verifica).
 
 Tutte e tre producono `StatoPaziente`; i farmaci dei campi di terapia li legge
 sempre `extract_a.farmaci_da_campo_strutturato` (una lettura sola nel
-progetto); la codifica è condivisa (§4). Uscite in
+progetto); la codifica è condivisa (sez. 4). Uscite in
 `data/processed/pipeline_{a,b_v3,c}/<enc_oid>.json`.
 
 ### `gazetteer.py` + `context_it.py` + `extract_a.py` — pipeline A (step 3)
@@ -376,24 +376,29 @@ parafrasi). `valuta_mcp`: `DOMANDE` (dieci `Domanda` con lo strumento atteso),
 ## 9. Valutazione: `valuta_gerarchica.py` (step 11)
 
 ```python
-LIVELLI = (1, 3, 4, 5)   # (+7 con --sostanza)
-antenati(codice) · profondita_comune(a, b)
-class RankerCasuale(seme=20260916)
-richiamo_per_livello(ordini, bersagli, livello, k) · misure_gerarchiche (hP, hR, hF) · errori_di_famiglia
-@dataclass class Esito: sigla, nome, richiamo, gerarchiche, famiglia, ordini, bersagli
-proiezioni(ranker, casi, candidati) -> (ordini, bersagli)      # una passata, riusata da tutto
-valuta_incrociata(fabbriche, casi, quante, k) -> list[Esito]   # candidati ricostruiti per piega
-bootstrap(esiti, k, giri, seme, coppie) -> intervalli + differenze appaiate
-spiegabilita(esiti, casi, k) -> quante proposte (e quanti centri) hanno un'indicazione
+LIVELLI = (1, 3, 4, 5, 7)                 # i cinque livelli ATC, in caratteri di prefisso
+livelli_misurabili() -> quelli <= ranker.LIVELLO_CLASSE   # a unita' classe il 5o non c'e'
+class RankerCasuale(seme=20260916)        # il controllo
+precisione_richiamo_f1(proposti, veri) -> (P, R, F1)      # su due insiemi gia' troncati
+terapia_proposta(caso, ordine, k) -> ingresso | prime k nuove
+misure_per_livello(ordini, casi, k) -> {livello: {"P", "R", "F1"}}   # medie sui ricoveri
+top_k_per_livello(ordini, casi, k) -> {livello: quota ricoveri con almeno un'aggiunta centrata}
+@dataclass class Esito: sigla, nome, per_livello, top_k, ordini, casi
+proiezioni(ranker, casi, candidati) -> ordini            # le classi nuove, per ricovero
+valuta_incrociata(fabbriche, casi, quante, k, stratifica) -> list[Esito]   # candidati ricostruiti per piega
+bootstrap(esiti, k, giri, seme, coppie) -> intervalli di F1 + differenze appaiate (F1 e top-k)
+spiegabilita(esiti, k) -> quante proposte (e quanti centri) hanno un'indicazione
+esempio_svolto(esito, enc, k) -> la misura fatta a mano su un ricovero, livello per livello
 ```
 
-`ordini` è `{enc_oid: [classi proposte]}`, `bersagli` è `{enc_oid:
-frozenset(classi aggiunte davvero)}`: tutte le metriche sono funzioni pure
-di questi due dizionari, e il bootstrap ricampiona gli `enc_oid` senza
-rieseguire nessun ranker. Con `--sostanza` si cambia `ranker.LIVELLO_CLASSE`
-prima di caricare i casi, e tutto — candidati, bersagli, proposte — lavora
-a 7 caratteri. Con `--llm openrouter` e `--pieghe`, `_llm_su_tutti` misura il
-ranker remoto su tutti i casi con un tetto di spesa (`--tetto-dollari`).
+`ordini` è `{enc_oid: [classi nuove nell'ordine del ranker]}`, `casi` è
+`{enc_oid: Caso}` (ingresso e dimissione stanno nel `Caso`): tutte le misure
+sono funzioni pure di questi due dizionari, e il bootstrap ricampiona le
+chiavi senza rieseguire nessun ranker. Con `--sostanza` si cambia
+`ranker.LIVELLO_CLASSE` prima di caricare i casi, e tutto — candidati,
+proposte, verità — lavora a 7 caratteri. Con `--llm`, `_llm_su_tutti` misura
+il ranker remoto su tutti i casi dalla cache (`--llm-solo-cache`, zero spesa)
+o con un tetto (`--tetto-dollari`).
 
 ---
 

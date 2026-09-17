@@ -1,4 +1,4 @@
-"""Step 7 - Lo script di import della knowledge base clinica (brief §3.3).
+"""Step 7 - Lo script di import della knowledge base clinica (brief sez. 3.3).
 
 Scrive `kb/conoscenza.ttl` a partire da tre cose:
 
@@ -393,7 +393,7 @@ def codici_citati() -> set[str]:
 
 
 # ---------------------------------------------------------------------------
-# Figura: il grafo di conoscenza come immagine (brief §3.3, networkx + matplotlib)
+# Figura: il grafo di conoscenza come immagine (brief sez. 3.3, networkx + matplotlib)
 # ---------------------------------------------------------------------------
 
 def figura(percorso: Path) -> None:
@@ -441,7 +441,7 @@ def figura(percorso: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Sonda: quanto Wikidata coprirebbe (brief §3.3: «valuta empiricamente»)
+# Sonda: quanto Wikidata coprirebbe (brief sez. 3.3: «valuta empiricamente»)
 # ---------------------------------------------------------------------------
 
 def sonda_wikidata() -> dict:

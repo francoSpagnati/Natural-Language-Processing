@@ -53,7 +53,7 @@ motivo e l'evidenza allegati.
 | **Allergia alla sostanza** | anamnesi del paziente + ATC | vietato |
 | **Allergia al sottogruppo** | gerarchia ATC (reattività crociata) | da verificare |
 | **Duplicazione terapeutica** | gerarchia ATC | da verificare |
-| **Controindicazione per condizione** | tabella manuale dichiarata, § 4 | variabile |
+| **Controindicazione per condizione** | tabella manuale dichiarata, sez. 4 | variabile |
 | **Provenienza** | misure dello step 6bis | declassa |
 
 Le prime tre non richiedono conoscenza esterna al progetto: la gerarchia ATC
@@ -75,14 +75,14 @@ clinico.
 | farmaco (ATC) | condizione (ICD-10) | esito | fonte |
 |---|---|---|---|
 | C07 betabloccanti | J45, J44 asma/BPCO | da verificare | ESC/ESH 2024 |
-| C07 betabloccanti | I44.1–3 blocco AV | vietato → **declassato**, § 6 | RCP 4.3 |
+| C07 betabloccanti | I44.1–3 blocco AV | vietato → **declassato**, sez. 6 | RCP 4.3 |
 | C08D verapamil, diltiazem | I50 scompenso | vietato | ESC 2021 |
 | M01A FANS | I50 scompenso | vietato | ESC 2021 |
 | M01A FANS | N18.4–5 insuff. renale | vietato | RCP 4.3 |
 | C09 ACE-i, sartani | O gravidanza | vietato | RCP 4.3/4.6 |
 | C09 ACE-i, sartani | I70.1 stenosi renale | vietato | RCP 4.3 |
 | A10BA02 metformina | N18.4–5 | vietato | RCP 4.3 |
-| B01A antitrombotici | I60–62 emorragia | vietato → **declassato**, § 6 | RCP 4.3, ESC 2020 |
+| B01A antitrombotici | I60–62 emorragia | vietato → **declassato**, sez. 6 | RCP 4.3, ESC 2020 |
 | C01BD01 amiodarone | E05, E03 tireopatia | da verificare | RCP 4.3/4.4 |
 | C10AA statine | K70–74 epatopatia | da verificare | RCP 4.3 |
 | C03A tiazidici | M10 gotta | da verificare | RCP 4.4 |
@@ -237,7 +237,7 @@ dipendono le decisioni cliniche.
 
 ## 10. Il richiamo del filtro, misurato su casi avversari
 
-Il §6 misura la **precisione** (quante volte il filtro blocca a vuoto) sulle
+Il sez. 6 misura la **precisione** (quante volte il filtro blocca a vuoto) sulle
 prescrizioni reali. Il **richiamo** — quante controindicazioni vere lascia
 passare — non ha una verità di riferimento, e il vincolo di questo step vieta
 di ricavarla dal dataset. Si è quindi fatto l'unico esperimento possibile:
@@ -251,12 +251,12 @@ deterministica**, cioè come li incontra un utente della demo o del server MCP
 | stessa sostanza a un altro codice ATC (analgesico vs antiaggregante) | da verificare, non vietato |
 | condizione negata, condizione del familiare, sezione «non note» | ammesso |
 | blocco AV, gotta, duplicazione di classe | da verificare |
-| verapamil o FANS in scompenso | **da verificare, non vietato**: la regola dice vietato, ma il solo gazetteer non basta a vietare (§9). Con il motore deterministico nessuna condizione produce un divieto: solo l'allergia |
+| verapamil o FANS in scompenso | **da verificare, non vietato**: la regola dice vietato, ma il solo gazetteer non basta a vietare (sez. 9). Con il motore deterministico nessuna condizione produce un divieto: solo l'allergia |
 
 | il filtro manca | 6 su 20 — restano nel test come `expectedFailure`, con la causa |
 |---|---|
 | allergene come acronimo («ASA») | nessuna fonte citabile lo risolve |
-| allergene con nome commerciale mai visto nel corpus («aspirina») | il vocabolario chiuso è lo scope (brief §3.1); per un filtro di sicurezza è il limite più serio di quella scelta |
+| allergene con nome commerciale mai visto nel corpus («aspirina») | il vocabolario chiuso è lo scope (brief sez. 3.1); per un filtro di sicurezza è il limite più serio di quella scelta |
 | allergia scritta in prosa fuori dalla sezione | la regex legge la sottosezione strutturata; in prosa diventa la condizione T78.4 |
 | «asma bronchiale», «emorragia cerebrale» | non nel vocabolario chiuso delle condizioni: la regola c'è, il fatto non arriva |
 | «insufficienza renale stadio 4» | il gazetteer arriva a N18, la regola della metformina vuole N18.4–5 |

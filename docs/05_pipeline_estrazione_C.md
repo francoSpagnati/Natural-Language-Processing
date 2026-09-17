@@ -28,7 +28,7 @@ l'annotazione manuale e prescrive testualmente la seconda via: *«fine-tuning
 di un modello NER italiano… usando come training set silver le annotazioni
 prodotte dalla pipeline A su tutto il dataset (weak supervision)»*. È quello
 che questo step fa. La domanda che ne segue — se un modello addestrato su
-etichette del gazetteer possa trovare più del gazetteer — è la §1.
+etichette del gazetteer possa trovare più del gazetteer — è la sez. 1.
 
 ### Prima: esiste un NER clinico italiano già addestrato?
 
@@ -52,7 +52,7 @@ funzione di valutazione delle tre pipeline
 Vede **due volte e mezzo** le condizioni del gazetteer, ma due su tre di ciò
 che marca non è una condizione attesa, e `TREATMENT` copre qualunque
 intervento (967 menzioni per 60 farmaci). Soprattutto **non collega a nulla**:
-restituisce intervalli, non codici, e lo step 5 §3 mostra che il collegamento
+restituisce intervalli, non codici, e lo step 5 sez. 3 mostra che il collegamento
 per similarità ortografica sbaglia 3 volte su 6. Un pre-addestrato generico
 sposta il problema dal riconoscimento al linking senza risolverlo; il
 fine-tuning su silver resta la via del brief, con il risultato negativo che

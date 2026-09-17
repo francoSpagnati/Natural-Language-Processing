@@ -50,9 +50,11 @@ clinico riga per riga.
    medicina.** Il 40,4% delle prescrizioni non è cardiologia; il ranker a
    linee guida ha un tetto per costruzione e il modello linguistico lo prende
    in pieno (step 9, 11).
-5. **Il miglior ranker non è misurabilmente migliore di un contatore** a
-   livello di classe (48,5% contro 47,5%, [−1,5%, +3,4%]); a livello di
-   sostanza è avanti di 4–9 punti. «Il migliore» dipende dall'unità (step 11).
+5. **Il miglior ranker non è misurabilmente migliore di un contatore.** In
+   F1 per livello ATC ibrido e frequenza sono alla pari a ogni livello
+   (differenze fra −3 e +1 punti, dentro il rumore); l'ibrido centra più
+   spesso *almeno una* aggiunta (top-5: 74,5% contro 66,8% alla sostanza).
+   Il simbolico ha la precisione più alta e il richiamo più basso (step 11).
 6. **Le garanzie valgono fino al confine dello strumento.** Un modello
    conversazionale davanti al sistema può invertire un fatto nella parafrasi
    («iperteso» → «ipotensione»), e il server non se ne accorge (step 10).
@@ -78,7 +80,7 @@ clinico riga per riga.
 | 9b | [`09b_demo.md`](09b_demo.md) | demo su pazienti nuovi; tre difetti trovati solo end-to-end; `--stato` entra dal confine del brief |
 | 9c | [`09c_traccia.md`](09c_traccia.md) | «da dove viene questo fatto» in SPARQL, dalla regola in `kb/` alle parole del referto |
 | 10 | [`10_tool_mcp.md`](10_tool_mcp.md) | 6 strumenti di sola lettura (a testo e a `StatoPaziente`), 2 client, 10 domande: 9/10, 6/6; la parafrasi contata |
-| 11 | [`11_valutazione.md`](11_valutazione.md) | controllo casuale, 5 pieghe, bootstrap, unità di sostanza, per pipeline, spiegabilità, LLM su 841 |
+| 11 | [`11_valutazione.md`](11_valutazione.md) | P/R/F1 per i 5 livelli ATC e top-5, 5 pieghe, bootstrap, controllo casuale, per pipeline, spiegabilità, LLM su 841 |
 
 Notebook: [`01_analisi_esplorativa`](../notebooks/01_analisi_esplorativa.ipynb)
 (step 0), [`02_confronto_pipeline`](../notebooks/02_confronto_pipeline.ipynb)
@@ -89,25 +91,27 @@ Notebook: [`01_analisi_esplorativa`](../notebooks/01_analisi_esplorativa.ipynb)
 
 ## 4. I numeri, con l'incertezza
 
-Compito: le **2 075 classi ATC aggiunte** alla dimissione. Validazione
-incrociata a 5 pieghe sugli **841** ricoveri, richiamo@5; intervalli al 95%
-da 1 000 ricampionamenti dei ricoveri, differenze appaiate.
+Misura: la **terapia proposta** (ingresso continuato + 5 classi nuove)
+contro la **terapia di dimissione**, precisione / richiamo / F1 a ogni
+livello ATC. Validazione incrociata a 5 pieghe sugli **841** ricoveri, unità
+= sostanza; intervalli al 95% da 1 000 ricampionamenti dei ricoveri,
+differenze appaiate. Sotto, l'F1 in %.
 
-| ranker | ric@5, classe | intervallo | ric@5, sostanza |
-| --- | --- | --- | --- |
-| casuale, seme fisso | 5,3% | [4,0%, 6,5%] | 4,2% |
-| continuità della terapia | 10,6% | [9,1%, 12,2%] | 9,0% |
-| simbolico, 27 indicazioni ESC | 23,7% | [21,5%, 25,8%] | 9,4% |
-| frequenza, non guarda il paziente | 47,5% | [44,8%, 50,3%] | 38,0% |
-| **ibrido**, indicazioni + co-occorrenza | **48,5%** | [45,7%, 51,1%] | **44,3%** |
-| `deepseek-v4.1-flash`, su tutti gli 841 | 21,7% | [19,4%, 24,0%] | — |
+| ranker | 1° `C` | 2° `C07` | 3° `C07A` | 4° `C07AB` | 5° `C07AB07` | top-5 al 5° |
+| --- | --- | --- | --- | --- | --- | --- |
+| casuale, seme fisso | 70,9 | 58,9 | 54,3 | 48,9 | 44,9 | 10,8 |
+| continuità della terapia | 81,5 | 72,9 | 64,4 | 60,7 | 47,5 | 31,7 |
+| simbolico, 27 indicazioni ESC | 82,5 | 72,2 | 67,1 | 61,8 | 46,9 | 25,4 |
+| frequenza, non guarda il paziente | **86,1** | **74,8** | **70,5** | 61,0 | 56,2 | 66,8 |
+| **ibrido**, indicazioni + co-occorrenza | 83,7 | 73,3 | 69,2 | 61,7 | **56,9** | **74,5** |
+| `deepseek-v4.1-flash`, unità classe | 82,1 | 67,0 | 58,0 | 51,0 | — | — |
 
-| differenza appaiata | classe | sostanza |
+| differenza appaiata di F1 | 1° | 5° |
 | --- | --- | --- |
-| **ibrido − frequenza** | **[−1,5%, +3,4%]** include lo zero | **[+4,1%, +8,7%]** esclude lo zero |
-| ibrido − simbolico | [+21,7%, +28,0%] | [+32,4%, +37,8%] |
-| ibrido − frequenza, pieghe stratificate | [−3,0%, +2,0%] | — |
-| `deepseek` − frequenza | [−29,2%, −22,5%] | — |
+| **ibrido − frequenza** | [−2,9, −2,0] | [+0,1, +1,2] — dentro il rumore a ogni livello |
+| ibrido − simbolico | [−0,1, +2,6] | **[+9,2, +10,9]** |
+| ibrido − frequenza, top-5 | [+1,4, +4,1] | **[+4,7, +10,8]** |
+| `deepseek` − frequenza (unità classe, 1° e 4°) | [−5,1, −2,4] | [−9,3, −7,3] |
 
 Altri numeri che decidono il disegno:
 
@@ -116,8 +120,8 @@ Altri numeri che decidono il disegno:
 | referti con terapia di dimissione codificata | **841** su 1 000 |
 | prescrizioni di dimissione non cardiologiche | **40,4%** |
 | filtro su 5 863 prescrizioni | 91,3% ammesse, 8,6% da verificare, **4** vietate; casi avversari 14 su 20 |
-| proposte centrate con un'indicazione citabile | frequenza 30,8%, ibrido 34,8%, simbolico 81,7% |
-| l'estrazione sul ranking (ibrido da A / B / C) | 48,9 / 48,5 / 49,0% |
+| proposte centrate con un'indicazione citabile | frequenza 33,9%, ibrido 37,2%, simbolico 74,1% |
+| l'estrazione sul ranking (F1 ibrido al 5°, da A / B / C) | 56,9 / 56,9 / 56,9 |
 | interrogazione SPARQL / lettura da dizionario | 12,43 ms / 0,073 µs |
 | speso in inferenza a pagamento | **4,79 $**, budget chiuso |
 
@@ -164,7 +168,7 @@ piccola non è un risultato.
 python3 -m unittest discover -s tests -q          # 472 test, nessuna rete
 python3 src/demo.py --esempio 1 --traccia         # un paziente dall'inizio alla fine
 python3 src/kb_build.py --figura                  # il grafo di conoscenza e la figura
-python3 src/valuta_gerarchica.py --pieghe 5       # step 11 (gratis); --sostanza, --cartella-b, --llm openrouter
+python3 src/valuta_gerarchica.py --sostanza       # step 11 (gratis); --llm --llm-solo-cache, --stratifica, --cartella
 python3 src/mcp_client_locale.py --strumenti      # handshake col server MCP
 claude mcp add cardio -- python3 src/mcp_server.py
 ```
@@ -196,6 +200,6 @@ risposte si ricalcola gratis; chi rilancia deve nominare il modello
 | `filtro.py` | 8 | filtro simbolico, tre esiti |
 | `ranker.py`, `valuta_ranker.py`, `demo.py` | 9, 9b | ranker; valutazione; demo |
 | `mcp_server.py`, `mcp_client_locale.py`, `valuta_mcp.py` | 10 | server MCP, host locale, dieci domande |
-| `valuta_gerarchica.py` | 11 | controllo casuale, pieghe, bootstrap, unità, spiegabilità |
+| `valuta_gerarchica.py` | 11 | P/R/F1 per livello, top-k, pieghe, bootstrap, controllo casuale, spiegabilità |
 
 Ogni modulo ha il suo file di test in `tests/`, tutti su dati sintetici.

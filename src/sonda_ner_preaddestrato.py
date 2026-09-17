@@ -1,6 +1,6 @@
 """Step 5, la prova che il brief chiede prima del fine-tuning.
 
-§3.2 C: «valuta prima l'uso di modelli NER biomedici/clinici pre-addestrati
+sez. 3.2 C: «valuta prima l'uso di modelli NER biomedici/clinici pre-addestrati
 eventualmente disponibili per l'italiano». Cercato su Hugging Face il 17
 settembre 2026 (ricerca «italian medical ner», filtro token-classification):
 un solo modello italiano, `HUMADEX/italian_medical_ner` — BERT base cased

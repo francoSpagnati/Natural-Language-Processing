@@ -14,7 +14,7 @@ possibile, ma diventa una domanda da porre al grafo.
 
 ## 1. Due grafi, non uno: la conoscenza e la provenienza
 
-Il brief §3.3 chiede un grafo di **conoscenza clinica** — `Drug`, `Condition`,
+Il brief sez. 3.3 chiede un grafo di **conoscenza clinica** — `Drug`, `Condition`,
 `Guideline`, `hasIndication`, `hasContraindication`, `recommendedBy` — in un
 Turtle versionato in `kb/`, scritto da uno script di import rieseguibile. È
 [`kb/conoscenza.ttl`](../kb/conoscenza.ttl), 805 triple, prodotto da

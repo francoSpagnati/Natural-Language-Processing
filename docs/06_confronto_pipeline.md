@@ -8,7 +8,7 @@ referti. Questo step le confronta: chi vede che cosa, quanto concordano sugli
 attributi, chi ha ragione dove divergono. **Non è un confronto contro una
 verità** — quella arriva allo step 6bis — ma un confronto **fra** metodi, con
 un'aggiudicazione a mano di un campione delle menzioni esclusive, come il
-brief §3.2 D chiede.
+brief sez. 3.2 D chiede.
 
 ---
 

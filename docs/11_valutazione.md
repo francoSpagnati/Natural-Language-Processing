@@ -1,217 +1,229 @@
-# Step 11 — La valutazione: che cosa sopravvive al campione
+# Step 11 — La valutazione: precisione, richiamo e F1 per livello ATC
 
 **Stato:** completato.
-**Riproducibilità:** `python3 src/valuta_gerarchica.py --pieghe 5` (gratis); `--sostanza` per l'unità a 7 caratteri; `--stratifica` per le pieghe stratificate; `--cartella-b data/processed/pipeline_a` per la pipeline A; `--llm openrouter` per il ranker remoto (in cache: non costa)
-
-Lo step 9 aveva misurato i ranker su una divisione singola (597 addestramento,
-244 prova) con il richiamo esatto sulla classe. Qui si mette dietro ogni
-numero ciò che gli mancava: la **gerarchia** ATC (un antenato del codice
-giusto vale qualcosa), un **controllo casuale**, la **validazione incrociata**
-su tutti gli 841 ricoveri, gli **intervalli** al 95%, l'unità di misura
-alternativa, l'effetto dell'estrazione, e una misura della spiegabilità.
-Codice: [`src/valuta_gerarchica.py`](../src/valuta_gerarchica.py).
+**Riproducibilità:** `python3 src/valuta_gerarchica.py --sostanza --esempi 4` (gratis, un minuto); `--llm --llm-solo-cache` per aggiungere il ranker LLM dalla cache (unità classe); `--stratifica` per le pieghe stratificate; `--cartella data/processed/pipeline_a` per un'altra pipeline.
+Codice: [`src/valuta_gerarchica.py`](../src/valuta_gerarchica.py). Uscita: `data/processed/valutazione_step11.json`.
 
 ---
 
-## 1. Il protocollo
+## 1. La misura, in una pagina
 
-- **Compito**: le 2 075 classi ATC aggiunte alla dimissione su 841 ricoveri
-  (le sole aggiunte, non la terapia intera: copiare l'ingresso fa già 63,6%).
-- **Unità**: la classe a 5 caratteri (`C07AB`); nel §6 la sostanza a 7.
-- **Validazione incrociata a 5 pieghe**: pieghe deterministiche per hash del
-  ricovero (`ranker.pieghe`), il ranker impara sulle altre quattro, l'insieme
-  candidato è ricostruito a ogni piega (nessuna classe presente solo nella
-  prova può entrare), ogni ricovero misurato una volta.
-- **Bootstrap**: 1 000 ricampionamenti *dei ricoveri* (non delle
-  prescrizioni, che non sono indipendenti) con seme fisso; le differenze fra
-  ranker sono calcolate dentro lo stesso ricampionamento (**appaiate**).
-- **Controllo**: un ranker casuale con seme 20260916, scritto prima dei
-  risultati.
-- **Gerarchia**: l'ATC è un albero (`C` → `C07` → `C07A` → `C07AB` → `C07AB07`);
-  il richiamo per livello tronca proposte e bersagli; hP/hR/hF sono
-  precisione, richiamo e F sull'insieme degli antenati (Kiritchenko, Matwin,
-  Famili, *Functional annotation of genes using hierarchical text
-  categorization*, BioLINK SIG 2005; Silla & Freitas, *A survey of
-  hierarchical classification across different application domains*, Data
-  Mining and Knowledge Discovery 22, 2011, doi:10.1007/s10618-010-0175-9).
-- **Rumore di fondo**: due punti percentuali (step 6bis).
+Per ogni ricovero il sistema produce una **terapia proposta**: la terapia
+d'ingresso continuata, più le **5 classi nuove** che il ranker mette in cima.
+La si confronta con la **terapia di dimissione** scritta dal medico, che è la
+verità e che nessun ranker riceve. Il confronto si fa a ognuno dei cinque
+livelli dell'ATC, troncando entrambi gli insiemi a quel livello:
 
-## 2. Il risultato principale
+| livello | esempio | che cosa conta come «giusto» |
+| --- | --- | --- |
+| 1° gruppo anatomico | `C` | stesso apparato |
+| 2° gruppo terapeutico | `C07` | stessa area terapeutica (beta-bloccanti) |
+| 3° gruppo farmacologico | `C07A` | stessa famiglia farmacologica |
+| 4° sottogruppo chimico | `C07AB` | stessa classe chimica (beta-bloccanti selettivi) |
+| 5° sostanza | `C07AB07` | stesso principio attivo (bisoprololo) |
 
-| ranker · 5 pieghe, 841 ricoveri | ric@3 | **ric@5** | ric@10 | prec@5 | MAP | intervallo ric@5 | hF |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| casuale, seme fisso | 3,2% | 5,3% | 10,8% | 2,8% | 0,075 | [4,0%, 6,5%] | 14,6% |
-| continuità della terapia | 10,1% | 10,6% | 13,2% | 6,6% | 0,108 | [9,1%, 12,2%] | 12,1% |
-| simbolico, 27 indicazioni ESC | 15,8% | 23,7% | 29,2% | 13,6% | 0,185 | [21,5%, 25,8%] | 28,6% |
-| frequenza, non guarda il paziente | 32,6% | 47,5% | 65,2% | 26,5% | 0,402 | [44,8%, 50,3%] | **45,5%** |
-| **ibrido** | **36,8%** | **48,5%** | **67,2%** | 26,6% | **0,425** | [45,7%, 51,1%] | 44,8% |
-| `deepseek-v4.1-flash` (§9) | 15,8% | 21,7% | 33,7% | 12,0% | 0,205 | [19,4%, 24,0%] | 24,5% |
+A ogni livello, sui due insiemi troncati: **precisione** = quota delle
+proposte che il medico ha prescritto davvero; **richiamo** = quota delle
+prescrizioni che il sistema aveva proposto; **F1** = media armonica. Le cifre
+sono medie sui ricoveri: ogni paziente pesa uno. È la metrica primaria del
+brief (sezione 4), calcolata come chiede: codici risolti al 5° livello, poi
+troncati livello per livello.
 
-| differenza appaiata | richiamo@5 | hF | |
-| --- | --- | --- | --- |
-| **ibrido − frequenza** | **[−1,5%, +3,4%]** | [−1,8%, +0,4%] | include lo zero: **indistinguibili** |
-| ibrido − simbolico | [+21,7%, +28,0%] | [+14,6%, +17,9%] | esclude lo zero |
-| frequenza − simbolico | [+20,9%, +26,9%] | [+15,2%, +18,7%] | esclude lo zero |
-| `deepseek` − frequenza | [−29,2%, −22,5%] | [−23,1%, −19,0%] | esclude lo zero |
-| `deepseek` − simbolico | [−4,2%, +0,3%] | [−5,6%, −2,4%] | alla pari sul richiamo |
+**Svolta a mano su un ricovero vero** (9764312; ingresso 5 sostanze, il
+medico ne ha prescritte 9 alla dimissione, l'ibrido propone 5 nuove):
 
-Tre cose si possono dire e una no. **Il simbolico è sotto entrambi** di 21–28
-punti: le linee guida da sole sono un ranker peggiore del sapere che cosa si
-prescrive in questo reparto. **Il modello linguistico è sotto il contatore**
-di 22–29 punti, e alla pari con il simbolico: si comporta come un ranker di
-linee guida. **L'ibrido e la frequenza sono indistinguibili** a livello di
-classe: un punto sul richiamo, e sotto hF è avanti la frequenza. Quello che
-non si può dire è «l'ibrido è il migliore».
+```
+ingresso           A02BC01 B01AC06 B05BA10 C09AA05 C10BA06
+proposte nuove     A02BC02 B01AC04 C07AB07 C03CA01 B01AX06
+dimissione (vera)  A02BC02 B01AA03 B01AC06 C03CA01 C03DA04 C07AB07 C08CA01 C09AA05 C10BA06
 
-La divisione singola dello step 9 (ibrido 53,1%, frequenza 49,5%, «coerente
-su cinque metriche») era un campione favorevole a chi impara: con tutti gli
-841 le cifre si assestano più in basso e il vantaggio sparisce.
-
-## 3. Il controllo casuale: i punti gerarchici erano aritmetica
-
-| richiamo@5 per livello, 5 pieghe | 1° `C` | 2° `C07` | 3° `C07A` | 4° `C07AB` | sopra il caso, 4° → 1° |
-| --- | --- | --- | --- | --- | --- |
-| **casuale** | **54,6%** | 17,9% | 12,3% | 5,3% | — |
-| continuità | 20,7% | 11,7% | 11,0% | 10,6% | +5,3 → −33,9 |
-| simbolico | 58,2% | 36,6% | 32,1% | 23,7% | +18,4 → +3,6 |
-| `deepseek` | **45,1%** | 31,4% | 26,4% | 21,7% | +16,4 → **−9,4** |
-| frequenza | 77,1% | 55,3% | 55,0% | 47,5% | +42,2 → +22,5 |
-| ibrido | 80,0% | 58,7% | 56,2% | 48,5% | +43,2 → +25,4 |
-
-Lo step 9 anticipava che contare gli antenati avrebbe valso 4–7 punti. Li
-vale — ma li guadagna anche il ranker casuale, perché con meno foglie è più
-facile indovinarne una. Il vantaggio dell'ibrido *sul caso* passa da +43,2 a
-+43,9 salendo di un livello, e crolla ai livelli alti dove il caso arriva al
-54,6%. La metrica gerarchica non regala niente a chi non lo merita; senza il
-controllo, quei punti sarebbero stati raccontati come un risultato.
-
-**Al primo livello `deepseek` sta sotto il caso** (45,1% contro 54,6%). Non
-legge male: propone la cardiologia giusta, e il 40,4% dei bersagli non è
-cardiologia. È lo stesso tetto del ranker simbolico, preso da un motore molto
-più costoso.
-
-**Dove cadono le proposte sbagliate.** Fra le proposte non esatte, la quota
-che sbaglia «di poco» (stesso gruppo farmacologico, foglia diversa) è 16,0%
-per la frequenza e 12,5% per l'ibrido, 6,3% per il simbolico, 5,6% per
-`deepseek`: il caso della statina (§4) non riguarda i ranker a linee guida.
-Simbolico e modello linguistico sbagliano invece **famiglia** (39,7% e 46,0%
-di errori al primo livello): propongono cardiologia dove serviva altro.
-
-## 4. Il caso della statina, contato
-
-Lo step 9 raccontava un paziente con aterosclerosi a cui il simbolico
-proponeva `C10AA` statina e il medico prescriveva `C10BA` statina in
-associazione: un quasi-centro contato come errore. Contato su tutti i
-ricoveri, l'aneddoto indicava il ranker sbagliato: il simbolico è quello che
-fa **meno** quasi-centri di tutti (6,3%); ne fanno la frequenza e l'ibrido,
-che propongono più molecole vicine. E il 40% dei suoi errori è di famiglia:
-non «statina sbagliata», ma «cardiologia dove non serviva».
-
-## 5. Una trappola trovata misurando
-
-**Troncare i codici può *abbassare* il richiamo.** Su 15 ricoveri reali:
-
-```text
-bersagli: A10BK, C03CA, C03DA, N02BF
-prime 5:  C03DA, B01AC, C03CA, B01AX, B01AA
-          richiamo a 5 caratteri = 2/4 = 50%
-          richiamo a 3 caratteri = 1/3 = 33%
+livello                   proposti  veri  comuni     P     R    F1
+1° gruppo anatomico              3     3       3  100%  100%  100%
+2° gruppo terapeutico            7     7       6   86%   86%   86%
+3° gruppo farmacologico          7     8       6   86%   75%   80%
+4° sottogruppo chimico           8     9       6   75%   67%   71%
+5° sostanza                     10     9       6   60%   67%   63%
 ```
 
-`C03CA` e `C03DA` collassano entrambi in `C03`: due bersagli distinti centrati
-diventano uno solo, e il denominatore scende. È il motivo per cui le righe
-del §3 non sono monotone; un test lo fissa, così la prossima
-«semplificazione» non lo cancella.
+Al 5° livello il sistema centra 6 sostanze su 9: le 4 continuate più
+`A02BC02`, `C07AB07`, `C03CA01` fra le nuove. Mancano `B01AA03` (warfarin),
+`C03DA04` e `C08CA01`; le proposte `A02BC02` al posto di `A02BC01` e
+`B01AC04` al posto di `B01AC06` sono giuste fino al 4° livello e sbagliate
+al 5°: è esattamente ciò che la misura per livello deve mostrare.
 
-## 6. Con l'unità = sostanza, «il migliore» cambia
+E un ricovero in cui il sistema sbaglia (9092833): il medico non ha aggiunto
+nulla (dimissione = ingresso, `C09CA06`), il sistema propone comunque 5
+classi nuove, tutte sbagliate: P 17 %, R 100 %, F1 29 % a ogni livello dal 2°
+in giù. Vale per il **15 % dei ricoveri** (127 su 841) in cui non c'è nessuna
+aggiunta: il sistema propone sempre 5, e lì sbaglia sempre. È il limite
+principale della misura, discusso nella sezione 10.
 
-Il brief chiede il quinto livello ATC (la sostanza, 7 caratteri). Con
-`--sostanza` candidati, bersagli e proposte lavorano a 7 caratteri:
+## 2. Il protocollo
 
-| 5 pieghe, unità sostanza | ric@3 | **ric@5** | ric@10 | MAP | hF |
+- **Casi**: gli 841 ricoveri con terapia di dimissione codificata (media 7,0
+  sostanze alla dimissione, 2,7 aggiunte). Stato del paziente dalla
+  pipeline B (la sezione 7 mostra che la scelta non conta).
+- **Unità del ranker**: la sostanza a 7 caratteri, come vuole il brief. I
+  ranker ordinano sostanze e la tabella ha tutti e cinque i livelli. Il ranker
+  LLM è stato interrogato a livello di classe (5 caratteri) e il budget è
+  chiuso: sta in una tabella a parte (sezione 5), con quattro livelli.
+- **k = 5** proposte nuove per ricovero, sempre.
+- **Validazione incrociata a 5 pieghe**: pieghe deterministiche per hash del
+  ricovero, il ranker impara sulle altre quattro, l'insieme candidato è
+  ricostruito a ogni piega, ogni ricovero misurato una volta.
+- **Bootstrap**: 1 000 ricampionamenti *dei ricoveri* con seme fisso; le
+  differenze fra ranker sono calcolate dentro lo stesso ricampionamento
+  (appaiate). Un intervallo che include lo zero = non distinguibile.
+- **Controllo**: un ranker casuale con seme fisso, scritto prima dei risultati.
+- **Rumore di fondo**: due punti percentuali (step 6bis). Una differenza
+  minore, anche se il suo intervallo esclude lo zero, non si racconta.
+
+## 3. Il risultato principale
+
+**Terapia proposta (ingresso + 5 nuove) contro dimissione, P / R / F1 in %,
+841 ricoveri, 5 pieghe, unità = sostanza.**
+
+| ranker | 1° `C` | 2° `C07` | 3° `C07A` | 4° `C07AB` | 5° `C07AB07` |
 | --- | --- | --- | --- | --- | --- |
-| casuale | 2,9% | 4,2% | 7,3% | 0,056 | 15,0% |
-| simbolico | 6,9% | 9,4% | 14,4% | 0,098 | 19,6% |
-| frequenza | 25,0% | 38,0% | 56,2% | 0,336 | 42,9% |
-| **ibrido** | **33,1%** | **44,3%** | **58,5%** | **0,402** | **44,4%** |
+| casuale (controllo) | 63,3 / 86,4 / 70,9 | 51,0 / 74,9 / 58,9 | 46,1 / 71,0 / 54,3 | 40,9 / 65,4 / 48,9 | 37,0 / 61,2 / 44,9 |
+| continuità (copia l'ingresso) | 85,8 / 82,6 / 81,5 | 78,7 / 73,6 / 72,9 | 62,7 / 71,0 / 64,4 | 59,5 / 66,6 / 60,7 | 39,4 / 64,1 / 47,5 |
+| frequenza, non guarda il paziente | 84,2 / 92,3 / **86,1** | 71,3 / 84,6 / **74,8** | 65,6 / 82,6 / **70,5** | 53,0 / 78,6 / 61,0 | 47,4 / 75,3 / 56,2 |
+| simbolico, linee guida ESC | **90,0** / 80,8 / 82,5 | **77,0** / 73,2 / 72,2 | **68,6** / 70,3 / 67,1 | **62,3** / 65,7 / **61,8** | 38,8 / 63,5 / 46,9 |
+| **ibrido**, indicazioni + co-occorrenza | 79,8 / **92,8** / 83,7 | 68,3 / **85,2** / 73,3 | 63,2 / **82,9** / 69,2 | 53,7 / **79,2** / 61,7 | 47,9 / **76,2** / **56,9** |
 
-| differenza appaiata, sostanza | richiamo@5 | hF | |
-| --- | --- | --- | --- |
-| **ibrido − frequenza** | **[+4,1%, +8,7%]** | [+0,5%, +2,6%] | **esclude lo zero** |
-| ibrido − simbolico | [+32,4%, +37,8%] | [+22,9%, +26,7%] | esclude lo zero |
+**Intervalli al 95 % di F1** (bootstrap): ibrido 5° livello [55,8, 58,1],
+frequenza [55,1, 57,3], simbolico [45,5, 48,2], continuità [46,2, 48,7],
+casuale [43,5, 46,4]. Tutti gli intervalli sono nel JSON.
 
-A livello di classe l'ibrido e la frequenza sono indistinguibili; a livello
-di sostanza l'ibrido è avanti di 4–9 punti. Il simbolico crolla dal 23,7% al
-9,4%: **una linea guida indica la classe, non la molecola**, e fra le
-molecole di una classe il simbolico non sa ordinare, mentre la co-occorrenza
-sì. Il richiamo assoluto è più basso (44% contro 48%) perché il bersaglio è
-più fine. La risposta a «qual è il ranker migliore?» dipende dall'unità, e
-va detta così.
+**Differenze appaiate di F1, in punti** (stesso campione a ogni giro):
 
-## 7. L'estrazione conta poco sul ranking
+| coppia | 1° | 2° | 3° | 4° | 5° |
+| --- | --- | --- | --- | --- | --- |
+| ibrido − frequenza | [−2,9, −2,0] | [−2,0, −1,1] | [−1,8, −0,8] | [+0,1, +1,3] | [+0,1, +1,2] |
+| ibrido − simbolico | [−0,1, +2,6] | [−0,1, +2,4] | [+1,0, +3,4] | [−1,2, +1,2] | **[+9,2, +10,9]** |
+| frequenza − simbolico | [+2,4, +4,9] | [+1,4, +3,9] | [+2,2, +4,7] | [−1,9, +0,6] | **[+8,5, +10,3]** |
+| frequenza − continuità | [+3,5, +5,7] | [+0,8, +3,1] | [+5,1, +7,1] | [−0,6, +1,3] | **[+8,0, +9,6]** |
 
-La metrica secondaria del brief: la stessa valutazione con lo stato paziente
-estratto da ciascuna pipeline (i farmaci dei campi di terapia sono identici;
-cambiano le condizioni).
+Che cosa dice la tabella:
 
-| ric@5, 5 pieghe | da A (gazetteer) | da B (modello) | da C (NER) |
-| --- | --- | --- | --- |
-| frequenza | 47,4% | 47,5% | 47,5% |
-| simbolico | 21,2% | **23,7%** | 21,2% |
-| ibrido | 48,9% | 48,5% | 49,0% |
-| ibrido − frequenza | [−0,9%, +3,7%] | [−1,5%, +3,4%] | [−0,9%, +3,7%] |
+1. **Ibrido e frequenza sono alla pari a ogni livello.** Le differenze
+   stanno fra −3 e +1,3 punti, cambiano segno e restano dentro il rumore di
+   fondo: un ranker che guarda il paziente non fa meglio, in F1, di un
+   contatore che non lo guarda. È il risultato negativo principale del
+   progetto ed è confermato con le pieghe stratificate (sezione 9).
+2. **Al 5° livello la frequenza e l'ibrido staccano tutto il resto di 8–11
+   punti.** Il simbolico e la continuità hanno F1 da controllo casuale sulla
+   sostanza (46,9 e 47,5 contro 44,9): le regole ESC nominano classi, non
+   principi attivi, e sulla sostanza scelgono a caso dentro la classe.
+3. **Il simbolico ha la precisione più alta a ogni livello dal 1° al 4°**
+   (90,0 % al 1°): propone poco e giusto, ma con il richiamo più basso. Fino
+   al 3° livello il suo F1 sta sotto la frequenza di 2–5 punti, al 4° è
+   indistinguibile. Il vantaggio della frequenza sta nel richiamo (+12 al
+   1°), non nella precisione.
+4. **La continuità è un pavimento alto**: copiare l'ingresso dà già F1 81,5
+   al 1° livello e 60,7 al 4°. Ogni ranker va letto come «quanto aggiunge
+   sopra la copia»: al 4° livello, +0,3 la frequenza, +1,0 l'ibrido, +1,1 il
+   simbolico — niente, dentro il rumore. Il guadagno dei ranker sta tutto al
+   5° livello (+8/+9).
 
-Il richiamo di B sulle condizioni (70% contro 20%) vale **2,5 punti al
-ranker simbolico** — al pavimento di rumore — e nulla all'ibrido, dominato
-dalla frequenza. Quel che l'estrazione migliore aggiunge lo assorbe la
-statistica di reparto.
+## 4. La versione top-5 del brief
 
-## 8. La spiegabilità, contata invece che affermata
+Per ogni livello: quota dei ricoveri (fra i 714 con almeno un'aggiunta) in
+cui **almeno una** delle 5 proposte nuove coincide con un'aggiunta reale.
 
-Se l'ibrido non batte la frequenza sul richiamo, ciò che lo distingue va
-misurato: quante proposte fra le prime cinque hanno almeno un'indicazione
-ESC che scatta per quel paziente, e quante fra quelle **centrate**.
+| ranker | 1° | 2° | 3° | 4° | 5° |
+| --- | --- | --- | --- | --- | --- |
+| casuale | 81,2 | 47,6 | 39,5 | 23,8 | 10,8 |
+| continuità | 49,0 | 32,6 | 32,6 | 32,6 | 31,7 |
+| frequenza | 92,3 | 79,7 | 78,6 | 72,8 | 66,8 |
+| simbolico | 74,2 | 46,1 | 40,9 | 27,7 | 25,4 |
+| **ibrido** | **95,1** | **85,7** | **84,5** | **80,5** | **74,5** |
 
-| 5 pieghe, classe | proposte motivate | centri | centri motivati |
-| --- | --- | --- | --- |
-| casuale | 4,5% | 96 | 26,0% |
-| frequenza | 20,9% | 900 | 30,8% |
-| ibrido | 29,5% | 904 | 34,8% |
-| simbolico | 68,4% | 464 | 81,7% |
-| `deepseek` | 46,8% | 407 | 65,8% |
+Differenza appaiata ibrido − frequenza: [+1,4, +4,1] al 1°, [+4,0, +8,2] al
+2°, [+3,9, +8,1] al 3°, **[+5,1, +10,6]** al 4°, **[+4,7, +10,8]** al 5°.
 
-Il vantaggio dell'ibrido sulla frequenza è di quattro punti, non una
-differenza di categoria: due terzi dei suoi centri sono co-occorrenza — «in
-questo reparto si fa» — e il sistema lo dichiara per ogni proposta. Il ranker
-davvero spiegabile è il simbolico, che centra la metà; il modello linguistico
-sta in mezzo, come un ranker di linee guida imperfetto.
+Qui l'ibrido è avanti, e sopra il rumore. Le due tabelle non si
+contraddicono: l'ibrido **centra più spesso almeno una** aggiunta (tre
+ricoveri su quattro al 5° livello, contro due su tre), ma sull'insieme
+completo della terapia le sue proposte sbagliate pesano quanto quelle della
+frequenza, e l'F1 non lo premia. Per un medico che guarda la prima riga
+giusta, l'ibrido è il ranker migliore; per chi conta tutte le proposte, i
+due sono uguali.
 
-## 9. Il ranker LLM su tutti gli 841
+## 5. Il ranker LLM, dalla cache
 
-Il ranker con modello linguistico non impara dai casi, quindi le pieghe non
-gli servono: è misurato su tutti gli 841 ricoveri con l'insieme candidato
-della divisione singola, così le 244 risposte già pagate allo step 9 arrivano
-dalla cache. Costo delle 597 nuove: **0,34 $** (tetto di spesa nel codice;
-totale del progetto 4,79 $). 68 codici fuori elenco scartati.
+Il ranker LLM (`deepseek-v4.1-flash` via OpenRouter, 0,48 $ registrati in
+cache, nessuna spesa nuova) ordina classi a 5 caratteri: si misura con gli
+altri ranker **a unità classe**, quattro livelli, stessi 841 ricoveri. I
+numeri non sono confrontabili riga per riga con la sezione 3 (unità diversa
+→ insiemi diversi), ma la graduatoria sì.
 
-Richiamo@5 **21,7%** [19,4%, 24,0%], contro frequenza [−29,2%, −22,5%], contro
-ibrido [−30,1%, −23,7%], contro simbolico [−4,2%, +0,3%]. Il modello locale
-(`qwen3.5:4b`, 19,7% sulla divisione singola) non è stato rimisurato: quattro
-ore di CPU per confermare un numero che sta sotto.
+**F1 in %, unità = classe.**
 
-## 10. Pieghe stratificate, e tre casi reali per codici
+| ranker | 1° | 2° | 3° | 4° | top-5 al 4° |
+| --- | --- | --- | --- | --- | --- |
+| casuale | 68,5 | 56,5 | 51,5 | 46,3 | 13,4 |
+| continuità | 81,5 | 62,2 | 52,4 | 48,8 | 32,4 |
+| frequenza | **85,8** | **74,0** | **68,0** | **59,3** | 75,0 |
+| simbolico | 83,3 | 67,8 | 57,4 | 52,1 | 51,7 |
+| ibrido | 82,4 | 71,2 | 66,2 | 58,9 | **78,4** |
+| **modello linguistico** | 82,1 | 67,0 | 58,0 | 51,0 | 45,8 |
 
-**Stratificazione.** Il brief chiede pieghe stratificate per patologia
-principale. Con `--stratifica` (strati I50, I48, I25, I10, altro; dentro ogni
-strato i casi vanno nelle pieghe a turno in ordine di impronta): ibrido
-46,8%, frequenza 47,1%, simbolico 22,7%; ibrido − frequenza **[−3,0%,
-+2,0%]** sul richiamo, [−2,8%, −0,4%] su hF. La conclusione non dipende
-dalle pieghe: indistinguibili sul richiamo, e sotto hF la frequenza è avanti.
+Differenze appaiate di F1: LLM − frequenza **[−5,1, −2,4]** al 1°, **[−9,3,
+−7,3]** al 4°; LLM − simbolico [−2,2, −0,2] al 1°, [−1,7, −0,5] al 4°. Top-5
+al 4°: LLM − frequenza [−33,5, −24,9].
 
-**Tre ricoveri di prova, solo per codici** (il testo non si mostra; le prime
-cinque proposte dell'ibrido a 5 pieghe, con il livello ATC a cui ogni
-proposta incontra un bersaglio: 4 = classe esatta, 0 = nessuna famiglia in
-comune).
+Il modello linguistico, vincolato all'insieme candidato e con lo stesso
+stato del paziente degli altri, sta **sotto la frequenza a ogni livello**, di
+7–9 punti di F1 al 4°, e alla pari del simbolico (la sua precisione al 1°
+livello, 88,8 %, è la più alta della tabella: come il simbolico, propone
+poco). Ha scartato 68 codici fuori elenco su 841 risposte.
+
+## 6. Il controllo casuale, e perché serve
+
+Tirare a sorte 5 classi fra i candidati dà F1 70,9 al 1° livello e 44,9 al
+5° (sezione 3, prima riga). Il 1° livello è generoso con chiunque: in un
+reparto di cardiologia quasi tutto sta in `C`, e troncare lì fa coincidere
+proposte e prescrizioni per aritmetica. Il guadagno vero di un ranker è la
+sua distanza dal caso, che vale +12 (ibrido, 5° livello) e non i 57 punti
+della cifra assoluta. Senza questa riga la tabella sembrerebbe migliore di
+quanto è.
+
+## 7. L'estrazione conta poco sul ranking (metrica secondaria del brief)
+
+Stessi ranker, stato del paziente dalle tre pipeline. F1 dell'ibrido:
+
+| pipeline | 1° | 2° | 3° | 4° | 5° |
+| --- | --- | --- | --- | --- | --- |
+| A, deterministica | 83,6 | 73,2 | 68,9 | 61,6 | 56,9 |
+| B, modello linguistico | 83,7 | 73,3 | 69,2 | 61,7 | 56,9 |
+| C, NER + entity linking | 83,7 | 73,2 | 68,9 | 61,6 | 56,9 |
+
+Meno di mezzo punto a ogni livello. Il simbolico, che dipende solo dai fatti
+estratti, varia di 1,5 punti al 3° livello (65,6 con A e C, 67,1 con B: B
+estrae più condizioni). La frequenza e la continuità non leggono lo stato e
+sono identiche per costruzione. La scelta della pipeline non decide il
+risultato: la B è quella usata perché è l'unica con la cache del ranker LLM.
+
+## 8. La spiegabilità, contata
+
+Una proposta è «motivata» se almeno un'indicazione ESC del grafo di
+conoscenza scatta su quel paziente. Sulle proposte **centrate** (prescritte
+davvero), unità sostanza: frequenza 33,9 %, ibrido 37,2 %, simbolico 74,1 %;
+LLM (unità classe) 65,8 %. L'ibrido spiega 3 punti di proposte in più della
+frequenza: un vantaggio, non una categoria. Il simbolico spiega tre proposte
+su quattro e ne centra la metà.
+
+## 9. Pieghe stratificate, e tre casi reali per codici
+
+**Stratificazione** per patologia principale (strati I50, I48, I25, I10,
+altro): F1 ibrido 5° livello 56,7, frequenza 56,1, simbolico 46,8; ibrido −
+frequenza [+0,0, +1,1] al 5°, [−2,7, −1,8] al 1°. Identico alle pieghe per
+hash: la conclusione non dipende dalle pieghe.
+
+**Tre ricoveri, solo per codici** (prime cinque proposte dell'ibrido a unità
+classe, con il livello a cui ogni proposta incontra un'aggiunta reale: 4 =
+classe esatta, 0 = nessun gruppo in comune):
 
 | ricovero | condizioni estratte | terapia in atto | aggiunte vere | ibrido, prime 5 → livello |
 | --- | --- | --- | --- | --- |
@@ -219,24 +231,31 @@ comune).
 | 9799541 | I31.3, J95, N19, R56.0 | *nessuna* | A02BC, B01AC, J01DD, M02AA | C03DA → 0, D07AC → 0, A02BC → 4, M04AC → 1, B01AX → 3 |
 | 10067375 | E11, I10, I42.6, I48, I48.1 | A10BK, B01AF, C01BD, C03DA, C07AB, C09AA, C10AA | M04AC | B01AX → 0, A02BC → 0, B01AA → 0, C08CA → 0, C09CA → 0 |
 
-Il primo è il caso più istruttivo: **l'estrazione non ha trovato nulla** e il
-ranker centra 5 su 5 — perché con zero fatti l'ibrido ricade sulla frequenza,
-e in questo reparto un ricovero senza terapia d'ingresso riceve i quattro
-pilastri più il gastroprotettore. È la tesi 4 in un ricovero solo. Il
-simbolico, senza fatti, restituisce i candidati in ordine alfabetico
-(`A02AD`, `A02BC`, …): un artefatto della parità, che vale la pena vedere. Il
-secondo è un paziente non cardiologico (versamento pericardico, insufficienza
-respiratoria e renale): il medico aggiunge un antibiotico e un antiinfiammatorio
-topico, che nessun ranker può prevedere dal profilo. Il terzo sbaglia a ogni
-livello: un paziente in fibrillazione già trattato con tutto, a cui viene
-aggiunta la colchicina `M04AC` — la ragione (una pericardite? la gotta?) non
-è fra le condizioni estratte. Il sistema sbaglia dove il fatto che decide non
-c'è, ed è coerente con tutto il resto del progetto.
+Il primo: l'estrazione non ha trovato nulla e il ranker centra 5 su 5, perché
+senza fatti l'ibrido ricade sulla frequenza, e in questo reparto un ricovero
+senza terapia d'ingresso riceve i quattro pilastri più il gastroprotettore. Il
+secondo è un paziente non cardiologico: il medico aggiunge un antibiotico e un
+antiinfiammatorio topico, che nessun ranker può prevedere dal profilo (F1 al
+5° livello: 22 %). Il terzo sbaglia a ogni livello: un paziente in
+fibrillazione già trattato con tutto, a cui viene aggiunta la colchicina
+`M04AC`; la ragione non è fra le condizioni estratte. Il sistema sbaglia dove
+il fatto che decide non c'è.
 
-## 11. Che cosa resta aperto
+## 10. I limiti della misura
 
-- **Il riferimento è una decisione di un medico** per ricovero: la precisione
-  non è interpretabile come correttezza.
-- **Il dosaggio non è modellato.**
-- **Frazione di eiezione, punteggio CHA₂DS₂-VA, valori di laboratorio e
-  dispositivi** restano i fatti non estratti che limitano le regole.
+- **k è fisso a 5.** Nel 15 % dei ricoveri il medico non aggiunge nulla e il
+  sistema propone comunque 5 classi: precisione 17 % garantita. Un sistema
+  che sapesse *quando non proporre* guadagnerebbe su tutta la tabella; qui
+  non c'è, e la misura lo paga onestamente.
+- **Il riferimento è la decisione di un medico** per ricovero, non l'insieme
+  delle terapie accettabili: una proposta ragionevole non prescritta conta
+  come errore. La precisione è «accordo col medico», non correttezza.
+- **Il 40,4 % delle prescrizioni non è cardiologico** (antibiotici,
+  gastroprotettori, insuline): nessun ranker di questo progetto le prevede
+  dal profilo, ed è il tetto del richiamo.
+- **Le unità non si confrontano fra tabelle**: a unità sostanza due proposte
+  della stessa classe collassano in una al 4° livello, e i numeri delle
+  sezioni 3 e 5 non sono la stessa misura. La graduatoria sì.
+- **Il dosaggio non è modellato**; frazione di eiezione, punteggio
+  CHA₂DS₂-VA, laboratorio e dispositivi restano i fatti non estratti che
+  limitano le regole.

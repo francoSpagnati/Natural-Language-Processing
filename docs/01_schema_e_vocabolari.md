@@ -68,7 +68,7 @@ negativa per CAD»*, che è insieme familiare e negata. Comprimere i due assi in
 un campo solo perdeva sempre una delle due informazioni.
 
 Il dettaglio della regola, dei marcatori contati sul corpus e della migrazione
-dei dati già prodotti sta in [`04_pipeline_estrazione_B.md`](04_pipeline_estrazione_B.md) § 7quater.
+dei dati già prodotti sta in [`04_pipeline_estrazione_B.md`](04_pipeline_estrazione_B.md) sez. 7quater.
 
 ### 3.2 `stato_sezione_allergie`, separato dalla lista delle allergie
 

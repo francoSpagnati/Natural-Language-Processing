@@ -64,15 +64,17 @@ davvero prescritto, su **841** ricoveri.
 **Che cosa non ha funzionato**
 
 - Il ranker «migliore» non è distinguibile da un contatore di frequenza che
-  non guarda il paziente: richiamo@5 **48,5% contro 47,5%**, differenza
-  [−1,5%, +3,4%] in validazione incrociata a 5 pieghe. A livello di sostanza
-  (7 caratteri ATC) l'ibrido è invece avanti di 4–9 punti, [+4,1%, +8,7%]:
-  «il migliore» dipende dall'unità di misura.
-- Il ranker con modello linguistico perde di 22–29 punti contro quel
-  contatore (21,7% su tutti gli 841 ricoveri): propone la cardiologia giusta e manca il **40,4%** delle
-  prescrizioni che cardiologia non è.
-- Il guadagno «gerarchico» (contare gli antenati ATC) era aritmetica: lo
-  guadagna anche un ranker casuale.
+  non guarda il paziente: F1 alla pari a ognuno dei cinque livelli ATC
+  (alla sostanza **56,9 contro 56,2**, differenza [+0,1, +1,2]; al 1°
+  livello [−2,9, −2,0]), dentro il rumore. Centra più spesso *almeno una*
+  aggiunta (top-5 alla sostanza 74,5% contro 66,8%), ma sull'insieme della
+  terapia le proposte sbagliate pesano uguale.
+- Il ranker con modello linguistico perde di 7–9 punti di F1 contro quel
+  contatore (51,0 contro 59,3 al 4° livello, su tutti gli 841 ricoveri):
+  propone la cardiologia giusta e manca il **40,4%** delle prescrizioni che
+  cardiologia non è.
+- Il 1° livello ATC è generoso con chiunque: tirare a sorte fa F1 70,9 al
+  gruppo anatomico, perché in cardiologia quasi tutto sta in `C`.
 - Il NER addestrato su etichette silver non trova ciò che il gazetteer non
   trova, e ciò che trova in più non sa codificarlo; il NER clinico italiano
   pre-addestrato trovato su Hugging Face vede 2,5 volte più condizioni con
@@ -142,7 +144,7 @@ perché una regola di sicurezza deve poter essere contestata da un clinico.
 | esposizione | `mcp_server`, `mcp_client_locale`, `valuta_mcp` | 10 |
 | valutazione | `valuta_gerarchica` | 11 |
 
-Ogni modulo ha il suo file di test; 472 test, nessuno usa la rete.
+Ogni modulo ha il suo file di test; 471 test, nessuno usa la rete.
 
 ---
 
@@ -179,7 +181,7 @@ cose diverse per un filtro di sicurezza.
 delimitatori: si leggono con un parser (100% sull'ingresso, misurato) e sono
 una verità gratuita. La prosa richiede riconoscimento.
 
-**Il vocabolario chiuso** (brief §3.1) viene dal dataset — 406 principi
+**Il vocabolario chiuso** (brief, sez. 3.1) viene dal dataset — 406 principi
 attivi, 923 nomi commerciali, 249 condizioni candidate — e definisce lo
 *scope*, non le relazioni. La risoluzione ad ATC usa il registro AIFA con una
 **cascata di sei strategie**, dal più stretto al più largo, ognuna
@@ -316,7 +318,7 @@ insieme, con la provenienza.
 Due grafi RDF (`rdflib`), con lo stesso spazio di nomi per i concetti.
 
 **La conoscenza clinica** — `kb/conoscenza.ttl`, versionato, 805 triple —
-è il grafo del brief §3.3: nodi `Drug` (classi ATC, con etichetta AIFA),
+è il grafo del brief, sez. 3.3: nodi `Drug` (classi ATC, con etichetta AIFA),
 `Condition` (ICD-10), `Guideline` (documento citato); relazioni reificate
 `Indicazione` (27: farmaco → condizione, classe di raccomandazione ESC,
 motivo, fonte, eventuale terapia che la innesca, fatto non estratto) e
@@ -406,7 +408,7 @@ nessun argomento che indichi un ricovero (il corpus non passa di qui):
 | strumento | risponde a |
 | --- | --- |
 | `cardio_proponi_terapia` | che cosa aggiungere — dal testo |
-| `cardio_proponi_da_stato` | idem — da uno `StatoPaziente` (la firma del brief §3.5, schema Pydantic generato) |
+| `cardio_proponi_da_stato` | idem — da uno `StatoPaziente` (la firma del brief, sez. 3.5, schema Pydantic generato) |
 | `cardio_sostegno_del_concetto` | da dove viene questo fatto (SPARQL) |
 | `cardio_verifica_sicurezza` | il verdetto del filtro; rifiuta ciò che non è un codice |
 | `cardio_cerca_codice` | ATC e ICD-10 per nome o codice |
@@ -426,89 +428,101 @@ impedibile.
 
 ## 8. Valutazione
 
-**Protocollo.** Unità: classe ATC. Compito: le aggiunte. Metrica primaria:
-richiamo@5 (una decisione giusta per ricovero, non tutte: la precisione non
-è interpretabile come correttezza); metriche gerarchiche per livello ATC e
-hP/hR/hF (Kiritchenko 2005; Silla & Freitas 2011,
-doi:10.1007/s10618-010-0175-9). **Validazione incrociata a 5 pieghe** con
-pieghe deterministiche per hash del ricovero e insieme candidato ricostruito
-per piega; **bootstrap** su 1 000 ricampionamenti *dei ricoveri* con
-differenze appaiate; un **ranker casuale a seme fisso** come controllo.
+**La misura** (metrica primaria del brief, sezione 4). Per ogni ricovero il
+sistema produce una *terapia proposta*: la terapia d'ingresso continuata più
+le 5 classi nuove che il ranker mette in cima. La si confronta con la
+*terapia di dimissione* scritta dal medico, che nessun ranker riceve. I codici
+sono risolti alla sostanza (7 caratteri ATC) e troncati a ciascuno dei cinque
+livelli; a ogni livello si calcolano precisione (quota delle proposte
+prescritte davvero), richiamo (quota delle prescrizioni proposte) e F1, medie
+sui ricoveri. La versione top-5 del brief conta i ricoveri in cui almeno una
+delle 5 proposte nuove coincide con un'aggiunta reale.
+
+**Il protocollo.** Validazione incrociata a 5 pieghe con pieghe
+deterministiche per hash del ricovero e insieme candidato ricostruito per
+piega; bootstrap su 1 000 ricampionamenti *dei ricoveri* con differenze
+appaiate; un ranker casuale a seme fisso come controllo; rumore di fondo 2
+punti (una differenza minore non si racconta). Un esempio svolto a mano,
+livello per livello, è nel [documento dello step 11](docs/11_valutazione.md).
 
 ### 8.1 Il risultato principale
 
-![Richiamo@5 per ranker](docs/img/graf-ranker.png)
+![F1 alla sostanza per ranker](docs/img/graf-ranker.png)
 
-| ranker · 5 pieghe, 841 ricoveri | ric@3 | ric@5 | ric@10 | MAP | intervallo ric@5 |
-| --- | --- | --- | --- | --- | --- |
-| casuale | 3,2% | 5,3% | 10,8% | 0,075 | [4,0%, 6,5%] |
-| continuità | 10,1% | 10,6% | 13,2% | 0,108 | [9,1%, 12,2%] |
-| simbolico | 15,8% | 23,7% | 29,2% | 0,185 | [21,5%, 25,8%] |
-| frequenza | 32,6% | 47,5% | 65,2% | 0,402 | [44,8%, 50,3%] |
-| **ibrido** | **36,8%** | **48,5%** | **67,2%** | **0,425** | [45,7%, 51,1%] |
-| `deepseek-v4.1-flash`, tutti gli 841 con i candidati della divisione singola | 15,8% | 21,7% | 33,7% | 0,205 | [19,4%, 24,0%] |
+**F1 per livello ATC, 841 ricoveri, 5 pieghe, unità = sostanza.**
 
-| differenza appaiata (ric@5) | intervallo 95% | |
-| --- | --- | --- |
-| **ibrido − frequenza** | **[−1,5%, +3,4%]** | include lo zero: indistinguibili |
-| ibrido − simbolico | [+21,7%, +28,0%] | esclude lo zero |
-| frequenza − simbolico | [+20,9%, +26,9%] | esclude lo zero |
-| `deepseek` − frequenza | [−29,2%, −22,5%] | esclude lo zero |
-| ibrido − frequenza, pieghe stratificate per condizione principale | [−3,0%, +2,0%] | include lo zero |
+| ranker | 1° `C` | 2° `C07` | 3° `C07A` | 4° `C07AB` | 5° `C07AB07` | top-5 al 5° |
+| --- | --- | --- | --- | --- | --- | --- |
+| casuale (controllo) | 70,9 | 58,9 | 54,3 | 48,9 | 44,9 | 10,8% |
+| continuità (copia l'ingresso) | 81,5 | 72,9 | 64,4 | 60,7 | 47,5 | 31,7% |
+| simbolico (linee guida ESC) | 82,5 | 72,2 | 67,1 | 61,8 | 46,9 | 25,4% |
+| frequenza (non guarda il paziente) | **86,1** | **74,8** | **70,5** | 61,0 | 56,2 | 66,8% |
+| **ibrido** (indicazioni + co-occorrenza) | 83,7 | 73,3 | 69,2 | 61,7 | **56,9** | **74,5%** |
+| `deepseek-v4.1-flash` (unità classe, dalla cache) | 82,1 | 67,0 | 58,0 | 51,0 | — | 45,8% al 4° |
 
-### 8.2 Il controllo casuale: il guadagno gerarchico era aritmetica
+| differenza appaiata di F1 | 1° | 3° | 5° | lettura |
+| --- | --- | --- | --- | --- |
+| **ibrido − frequenza** | [−2,9, −2,0] | [−1,8, −0,8] | [+0,1, +1,2] | dentro il rumore, segno che cambia: **alla pari** |
+| ibrido − simbolico | [−0,1, +2,6] | [+1,0, +3,4] | **[+9,2, +10,9]** | alla sostanza esclude lo zero |
+| frequenza − continuità | [+3,5, +5,7] | [+5,1, +7,1] | **[+8,0, +9,6]** | esclude lo zero |
+| ibrido − frequenza, **top-5** | [+1,4, +4,1] | [+3,9, +8,1] | **[+4,7, +10,8]** | esclude lo zero |
+| `deepseek` − frequenza (unità classe; 1°, 3°, 4°) | [−5,1, −2,4] | [−11,1, −8,9] | [−9,3, −7,3] | esclude lo zero |
+| ibrido − frequenza, pieghe stratificate | [−2,7, −1,8] | [−1,8, −0,8] | [+0,0, +1,1] | identico |
 
-![Richiamo per livello ATC](docs/img/graf-livelli.png)
+Che cosa dice: (1) ibrido e frequenza sono **alla pari in F1 a ogni
+livello**; l'ibrido centra più spesso almeno una aggiunta (tre ricoveri su
+quattro alla sostanza contro due su tre), ma sull'insieme della terapia le
+sue proposte sbagliate pesano quanto quelle della frequenza. (2) Alla
+sostanza frequenza e ibrido staccano simbolico e continuità di 8–11 punti:
+una linea guida indica la classe, non la molecola, e dentro la classe il
+simbolico sceglie a caso. (3) Il **simbolico ha la precisione più alta** a
+ogni livello dal 1° al 4° (90,0% al 1°) e il richiamo più basso: propone
+poco e giusto. (4) La continuità è un pavimento alto (F1 81,5 al 1°): i
+ranker aggiungono qualcosa sopra la copia solo alla sostanza.
 
-Contare come centrato un antenato del codice giusto alza il richiamo di
-tutti, ranker casuale compreso (dal 7,2% al 57,3% dal quarto al primo
-livello). Sopra il caso il vantaggio dell'ibrido passa da +45,9 a +44,4:
-niente. E al primo livello `deepseek` sta *sotto* il caso: propone la
-cardiologia giusta e il 40,4% dei bersagli non è cardiologia. Trappola
-trovata misurando: troncare i codici può *abbassare* il richiamo, perché due
-bersagli centrati (`C03CA`, `C03DA`) collassano in un `C03` solo — 15 casi
-reali, e un test lo fissa.
+### 8.2 Per livello: dove il sistema si ferma
 
-### 8.3 «Il migliore» dipende dall'unità
+![F1 per livello ATC](docs/img/graf-livelli.png)
 
-Con l'unità = sostanza (7 caratteri, il quinto livello ATC del brief):
+Salendo di livello i codici distinti diventano pochi e chiunque migliora,
+anche chi tira a sorte (F1 da 44,9 a 70,9). Il 1° livello è generoso con
+chiunque: in cardiologia quasi tutto sta in `C`. Il guadagno vero di un
+ranker è la distanza dal caso, +12 alla sostanza per l'ibrido, non i 57
+punti della cifra assoluta. Il modello linguistico, vincolato all'insieme
+candidato e con lo stesso stato del paziente, sta sotto la frequenza a ogni
+livello e alla pari col simbolico: la sua precisione al 1° livello (88,8%) è
+la più alta della tabella, e come il simbolico propone poco.
 
-| 5 pieghe, unità sostanza | ric@5 | hF |
-| --- | --- | --- |
-| frequenza | 38,0% | 42,9% |
-| **ibrido** | **44,3%** | **44,4%** |
-| simbolico | 9,4% | 19,6% |
-| ibrido − frequenza | **[+4,1%, +8,7%]** | [+0,5%, +2,6%] |
-
-A livello di classe l'ibrido e la frequenza sono indistinguibili; a livello
-di sostanza l'ibrido è avanti di 4–9 punti e il simbolico crolla, perché una
-linea guida indica la classe, non la molecola: dentro la classe decide la
-co-occorrenza. Il richiamo assoluto è più basso (44% contro 48%) perché il
-bersaglio è più fine.
-
-### 8.4 La spiegabilità, contata invece che affermata
+### 8.3 La spiegabilità, contata invece che affermata
 
 Quante proposte fra le prime cinque hanno almeno un'indicazione ESC che
-scatta per quel paziente, e quante fra quelle centrate:
-
-| 5 pieghe, classe | proposte motivate | centri motivati |
-| --- | --- | --- |
-| frequenza | 20,9% | 30,8% |
-| ibrido | 29,5% | 34,8% |
-| simbolico | 68,4% | 81,7% (ma centra la metà: 464 contro 904) |
-
-Il vantaggio di spiegabilità dell'ibrido sulla frequenza è di quattro punti,
-non una differenza di categoria: due terzi dei suoi centri sono «in questo
+scatta per quel paziente, fra quelle centrate (unità sostanza): frequenza
+33,9%, ibrido 37,2%, simbolico 74,1%; `deepseek` (unità classe) 65,8%. Il
+vantaggio di spiegabilità dell'ibrido sulla frequenza è di tre punti, non
+una differenza di categoria: due terzi dei suoi centri sono «in questo
 reparto si fa», e il sistema lo dice per ogni proposta. Il ranker davvero
-spiegabile è il simbolico, che trova la metà.
+spiegabile è il simbolico, che alla sostanza centra poco (193 proposte
+contro 866).
 
-### 8.5 L'estrazione conta poco sul ranking
+### 8.4 L'estrazione conta poco sul ranking
 
 Metrica secondaria del brief: la stessa valutazione con lo stato estratto da
-ciascuna pipeline. Ibrido 48,9% (A), 48,5% (B), 49,0% (C); simbolico 21,2%
-(A e C) contro 23,7% (B). Il richiamo più alto di B sulle condizioni vale
-2,5 punti al ranker simbolico — al pavimento di rumore — e nulla all'ibrido,
-dominato dalla frequenza.
+ciascuna pipeline. F1 dell'ibrido alla sostanza: 56,9 da A, 56,9 da B, 56,9
+da C. Il richiamo più alto di B sulle condizioni vale 1,5 punti al ranker
+simbolico al 3° livello (67,1 contro 65,6) — al pavimento di rumore — e
+nulla all'ibrido, dominato dalla frequenza.
+
+### 8.5 I limiti della misura
+
+k è fisso a 5: nel 15% dei ricoveri il medico non aggiunge nulla e il
+sistema propone comunque 5 classi, con precisione 17% garantita; un sistema
+che sapesse *quando non proporre* guadagnerebbe su tutta la tabella. Il
+riferimento è la decisione di un medico, non l'insieme delle terapie
+accettabili: la precisione è accordo col medico, non correttezza. Il 40,4%
+delle prescrizioni non è cardiologico ed è il tetto del richiamo. E le unità
+non si confrontano fra tabelle: a unità sostanza due proposte della stessa
+classe collassano in una al 4° livello, quindi la riga del modello
+linguistico (unità classe) si confronta per graduatoria, non cifra per cifra.
 
 ### 8.6 La provenienza
 
@@ -524,7 +538,7 @@ dominato dalla frequenza.
 | filtro e ranker non passano dal grafo | una SPARQL costa 12,43 ms, una lettura da dizionario 0,073 µs; sul ciclo di valutazione (841 × migliaia di candidati) sono ore contro secondi. La traccia sì, perché serve *dopo* | tutto via SPARQL |
 | estrazione deterministica come predefinita nella demo e nel server | zero rete, zero chiavi, zero denaro, riproducibile; il modello è opzionale (`--motore`) | il modello sempre attivo: un server che chiama un modello per rispondere a un modello paga due volte |
 | prior empirico nell'ibrido (co-occorrenza) | il 40,4% delle prescrizioni non è in nessuna linea guida; senza il prior il ranker ha un tetto per costruzione | solo linee guida: 23,7% di richiamo |
-| unità = classe ATC | la molecola è del prontuario; il brief ammette la classe; misurato anche a sostanza (§8.3) | sostanza come unica unità |
+| unità = classe ATC nel motore, sostanza nella valutazione | la molecola è del prontuario; il brief ammette la classe; la misura finale è alla sostanza (sez. 8.1) | sostanza come unica unità |
 | Pydantic per il contratto dati | validazione all'ingresso, JSON Schema generato (usato dal tool MCP e dal prompt), enumerazioni chiuse | dizionari: nessun contratto |
 | `urllib` per i backend LLM | due funzioni; nessun SDK che cambia; la cache e i ritentativi sono nostri e testati | SDK dei fornitori |
 | cache per impronta della richiesta | rimisurare è gratis; il costo si somma dai file; la valutazione è ripetibile su risposte non deterministiche | richiamare il modello a ogni metrica |
@@ -534,7 +548,7 @@ dominato dalla frequenza.
 | modello locale prima, remoto solo con token misurati | 65 ore contro 1,65 $: la scelta è stata fatta con i numeri, non con una stima | remoto per comodità |
 | il modello non riceve né produce codici | la conoscenza interna non è citabile; i codici li danno AIFA e ICD-10 | chiedere al modello il codice |
 | tre esiti nel filtro | falso blocco e falso permesso fanno entrambi danno | ammesso / vietato |
-| ranker casuale come controllo, prima dei risultati | senza, i 4–7 punti gerarchici sarebbero stati raccontati come un risultato | nessun controllo |
+| ranker casuale come controllo, prima dei risultati | senza, il 70,9 di F1 al 1° livello sembrerebbe un risultato | nessun controllo |
 | bootstrap sui pazienti, differenze appaiate | le prescrizioni dello stesso ricovero non sono indipendenti | intervalli non appaiati |
 
 ---
@@ -575,12 +589,12 @@ python3 -m spacy download it_core_news_sm
 python3 src/fetch_external_kb.py                  # AIFA, con manifest in kb/
 ollama pull qwen3.5:4b                            # il modello locale (step 9 e 10)
 
-python3 -m unittest discover -s tests -q          # 472 test, nessuna rete
+python3 -m unittest discover -s tests -q          # 471 test, nessuna rete
 python3 src/demo.py --esempio 1 --traccia         # un paziente dall'inizio alla fine
 python3 src/demo.py --interattivo                 # la tua anamnesi da tastiera
 python3 src/kb_build.py --figura                  # rigenera kb/conoscenza.ttl e la figura
-python3 src/valuta_gerarchica.py --pieghe 5       # la valutazione finale, gratis
-python3 src/valuta_gerarchica.py --pieghe 5 --sostanza    # unita' = sostanza; --stratifica per le pieghe
+python3 src/valuta_gerarchica.py --sostanza --esempi 4   # la valutazione finale, gratis
+python3 src/valuta_gerarchica.py --llm --llm-solo-cache  # + il ranker LLM dalla cache; --stratifica per le pieghe
 claude mcp add cardio -- python3 src/mcp_server.py
 python3 src/mcp_client_locale.py --strumenti      # handshake col server
 python3 src/valuta_mcp.py                         # le dieci domande (ollama, ~1 h)
@@ -596,7 +610,7 @@ OpenRouter sta in `.env.local`, mai nel codice.
 
 ```text
 src/          un modulo per step, più schema, backend LLM, conoscenza
-tests/        472 test su dati sintetici
+tests/        471 test su dati sintetici
 docs/         un documento per step, l'indice, la guida al codice, il brief, le figure
 kb/           conoscenza.ttl (il grafo clinico) e manifest_fonti.json
 notebooks/    quattro notebook di analisi, senza output salvati

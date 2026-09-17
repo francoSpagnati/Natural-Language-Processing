@@ -97,7 +97,7 @@ class TestGliStrumentiSonoRegistrati(unittest.TestCase):
 
 
 class TestProponiDaStato(unittest.TestCase):
-    """Il tool a stato paziente del brief §3.5: Pydantic in ingresso, il
+    """Il tool a stato paziente del brief sez. 3.5: Pydantic in ingresso, il
     motore entra dopo l'estrazione."""
 
     def test_lo_schema_di_ingresso_e_quello_di_StatoPaziente(self) -> None:

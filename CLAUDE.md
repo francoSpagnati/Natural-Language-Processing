@@ -49,7 +49,7 @@ src/demo.py               step 9b  demo end-to-end
 src/traccia.py            step 9c  traccia di provenienza via SPARQL
 src/mcp_server.py         step 10  server MCP, 6 strumenti di sola lettura (testo o StatoPaziente)
 src/mcp_client_locale.py  step 10  host MCP locale con ollama
-src/valuta_gerarchica.py  step 11  metrica gerarchica, controllo casuale, bootstrap
+src/valuta_gerarchica.py  step 11  P/R/F1 per livello ATC, top-k, controllo casuale, bootstrap
 src/llm_backend.py                 backend LLM intercambiabili, con cache
 ```
 
@@ -60,10 +60,10 @@ base scaricabili con `src/fetch_external_kb.py` (manifest citabile in `kb/`).
 ## Comandi
 
 ```bash
-python3 -m unittest discover -s tests -q     # 472 test, nessuno usa la rete
+python3 -m unittest discover -s tests -q     # 471 test, nessuno usa la rete
 python3 src/demo.py --esempio 1 --traccia    # un paziente dall'inizio alla fine
 python3 src/valuta_ranker.py                 # ranker senza LLM (gratis)
-python3 src/valuta_gerarchica.py --pieghe 5  # step 11: 5 pieghe + bootstrap (gratis); --sostanza per l'unita' a 7
+python3 src/valuta_gerarchica.py --sostanza --esempi 4  # step 11 (gratis); --llm --llm-solo-cache per il ranker LLM
 python3 src/mcp_client_locale.py --strumenti # handshake col server MCP
 ```
 
@@ -73,9 +73,10 @@ python3 src/mcp_client_locale.py --strumenti # handshake col server MCP
 |---|---|
 | referti | 1 000, di cui **841** con terapia di dimissione codificata |
 | linea di base: copiare la terapia d'ingresso | **63,6%** della dimissione |
-| ibrido / frequenza, richiamo@5 sulle aggiunte, 5 pieghe su 841 | **48,5% / 47,5%**, differenza [−1,5%, +3,4%]: **indistinguibili** |
-| modello linguistico (deepseek) contro frequenza, tutti gli 841 | 21,7% contro 47,5%, [−29,2%, −22,5%]: distinguibile |
-| ibrido / frequenza con unita' = sostanza (7 caratteri) | 44,3% / 38,0%, [+4,1%, +8,7%]: **l'ibrido e' avanti** |
+| misura finale: terapia proposta (ingresso + 5 nuove) contro dimissione, P/R/F1 per livello ATC, 5 pieghe su 841, unita' sostanza | F1 al 5o livello: ibrido **56,9**, frequenza **56,2**, simbolico 46,9, continuita' 47,5, casuale 44,9 |
+| ibrido − frequenza, F1 | fra [−2,9, −2,0] (1o) e [+0,1, +1,2] (5o): **alla pari a ogni livello** |
+| ibrido − frequenza, top-5 (almeno un'aggiunta centrata) | [+4,7, +10,8] al 5o: l'ibrido e' avanti solo qui |
+| modello linguistico (deepseek) contro frequenza, F1 al 4o, unita' classe | 51,0 contro 59,3, [−9,3, −7,3]: sotto |
 | tetto di dominio: prescrizioni non cardiologiche | **40,4%** |
 | filtro step 8 su 5 863 prescrizioni | 91,3% ammesse, 8,6% da verificare, 4 vietate |
 | interrogazione SPARQL contro lettura da dizionario | 12,43 ms contro 0,073 µs |

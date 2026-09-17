@@ -24,7 +24,7 @@ Quest'ultimo è il numero che conta davvero. Il conteggio per voce distinta è
 dominato dalla coda rara — farmaci visti una volta sola — mentre la copertura
 pesata dice quanta parte del *testo reale* riusciamo effettivamente a
 normalizzare. Il residuo del 6 % è concentrato in poche voci ricorrenti,
-elencate in § 5.
+elencate in sez. 5.
 
 ## 3. Una cascata di strategie, non un solo confronto
 
@@ -101,7 +101,7 @@ contesto clinico del paziente, quindi appartiene all'entity linking (step 5).
 ## 5. Cosa resta non risolto
 
 183 voci, **835 occorrenze (4,6 %)**. Le altre 260 occorrenze che mancano al
-100 % sono le voci ambigue di § 4, che un codice ce l'hanno ma non uno solo.
+100 % sono le voci ambigue di sez. 4, che un codice ce l'hanno ma non uno solo.
 Le non risolte più frequenti:
 
 | Occorrenze | Voce | Causa |

@@ -53,7 +53,7 @@ atteso: **559 condizioni, 60 farmaci narrati**.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | A | 60 | 41 | 39 | 2 | 21 | 95,1% | 65,0% | 77,2% |
 | B, prima corsa | 60 | **0** | 0 | 0 | 60 | 0,0% | **0,0%** | 0,0% |
-| B, prompt corretto (§5) | 60 | 55 | 50 | 5 | 10 | 90,9% | **83,3%** | **87,0%** |
+| B, prompt corretto (sez. 5) | 60 | 55 | 50 | 5 | 10 | 90,9% | **83,3%** | **87,0%** |
 | C | 60 | 44 | 42 | 2 | 18 | 95,5% | 70,0% | 80,8% |
 
 **Sulle condizioni il divario è strutturale**: A e C mancano quattro

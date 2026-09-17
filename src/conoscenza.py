@@ -1,6 +1,6 @@
 """La knowledge base clinica: strutture, lettura e scrittura del Turtle.
 
-Il grafo di conoscenza del progetto (brief §3.3) sta in `kb/conoscenza.ttl`,
+Il grafo di conoscenza del progetto (brief sez. 3.3) sta in `kb/conoscenza.ttl`,
 versionato. Contiene tre tipi di nodo — `Drug` (classi ATC), `Condition`
 (codici ICD-10), `Guideline` (documenti citati) — e due tipi di relazione
 reificata, perche' portano attributi:
