@@ -1,21 +1,11 @@
-"""Step 5, la prova che il brief chiede prima del fine-tuning.
+"""Step 5 - Il NER clinico italiano pre-addestrato, come chiede il brief (sez. 3.2 C).
 
-sez. 3.2 C: «valuta prima l'uso di modelli NER biomedici/clinici pre-addestrati
-eventualmente disponibili per l'italiano». Cercato su Hugging Face il 17
-settembre 2026 (ricerca «italian medical ner», filtro token-classification):
-un solo modello italiano, `HUMADEX/italian_medical_ner` — BERT base cased
-addestrato con supervisione debole su testo clinico tradotto, etichette
-PROBLEM / TEST / TREATMENT, Apache 2.0, Sallauka et al. 2025,
-doi:10.3390/app15105585. Nessun modello italiano con etichette DRUG/CONDITION
-ancorate a un vocabolario.
+L'unico modello italiano su Hugging Face (`HUMADEX/italian_medical_ner`,
+etichette PROBLEM / TEST / TREATMENT, Sallauka et al. 2025,
+doi:10.3390/app15105585) eseguito sui 25 referti del riferimento e misurato
+con la stessa funzione delle tre pipeline. Non collega a codici.
 
-Qui si esegue quel modello sui 25 referti del riferimento annotato (step 6bis)
-e si misura con la stessa funzione delle tre pipeline: PROBLEM contro le
-condizioni attese, TREATMENT contro i farmaci citati nella prosa. Non collega
-a nessun codice: e' la sola parte di riconoscimento, e la domanda e' se vede
-di piu' del gazetteer (richiamo 19,5%) o del NER addestrato su silver (19,9%).
-
-Uso:  python3 src/sonda_ner_preaddestrato.py     (scarica ~430 MB la prima volta)
+    python3 src/sonda_ner_preaddestrato.py     (scarica ~430 MB la prima volta)
 """
 
 from __future__ import annotations

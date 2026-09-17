@@ -1,30 +1,9 @@
-"""
-Step 1 - Schema dello "stato paziente strutturato".
+"""Step 1 - Schema dello stato paziente strutturato.
 
-E' il contratto dati del progetto: l'unica struttura che le tre pipeline di
-estrazione (A deterministica, B LLM, C NER+Entity Linking) devono produrre, e
-l'unico input che il motore di raccomandazione e il tool MCP accettano. Averlo
-definito una volta sola e in un punto solo e' cio' che rende le tre pipeline
-confrontabili: se ciascuna avesse il proprio formato, il confronto dello step 6
-misurerebbe le differenze di formato invece che quelle di estrazione.
-
-PERCHE' PYDANTIC
-    - Valida i dati invece di limitarsi a descriverli: un JSON che non rispetta
-      lo schema viene rifiutato al momento del caricamento, non tre step dopo.
-    - Genera automaticamente lo JSON Schema, che serve sia a documentare i file
-      intermedi sia, allo step 10, a far capire a un LLM la firma del tool MCP.
-    - Lo step 10 richiede comunque modelli Pydantic per il tool MCP: definire lo
-      schema con altri strumenti significherebbe mantenerne due versioni
-      allineate a mano.
-    Il costo e' l'unica dipendenza esterna finora; e' accettato consapevolmente.
-
-I TRE STATI DI CONOSCENZA
-    La scelta di modellazione piu' importante. Nei referti "il paziente non e'
-    iperteso" e "dell'ipertensione non si parla" sono cose diverse: la prima e'
-    un'informazione clinica (il medico ha verificato), la seconda e' assenza di
-    informazione. Collassarle in un booleano perderebbe esattamente cio' che
-    serve al filtro di sicurezza, che deve poter distinguere "non ha allergie"
-    da "non sappiamo se ne ha".
+Il contratto dati del progetto: cio' che le tre pipeline producono e cio' che
+motore e tool MCP accettano. Pydantic valida i file intermedi e genera lo JSON
+Schema usato dal tool MCP. Tre stati di conoscenza (affermato / negato /
+ignoto) e l'asse del soggetto: docs/01_schema_e_vocabolari.md.
 """
 
 from __future__ import annotations
@@ -34,19 +13,12 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-# Versione dello schema. Cambiarla quando la struttura cambia in modo non
-# retrocompatibile: i file intermedi la riportano, cosi' e' sempre possibile
-# capire con quale versione sono stati prodotti.
+# Versione dello schema, riportata nei file intermedi.
 VERSIONE_SCHEMA = "1.1.0"
 
 
 class StatoConoscenza(str, Enum):
-    """Cosa sappiamo di un'affermazione clinica.
-
-    Eredita da `str` cosi' serializza come stringa leggibile nel JSON, invece
-    che come indice numerico: i file intermedi devono restare ispezionabili a
-    occhio.
-    """
+    """Cosa sappiamo di un'affermazione clinica. `str` per serializzare leggibile."""
 
     AFFERMATO = "affermato"   # il referto lo afferma: "Ipertensione arteriosa."
     NEGATO = "negato"         # il referto lo nega: "Nega diabete mellito."
@@ -63,12 +35,7 @@ class MomentoTerapia(str, Enum):
 
 
 class StatoNormalizzazione(str, Enum):
-    """Esito del collegamento di una menzione a un identificatore standard.
-
-    `NIL` e' esplicito e distinto da `NON_TENTATO`: lo step 5 richiede che le
-    menzioni non collegabili siano marcate come entita' fuori KB, non forzate
-    su un match sbagliato ne' confuse con quelle mai processate.
-    """
+    """Esito del collegamento a un codice; `NIL` (fuori KB) e' distinto da `NON_TENTATO`."""
 
     RISOLTO = "risolto"           # collegato a un identificatore standard
     NIL = "nil"                   # nessun candidato affidabile: entita' fuori KB
@@ -77,17 +44,7 @@ class StatoNormalizzazione(str, Enum):
 
 
 class Soggetto(str, Enum):
-    """Di chi parla l'affermazione: l'asse *experiencer* di ConText.
-
-    Senza questo asse una frase di familiarita' non e' rappresentabile. "Nega
-    diabete" e "familiarita' per diabete" finivano entrambe in `stato`, che pero'
-    misura la polarita' e non il soggetto: la prima dice che il paziente non ha
-    il diabete, la seconda che ce l'ha un parente — e sulla seconda `affermato` e
-    `negato` sono ugualmente sbagliati.
-
-    I due assi restano indipendenti: "familiarita' negativa per cardiopatia
-    ischemica" e' `soggetto=familiare` e `stato=negato` insieme.
-    """
+    """Di chi parla l'affermazione (asse *experiencer* di ConText), indipendente da `stato`."""
 
     PAZIENTE = "paziente"
     FAMILIARE = "familiare"
@@ -103,20 +60,12 @@ class Pipeline(str, Enum):
 
 
 class Provenienza(BaseModel):
-    """Da dove viene un'entita' estratta.
-
-    Il brief chiede che la pipeline A sia tracciabile: per ogni entita' devono
-    essere note la posizione nel testo e la regola che l'ha generata. Lo stesso
-    schema serve pero' anche a B e C, dove `regola` diventa rispettivamente il
-    prompt e il modello: cosi' l'audit e' uniforme fra le tre.
-    """
+    """Da dove viene un'entita': campo, offset e regola (prompt o modello per B e C)."""
 
     pipeline: Pipeline
     campo_sorgente: str = Field(description="Referto da cui proviene, es. 'Anamnesi'.")
     testo_originale: str = Field(description="La menzione esatta, come appare nel referto.")
-    # Offset assenti quando l'entita' non viene dal testo libero (es. campo
-    # semi-strutturato) o quando la pipeline non li fornisce (tipico di un LLM
-    # generativo, che riscrive invece di puntare).
+    # Offset assenti se l'entita' non viene dal testo libero o la pipeline non li da'.
     inizio: int | None = Field(default=None, description="Offset di inizio nel campo sorgente.")
     fine: int | None = Field(default=None, description="Offset di fine nel campo sorgente.")
     regola: str | None = Field(
@@ -126,13 +75,7 @@ class Provenienza(BaseModel):
 
 
 class FarmacoEstratto(BaseModel):
-    """Un farmaco attribuito al paziente.
-
-    Nome grezzo e forme normalizzate sono campi separati e il grezzo non viene
-    mai sovrascritto: e' l'unico modo per poter verificare a posteriori una
-    normalizzazione sbagliata, e per non perdere informazione se la fonte
-    esterna cambia.
-    """
+    """Un farmaco attribuito al paziente; il nome grezzo non viene mai sovrascritto."""
 
     nome_grezzo: str = Field(description="Nome come compare nel referto, non modificato.")
     principio_attivo: str | None = Field(
@@ -175,12 +118,7 @@ class CondizioneEstratta(BaseModel):
 
 
 class AllergiaEstratta(BaseModel):
-    """Un'allergia o intolleranza documentata.
-
-    `categoria` distingue le allergie a principi attivi (le uniche che vincolano
-    la scelta terapeutica) da quelle ad alimenti, pollini o mezzi di contrasto,
-    che vanno conservate ma non filtrano i farmaci.
-    """
+    """Un'allergia documentata; solo la categoria «principi attivi» vincola la terapia."""
 
     allergene: str
     categoria: str = Field(description="'principi attivi', 'alimenti', 'altro', ...")
@@ -192,11 +130,7 @@ class AllergiaEstratta(BaseModel):
 
 
 class StatoPaziente(BaseModel):
-    """Lo stato strutturato di un paziente: il contratto dati del progetto.
-
-    Prodotto da ciascuna delle tre pipeline, consumato dal motore di
-    raccomandazione e dal tool MCP.
-    """
+    """Lo stato strutturato di un paziente: prodotto dalle pipeline, consumato da motore e MCP."""
 
     enc_oid: int = Field(description="Identificativo del ricovero (encounter).")
     versione_schema: str = VERSIONE_SCHEMA
@@ -207,11 +141,7 @@ class StatoPaziente(BaseModel):
     farmaci: list[FarmacoEstratto] = Field(default_factory=list)
     allergie: list[AllergiaEstratta] = Field(default_factory=list)
 
-    # Stato della *sezione* allergie, indipendente dalla lista: distingue
-    # "il clinico ha verificato che non ce ne sono" (assenza dichiarata, lista
-    # vuota ma informativa) da "il referto non ne parla" (lista vuota e basta).
-    # Senza questo campo le due situazioni sarebbero indistinguibili, e il
-    # filtro di sicurezza non potrebbe sapere quanto fidarsi di una lista vuota.
+    # Stato della sezione allergie: «nessuna, verificato» e' diverso da «non se ne parla».
     stato_sezione_allergie: StatoConoscenza = StatoConoscenza.IGNOTO
 
     testo_supporto: str | None = Field(
@@ -225,12 +155,7 @@ class StatoPaziente(BaseModel):
 
     @property
     def farmaci_in_corso(self) -> list[FarmacoEstratto]:
-        """I farmaci della terapia domiciliare, cioe' quelli gia' assunti.
-
-        Sono i soli rilevanti per il filtro sulle interazioni della Fase 1: la
-        terapia alla dimissione e' cio' che il sistema deve *predire*, quindi
-        usarla come input sarebbe una fuga di informazione dalla ground truth.
-        """
+        """I farmaci gia' assunti: la dimissione e' da predire, non da leggere."""
         return [f for f in self.farmaci if f.momento == MomentoTerapia.INGRESSO]
 
     @property
@@ -240,22 +165,11 @@ class StatoPaziente(BaseModel):
 
 
 def json_schema() -> dict:
-    """Restituisce lo JSON Schema dello stato paziente.
-
-    Serializzato in `data/interim/`, documenta i file intermedi in modo
-    verificabile a macchina invece che a parole.
-    """
+    """Lo JSON Schema dello stato paziente (scritto in `data/interim/`)."""
     return StatoPaziente.model_json_schema()
 
 
-# ---------------------------------------------------------------------------
-# Modelli dei vocabolari chiusi (step 1)
-# ---------------------------------------------------------------------------
-# I vocabolari non sono lo stato paziente, ma hanno lo stesso bisogno di una
-# struttura dichiarata: sono file intermedi che vanno ispezionati a mano per
-# capire cosa e' stato normalizzato bene e cosa e' rimasto scoperto. Modellarli
-# con Pydantic significa che il loro JSON Schema e' generato, non descritto a
-# parole, e che una modifica alla struttura non passa inosservata.
+# --- Modelli dei vocabolari chiusi (step 1) ---
 
 
 class EsitoConfermaEsterna(str, Enum):
@@ -276,26 +190,18 @@ class OccorrenzaVoce(BaseModel):
 
 
 class VoceFarmaco(BaseModel):
-    """Una voce del vocabolario chiuso dei farmaci.
-
-    La forma grezza resta la chiave: e' cio' che comparira' davvero nei testi da
-    processare. Tutto il resto e' annotazione, e ogni annotazione porta con se'
-    la fonte che la sostiene.
-    """
+    """Una voce del vocabolario chiuso dei farmaci: la forma grezza e' la chiave."""
 
     forma_grezza: str = Field(description="La stringa come appare nel dataset.")
     tipo: str = Field(description="'principio_attivo' | 'nome_commerciale'.")
     occorrenze_totali: int
     occorrenze_per_campo: list[OccorrenzaVoce] = Field(default_factory=list)
 
-    # Evidenza interna al dataset (il "ponte" dello step 0): utile, ma da sola
-    # non e' una fonte autorevole.
+    # Evidenza interna al dataset (il «ponte» dello step 0), non autorevole da sola.
     principio_attivo_dataset: str | None = None
     varianti_osservate: list[str] = Field(default_factory=list)
 
-    # Evidenza esterna citabile. `atc_candidati` NON e' ancora una risoluzione:
-    # e' cio' che AIFA associa alla voce, che lo step 2 dovra' disambiguare
-    # (una stessa denominazione puo' avere piu' ATC per confezioni diverse).
+    # Evidenza esterna (AIFA); `atc_candidati` va ancora disambiguato allo step 2.
     conferma_aifa: EsitoConfermaEsterna = EsitoConfermaEsterna.NON_VERIFICATA
     principi_attivi_aifa: list[str] = Field(default_factory=list)
     atc_candidati: list[str] = Field(default_factory=list)
@@ -303,13 +209,7 @@ class VoceFarmaco(BaseModel):
 
 
 class VoceCondizione(BaseModel):
-    """Una voce candidata del vocabolario delle condizioni.
-
-    A differenza dei farmaci, le condizioni non sono elencate in alcun campo
-    strutturato del dataset: queste voci sono *candidate* ricavate dalla prosa e
-    vanno validate contro una terminologia esterna nello step 2. Il campo
-    `codice` resta quindi nullo per costruzione in questo step.
-    """
+    """Una voce candidata delle condizioni, dalla prosa; `codice` arriva allo step 2."""
 
     testo_grezzo: str
     occorrenze: int
@@ -341,20 +241,11 @@ class Vocabolario(BaseModel):
     condizioni: list[VoceCondizione] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Modelli della normalizzazione ATC (step 2)
-# ---------------------------------------------------------------------------
+# --- Modelli della normalizzazione ATC (step 2) ---
 
 
 class MetodoRisoluzione(str, Enum):
-    """Come una voce del vocabolario e' stata collegata a un codice ATC.
-
-    Il metodo viene registrato su ogni voce perche' i metodi non sono
-    equivalenti: una corrispondenza esatta sulla descrizione ufficiale e' molto
-    piu' affidabile di un accostamento per prefisso di token. Chi legge il file
-    deve poter dare peso diverso alle due cose, e chi valuta il sistema deve
-    poter escludere i metodi piu' deboli per misurarne l'effetto.
-    """
+    """Come una voce e' stata collegata a un codice ATC; registrato perche' i metodi non si equivalgono."""
 
     PRINCIPIO_ESATTO = "principio_esatto"
     ASSOCIAZIONE = "associazione"
@@ -398,40 +289,15 @@ class MappaturaATC(BaseModel):
     voci: list[VoceMappaturaATC] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Schema di uscita della pipeline B (estrazione con LLM)
-#
-# Non e' `StatoPaziente`: e' volutamente piu' povero. Al modello si chiede solo
-# cio' che un modello sa fare in modo verificabile -- individuare le menzioni,
-# citarle alla lettera e interpretarne il contesto clinico -- e nient'altro.
-#
-# In particolare NON si chiedono i codici ATC e ICD. Un LLM li produrrebbe
-# volentieri e spesso in modo plausibile, ma sarebbero conoscenza interna del
-# modello e non conoscenza tracciabile a una fonte citabile. La codifica resta
-# quindi affidata agli stessi risolutori usati dalla pipeline A, che poggiano su
-# AIFA e sull'ICD-10 italiano. Cosi' il confronto dello step 6 isola davvero la
-# differenza di *estrazione*, a normalizzazione identica.
-#
-# La citazione letterale (`testo_grezzo`) ha una seconda funzione: e' un test di
-# allucinazione. Se la stringa restituita non compare nel referto, la menzione e'
-# inventata, e questo e' misurabile in modo automatico.
-#
-# Alle condizioni si chiede anche un `concetto`: la stessa menzione con gli
-# acronimi sciolti. Non e' una violazione del vincolo di provenienza, perche' non
-# e' un codice e non viene creduto sulla parola: serve solo come *chiave di
-# ricerca* nell'indice ICD-10 ufficiale, che resta l'unica autorita' a decidere
-# se quel concetto esiste e con quale codice. E' anche il punto in cui la
-# pipeline B puo' superare la A, che su "BPCO" non ha appiglio perche'
-# l'acronimo nel volume ICD non compare.
-# ---------------------------------------------------------------------------
+# --- Schema di uscita della pipeline B (estrazione con LLM) ---
+# Volutamente piu' povero di StatoPaziente: al modello si chiedono menzioni
+# citate alla lettera (`testo_grezzo`, che serve anche come test di
+# allucinazione) e il `concetto` con gli acronimi sciolti, mai i codici: la
+# codifica resta ai risolutori di AIFA e ICD-10. Vedi docs/04_pipeline_estrazione_B.md.
 
 
 class CampoReferto(str, Enum):
-    """Campo del record da cui proviene una menzione.
-
-    I valori coincidono con i tipi di referto di `data_loading`, cosi' che il
-    campo dichiarato dal modello sia verificabile contro il testo reale.
-    """
+    """Campo del record da cui proviene una menzione (stessi valori di `data_loading`)."""
 
     ANAMNESI = "Anamnesi"
     TERAPIA_INGRESSO = "Terapia medica all'ingresso"
@@ -476,38 +342,20 @@ class AllergiaLLM(BaseModel):
     """Allergia o intolleranza individuata dal modello."""
 
     allergene: str = Field(description="La sostanza, copiata alla lettera dal referto.")
-    # Senza questo campo la pipeline attribuiva d'ufficio ogni allergia
-    # all'anamnesi, e quando il modello citava correttamente un altro campo
-    # l'ancoraggio falliva per costruzione: 59 delle 111 allergie non ancorate
-    # della prima corsa erano testo che nel record esisteva, altrove.
+    # Senza il campo, l'ancoraggio delle allergie citate da altri campi falliva.
     campo: CampoReferto = Field(description="Campo del referto da cui viene la citazione.")
     categoria: str = Field(
         description="'principi attivi', 'alimenti', 'altro' o la categoria indicata nel referto."
     )
 
 
-# Tetto al numero di elementi per array. Non e' una preferenza stilistica: e'
-# l'unico rimedio strutturale alla sovra-estrazione. Su un'anamnesi lunga e
-# discorsiva qwen3:4b trasforma quasi ogni proposizione in una "condizione"
-# ("con lenta risoluzione" -> concetto "risoluzione lenta") e l'uscita cresce
-# senza un limite naturale: due record su 200 hanno esaurito trenta minuti di
-# generazione senza mai chiudere l'array.
-#
-# Un'istruzione nel prompt il modello puo' ignorarla; `maxItems` no, perche' lo
-# applica il decodificatore vincolato, che a quel punto e' obbligato a chiudere
-# l'array. Il tetto e' volutamente generoso — la mediana misurata e' 25
-# condizioni per record e il 95esimo percentile sta sotto la meta' del tetto —
-# cosi' i record sani non vengono toccati e solo quelli patologici si fermano.
+# Tetto per array (`maxItems`): il decodificatore vincolato lo applica, il
+# prompt no; senza, il modello locale non chiudeva l'array (docs/04).
 MASSIMI_ELEMENTI = 60
 
 
 class EstrazioneLLM(BaseModel):
-    """Uscita completa di una chiamata di estrazione.
-
-    Vincolando la generazione a questo schema la risposta non puo' essere JSON
-    malformato: la validita' sintattica e' garantita dal decodificatore, non
-    sperata dal prompt.
-    """
+    """Uscita di una chiamata di estrazione; la generazione e' vincolata a questo schema."""
 
     condizioni: list[CondizioneLLM] = Field(
         default_factory=list, max_length=MASSIMI_ELEMENTI
@@ -524,20 +372,10 @@ class EstrazioneLLM(BaseModel):
 
 
 def schema_estrazione_llm() -> dict:
-    """JSON Schema di `EstrazioneLLM` nella forma accettata dall'API Gemini.
-
-    Pydantic genera riferimenti a `$defs` e chiavi (`default`, `title`) che
-    l'API non usa; qui i riferimenti vengono espansi in linea e le chiavi
-    superflue rimosse. Le descrizioni restano: fanno parte delle istruzioni che
-    il modello riceve.
-    """
+    """JSON Schema di `EstrazioneLLM` con `$defs` espansi e chiavi superflue rimosse."""
     grezzo = EstrazioneLLM.model_json_schema()
     definizioni = grezzo.pop("$defs", {})
-    # Pydantic non marca obbligatorio un campo che ha un valore predefinito, ma
-    # qui il predefinito serve al codice Python, non al modello: senza `required`
-    # un modello piccolo soddisfa lo schema restituendo `{"condizioni": []}` e
-    # omettendo il resto -- e' successo davvero con qwen3:4b. Elencarli tutti lo
-    # costringe a pronunciarsi su ciascuno.
+    # Tutti `required`: altrimenti un modello piccolo omette i campi con predefinito.
     grezzo["required"] = list(grezzo["properties"])
 
     def espandi(nodo):

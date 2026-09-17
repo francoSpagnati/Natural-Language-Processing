@@ -1,11 +1,4 @@
-"""
-Test della risoluzione ATC (step 2).
-
-Ogni test usa un indice AIFA in miniatura, costruito nel test stesso con le
-stesse convenzioni di scrittura della fonte reale (maiuscolo, congiunzione "E"
-per le associazioni, forme saline per esteso). Cosi' i test girano senza gli
-82 MB di anagrafica, che non sono versionati.
-"""
+"""Test della risoluzione ATC (step 2)."""
 
 import sys
 import unittest
@@ -108,13 +101,7 @@ class TestCascata(unittest.TestCase):
         self.indici = indice_di_prova()
 
     def test_il_metodo_registrato_riflette_la_strategia_giusta(self):
-        """Regressione sull'ordine delle strategie.
-
-        Con i sali prima dei commerciali, "pantoprazolo sand" risolveva
-        troncando la sigla del produttore: stesso codice, ma provenienza
-        registrata falsa. L'ordine attuale attribuisce il match alla strategia
-        che lo spiega davvero.
-        """
+        """Regressione sull'ordine delle strategie."""
         voce = risolvi("pantoprazolo sand", "nome_commerciale", 10, self.indici)
 
         self.assertEqual(voce.codice_atc, "A02BC02")

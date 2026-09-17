@@ -1,53 +1,11 @@
 """Step 8 - Il filtro di sicurezza simbolico.
 
-CHE COSA DECIDE
-    Dato lo stato di un paziente e un farmaco candidato, dice se quel farmaco
-    puo' essere raccomandato. E' il punto in cui il sistema smette di descrivere
-    e comincia a consigliare, quindi e' il punto in cui un errore fa danno.
-
-PERCHE' E' SIMBOLICO, E PERCHE' NON TOCCA IL DATASET
-    Due vincoli del progetto si incontrano qui.
-
-    **Mai un modello linguistico.** Una regola di sicurezza deve poter essere
-    letta, discussa e contestata da un clinico. Un modello che risponde «questo
-    farmaco e' controindicato» non e' contestabile: non si puo' chiedergli su
-    quale riga di quale linea guida si basa. Ogni regola qui porta la sua fonte
-    nel codice, e la fonte finisce nella spiegazione che il filtro restituisce.
-
-    **Mai il dataset.** Le regole non si imparano dai referti. Se le imparassimo,
-    misureremmo cosa i cardiologi di quel reparto hanno prescritto — non cosa e'
-    sicuro — e il sistema raccomanderebbe di ripetere le abitudini del reparto,
-    inclusi i suoi errori. Il dataset serve a *provare* il filtro, mai a
-    costruirlo.
-
-LE QUATTRO FAMIGLIE DI REGOLE
-    1. **Allergia.** Il paziente e' allergico alla sostanza, o a una sostanza
-       dello stesso sottogruppo chimico. Fonte: il referto stesso piu' la
-       gerarchia ATC.
-    2. **Duplicazione terapeutica.** Due farmaci con lo stesso ATC di 5o livello
-       sono la stessa sostanza due volte; con lo stesso ATC di 4o livello sono lo
-       stesso sottogruppo farmacologico. Fonte: la definizione OMS dell'ATC, dove
-       il livello si legge dalla lunghezza del codice.
-    3. **Controindicazione per condizione.** Il paziente ha una condizione in cui
-       quel farmaco e' controindicato. E' l'unica famiglia che richiede una
-       conoscenza esterna al progetto, ed e' quindi la piu' delicata: vedi
-       `REGOLE_CONTROINDICAZIONE` e la nota sulla sua natura.
-    4. **Provenienza.** Non e' una regola clinica ma epistemica: dice *quanto
-       fidarsi* dell'evidenza su cui le altre tre poggiano.
-
-I TRE ESITI, E PERCHE' NON SONO DUE
-    Un filtro che risponde solo «si» o «no» nasconde che i suoi due errori sono
-    entrambi dannosi e non simmetrici:
-
-    * un **falso blocco** nega al paziente una terapia che potrebbe assumere;
-    * un **falso permesso** lascia passare una controindicazione.
-
-    «Nel dubbio blocca» tratta il secondo come grave e il primo come gratuito, e
-    non e' vero: negare un anticoagulante a chi ha la fibrillazione atriale fa
-    danno quanto darlo a chi sanguina. Gli esiti sono quindi tre —
-    `AMMESSO`, `DA_VERIFICARE`, `VIETATO` — e il secondo esiste perche' ci sono
-    casi in cui la risposta onesta e' «guarda tu», con il motivo e l'evidenza
-    allegati.
+Dato lo stato di un paziente e un farmaco candidato, risponde AMMESSO,
+DA_VERIFICARE o VIETATO con il motivo e la fonte. Mai un modello linguistico,
+mai regole imparate dal dataset (che serve solo a provarlo). Quattro famiglie
+di regole: allergia, duplicazione terapeutica, controindicazione per
+condizione (da kb/conoscenza.ttl), provenienza. Perche' tre esiti e non due,
+e il principio del fatto mancante: docs/08_filtro_sicurezza.md.
 """
 
 from __future__ import annotations
@@ -65,12 +23,7 @@ RADICE = Path(__file__).resolve().parent.parent
 
 @dataclass(frozen=True)
 class Regola:
-    """Una regola di sicurezza, con la fonte che la sostiene.
-
-    `fonte` non e' documentazione: viaggia nella spiegazione restituita al
-    chiamante, cosi' che chi legge un blocco possa risalire a chi lo prescrive
-    senza aprire il codice.
-    """
+    """Una regola di sicurezza; `fonte` viaggia nella spiegazione restituita."""
 
     codice: str
     descrizione: str
@@ -100,9 +53,7 @@ class Verdetto:
             self.esito = esito
 
 
-# ---------------------------------------------------------------------------
-# Le regole
-# ---------------------------------------------------------------------------
+# --- Le regole ---
 
 FONTE_ATC = ("Struttura della classificazione ATC dell'OMS, come pubblicata da "
              "AIFA nel registro atc.csv (CC-BY 4.0). Il livello di un codice si "
@@ -140,50 +91,19 @@ R_PROVENIENZA_DEBOLE = Regola(
 )
 
 
-# --- La famiglia che richiede conoscenza esterna ---------------------------
-#
-# ATTENZIONE, E VA LETTO PRIMA DI USARE QUESTA TABELLA.
-#
-# Queste sono controindicazioni **ampiamente riconosciute** in cardiologia, e
-# ciascuna porta la fonte puntuale. Non sono pero' una base di conoscenza
-# clinica completa: sono dodici regole scelte per essere rappresentative dei
-# meccanismi che un filtro deve saper esprimere (classe di farmaco contro
-# categoria di condizione), non l'insieme delle controindicazioni esistenti.
-#
-# Il vincolo del progetto dice che una voce non coperta da una fonte esterna va
-# **segnalata come mappatura manuale con la fonte puntuale usata**, invece di
-# essere riempita in silenzio. E' esattamente cio' che questa tabella e': una
-# mappatura manuale dichiarata, non un estratto automatico di una KB.
-#
-# Un sistema reale sostituirebbe questa tabella con una base di conoscenza
-# completa e mantenuta. La struttura del filtro non cambierebbe: cambierebbe
-# solo il contenuto di questa costante, ed e' il motivo per cui e' isolata qui.
 
 
-# LE CONTROINDICAZIONI
-#
-# Stanno nel grafo di conoscenza `kb/conoscenza.ttl` (scritto da `kb_build.py`,
-# letto da `conoscenza.py`), dodici regole con la fonte puntuale — RCP AIFA/EMA
-# sezione 4.3 o linee guida ESC. Sono una mappatura manuale dichiarata, non
-# una base di conoscenza completa: il filtro non cambierebbe sostituendola.
-# Il principio del fatto mancante e' descritto in `conoscenza.py`.
+# Le controindicazioni stanno in kb/conoscenza.ttl (12 regole con fonte):
+# una mappatura manuale dichiarata, non una base di conoscenza completa.
 
 
 
 
-# ---------------------------------------------------------------------------
-# Lo stato del paziente, ridotto a cio' che il filtro guarda
-# ---------------------------------------------------------------------------
+# --- Lo stato del paziente, ridotto a cio' che il filtro guarda ---
 
 @dataclass
 class StatoPerFiltro:
-    """Cio' che il filtro legge di un paziente, gia' ripulito.
-
-    E' costruito dallo stato prodotto dalle pipeline, e la costruzione applica
-    l'unica regola che il grafo rende possibile e che un sistema ingenuo
-    sbaglierebbe: **solo le condizioni affermate e del paziente** contano come
-    controindicazioni.
-    """
+    """Cio' che il filtro legge di un paziente: solo condizioni affermate e del paziente."""
 
     enc_oid: int
     condizioni: list[dict]   # {codice, testo, agenti}
@@ -200,13 +120,7 @@ def _prefisso(codice: str, quanti: int) -> str:
 
 
 def stato_da_file(percorsi: dict[str, Path], enc_oid: int) -> StatoPerFiltro:
-    """Costruisce lo stato leggendo le uscite delle pipeline.
-
-    `percorsi` mappa la sigla della pipeline alla sua cartella. Le condizioni di
-    pipeline diverse che portano lo stesso codice ICD sono **lo stesso fatto**,
-    e il numero di pipeline che lo sostengono viene conservato: e' l'evidenza su
-    cui poggia la regola di provenienza.
-    """
+    """Lo stato dalle uscite delle pipeline (`percorsi`: sigla -> cartella), contando quante sostengono ogni codice."""
     per_codice: dict[str, dict] = {}
     allergie: set[str] = set()
     terapia: set[str] = set()
@@ -218,10 +132,7 @@ def stato_da_file(percorsi: dict[str, Path], enc_oid: int) -> StatoPerFiltro:
         stato = json.loads(percorso.read_text(encoding="utf-8"))
 
         for c in stato["condizioni"]:
-            # LA riga che il grafo ha reso ovvia: una condizione negata non e'
-            # una controindicazione, e quella di un familiare non e' nemmeno del
-            # paziente. Senza questo filtro il sistema negherebbe un betabloccante
-            # a chi ha il padre asmatico.
+            # Una condizione negata o di un familiare non e' una controindicazione.
             if c["stato"] != "affermato" or c.get("soggetto", "paziente") != "paziente":
                 continue
             if not c.get("codice"):
@@ -242,19 +153,12 @@ def stato_da_file(percorsi: dict[str, Path], enc_oid: int) -> StatoPerFiltro:
     return StatoPerFiltro(enc_oid, condizioni, allergie, terapia)
 
 
-# ---------------------------------------------------------------------------
-# Il filtro
-# ---------------------------------------------------------------------------
+# --- Il filtro ---
 
 def valuta(stato: StatoPerFiltro, atc: str,
            regole: tuple[Controindicazione, ...] = REGOLE_CONTROINDICAZIONE,
            esclusa_dalla_terapia: str | None = None) -> Verdetto:
-    """Il verdetto per un farmaco candidato.
-
-    `esclusa_dalla_terapia` serve a valutare un farmaco che il paziente gia'
-    assume senza che risulti duplicato di se stesso: e' il modo in cui si prova
-    il filtro sulla terapia reale (vedi `main`).
-    """
+    """Il verdetto per un farmaco candidato; `esclusa_dalla_terapia` evita che un farmaco gia' assunto risulti duplicato di se stesso."""
     verdetto = Verdetto(atc, Esito.AMMESSO)
 
     # --- 1. allergia ---------------------------------------------------
@@ -294,15 +198,9 @@ def valuta(stato: StatoPerFiltro, atc: str,
             continue
 
         for c in colpite:
-            # --- 4. la provenienza e i fatti mancanti modulano l'esito ---
-            # Due ragioni indipendenti per non emettere un divieto:
-            #
-            # (a) il fatto che lo revocherebbe non e' estraibile — e' il
-            #     PRINCIPIO_DEL_FATTO_MANCANTE, misurato: 12 blocchi su 14 erano
-            #     pazienti con un pacemaker;
-            # (b) la condizione e' vista dalla sola pipeline con la precisione
-            #     piu' bassa. Un falso blocco fa danno quanto un falso permesso,
-            #     quindi si declassa invece di insistere.
+            # 4. Si declassa a DA_VERIFICARE se il fatto che revocherebbe il
+            # divieto non e' estraibile (PRINCIPIO_DEL_FATTO_MANCANTE) o se la
+            # condizione e' vista dalla sola pipeline meno precisa.
             solo_gazetteer = c["agenti"] == ["A"]
             declassa = regola.fatto_non_estratto is not None or solo_gazetteer
             esito = (Esito.DA_VERIFICARE
@@ -326,14 +224,7 @@ def valuta(stato: StatoPerFiltro, atc: str,
 
 
 def main() -> None:
-    """Prova il filtro sulla terapia che i cardiologi hanno davvero prescritto.
-
-    E' la verifica piu' severa disponibile senza dati nuovi: la terapia alla
-    dimissione e' cio' che un medico ha deciso per quel paziente. Un filtro che
-    ne vieta una quota consistente **non ha trovato errori dei cardiologi**: ha
-    un difetto proprio, e il confronto lo rende visibile senza bisogno di
-    annotare nulla.
-    """
+    """Prova il filtro sulla terapia reale di dimissione: se vieta molto, il difetto e' suo."""
     import argparse
     from collections import Counter
 

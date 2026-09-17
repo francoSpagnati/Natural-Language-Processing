@@ -1,32 +1,12 @@
-"""Step 10 - L'host MCP locale: il secondo client, quello che non paga e non esce.
+"""Step 10 - L'host MCP locale: modello locale (ollama), server locale, dati locali.
 
-Claude Code e' il client comodo, ma e' remoto: il risultato di uno strumento
-viene mandato a un modello che gira altrove. Questo secondo client chiude il
-cerchio — **modello locale, server locale, dati locali** — e serve a tre cose
-che il primo non puo' dare.
-
-1. **Dimostra che il server non e' legato a un fornitore.** Il protocollo MCP e'
-   uno standard: se gli strumenti funzionano con `qwen3.5:4b` su una macchina
-   senza GPU, funzionano con qualunque host conforme.
-2. **Rende misurabile il costo dell'orchestrazione.** Un giro di chiamata a
-   strumento con il modello locale si cronometra qui, senza spendere.
-3. **E' l'unica configurazione in cui un referto potrebbe entrare senza uscire
-   dalla macchina.** Non la usiamo — il server non espone il corpus, per la
-   ragione scritta in `mcp_server.py` — ma e' la strada aperta se un domani
-   servisse.
-
-## Perche' il ciclo e' scritto a mano
-
-Sono sessanta righe invece di un framework, e valgono la stessa scelta gia'
-fatta allo step 5 per il ciclo di addestramento: ogni passaggio resta visibile.
-Qui in particolare si vede **quante volte il modello chiama uno strumento**,
-**con quali argomenti**, e **quanto ci mette**, che sono le tre cose che un
-lettore vuole poter contestare.
-
-## Uso
+Il secondo client: mostra che il server non dipende da un fornitore e rende
+misurabile il costo dell'orchestrazione. Il ciclo e' scritto a mano perche' si
+vedano quante volte il modello chiama uno strumento, con quali argomenti e in
+quanto tempo. Vedi docs/10_tool_mcp.md.
 
     python3 src/mcp_client_locale.py "Paziente con scompenso cardiaco. Che terapia?"
-    python3 src/mcp_client_locale.py --strumenti          # elenca e basta
+    python3 src/mcp_client_locale.py --strumenti
 """
 
 from __future__ import annotations
@@ -64,24 +44,12 @@ def _normalizza(testo: str) -> str:
 
 
 def testo_fedele(passato: str, originale: str) -> bool:
-    """Il testo passato allo strumento e' un pezzo di quello dell'utente?
-
-    E' il controllo a valle contro la parafrasi. Non puo' impedirla — il modello
-    scrive quello che vuole — ma la rende **visibile**: misurato, una parafrasi
-    ha trasformato «iperteso» in «Ipotensione», e senza questo controllo nessuno
-    se ne sarebbe accorto. Il confronto e' su testo normalizzato, cosi' una
-    maiuscola o una virgola in piu' non contano come riscrittura.
-    """
+    """Il testo passato allo strumento e' un pezzo di quello dell'utente? Rende visibile la parafrasi («iperteso» -> «Ipotensione»)."""
     return _normalizza(passato) in _normalizza(originale)
 
 
 def _compatta(argomenti: dict, larghezza: int = 38) -> str:
-    """Gli argomenti veri, accorciati: e' cio' che si vuole poter contestare.
-
-    Stampare solo i nomi dei parametri nasconde proprio l'errore piu' comune di
-    un modello piccolo — chiamare lo strumento giusto con l'argomento sbagliato,
-    o lo stesso due volte.
-    """
+    """Gli argomenti veri della chiamata, accorciati."""
     parti = []
     for chiave, valore in argomenti.items():
         testo = str(valore).replace("\n", " ")
@@ -92,12 +60,7 @@ def _compatta(argomenti: dict, larghezza: int = 38) -> str:
 
 
 def _schema_per_ollama(strumenti) -> list[dict]:
-    """Traduce l'elenco MCP nel formato che `ollama.chat` si aspetta.
-
-    Sono due dialetti della stessa idea (nome, descrizione, JSON Schema degli
-    argomenti); la traduzione e' tutta qui, in un punto solo, cosi' se uno dei
-    due cambia si vede subito dove.
-    """
+    """L'elenco degli strumenti MCP nel formato di `ollama.chat`."""
     return [{
         "type": "function",
         "function": {
@@ -166,14 +129,8 @@ async def conversa(domanda: str, modello: str = MODELLO,
                         print(f"          -> {nome}("
                               f"{_compatta(argomenti)})")
 
-                    # Un modello piccolo puo' rifare la stessa chiamata giro
-                    # dopo giro senza accorgersene: e' successo sul serio, su
-                    # una domanda scritta in forma telegrafica. Ripetere la
-                    # stessa risposta lo lascerebbe nel ciclo fino ai giri
-                    # massimi; dirglielo e' l'unica informazione nuova che si
-                    # puo' dare, e costa una riga.
-                    # Controllo a valle: se lo strumento riceve un'anamnesi, deve
-                    # essere un pezzo del testo dell'utente, non una riscrittura.
+                    # Chiamata ripetuta: lo si dice al modello, o resta nel ciclo.
+                    # Se lo strumento riceve un'anamnesi, deve essere un pezzo del testo dell'utente.
                     fedele = None
                     if "anamnesi" in argomenti and isinstance(argomenti["anamnesi"], str):
                         fedele = testo_fedele(argomenti["anamnesi"], domanda)
@@ -201,9 +158,7 @@ async def conversa(domanda: str, modello: str = MODELLO,
                         testo = "\n".join(c.text for c in esito.content
                                           if getattr(c, "text", None))
                     except Exception as errore:      # noqa: BLE001
-                        # Un errore torna al modello come contenuto, non come
-                        # eccezione: e' l'unica forma in cui puo' correggersi,
-                        # ed e' cio' che il protocollo si aspetta.
+                        # L'errore torna al modello come contenuto, perche' possa correggersi.
                         testo = f"errore dallo strumento: {errore}"
                     if fedele is False:
                         # Al modello si dice che ha riscritto: e' l'unica

@@ -1,42 +1,10 @@
 """Step 5 - Addestramento del riconoscitore di entita' (pipeline C).
 
-MODELLO DI BASE: bioBIT
-    `IVN-RIN/bioBIT` e' un BERT italiano adattato al dominio biomedico:
-    parte da `dbmdz/bert-base-italian-xxl-cased` e prosegue il pre-addestramento
-    su un corpus biomedico italiano ottenuto traducendo abstract di PubMed.
-    Fonte: Buonocore et al., *Localizing in-domain adaptation of
-    transformer-based biomedical language models*, Journal of Biomedical
-    Informatics, 2023 (https://doi.org/10.1016/j.jbi.2023.104431);
-    modello su https://huggingface.co/IVN-RIN/bioBIT.
-
-    La scelta e' motivata: il lessico dei referti (patologie, principi attivi,
-    abbreviazioni cliniche) e' quello su cui bioBIT ha continuato ad
-    addestrarsi, mentre un modello generalista lo vede come vocabolario raro e
-    lo frammenta in molti sottotoken. Il modello di base e' comunque un
-    parametro (`--modello-base`), cosi' che il confronto con la variante
-    generalista sia una prova da eseguire e non un'opinione.
-
-PERCHE' UN CICLO DI ADDESTRAMENTO ESPLICITO
-    Si poteva usare `Trainer` di `transformers`. Un ciclo scritto a mano costa
-    quaranta righe e in cambio rende visibile ogni cosa che conta in una tesi:
-    quali token contribuiscono alla perdita, come sono allineate le etichette,
-    quando viene salvato il modello migliore. Evita inoltre di dipendere dalle
-    convenzioni di una classe che cambia fra versioni della libreria.
-
-ALLINEAMENTO DELLE ETICHETTE
-    Le annotazioni sono intervalli di **caratteri**, il modello ragiona in
-    **sottotoken**. L'allineamento usa la mappa di offset del tokenizzatore
-    veloce invece di riallineare per parole: e' esatto anche quando il
-    tokenizzatore spezza "ipertensione" in "iperten" + "##sione", e non dipende
-    da una nozione di "parola" che dovrebbe restare in accordo con quella di
-    spaCy usata altrove.
-
-LA VALUTAZIONE E' PER ENTITA', NON PER TOKEN
-    L'accuratezza per token e' ingannevole: la stragrande maggioranza dei token
-    e' fuori da ogni entita', quindi un modello che non trovasse nulla
-    supererebbe comunque il 90%. Qui una predizione conta come corretta solo se
-    coincidono **inizio, fine ed etichetta**, che e' il criterio con cui la
-    pipeline usera' davvero le menzioni.
+Modello di base `IVN-RIN/bioBIT` (BERT italiano biomedico, Buonocore et al.
+2023, doi:10.1016/j.jbi.2023.104431), parametrico con `--modello-base`. Ciclo
+di addestramento esplicito; etichette allineate ai sottotoken con la mappa di
+offset; valutazione per entita' (inizio, fine ed etichetta), non per token.
+Vedi docs/05_pipeline_estrazione_C.md.
 """
 
 from __future__ import annotations
@@ -85,12 +53,7 @@ def carica_partizione(nome: str, cartella: Path = CARTELLA_SILVER) -> list[dict]
 
 
 def allinea(offsets, entita: list[dict]) -> list[int]:
-    """Etichette BIO per ogni sottotoken, dagli intervalli di caratteri.
-
-    Un sottotoken riceve `B-` se e' il primo che si sovrappone all'entita',
-    `I-` se si sovrappone ma non e' il primo, `O` altrimenti. I sottotoken
-    speciali, che hanno offset (0, 0), sono esclusi dalla perdita.
-    """
+    """Etichette BIO per sottotoken dagli intervalli di caratteri; i sottotoken speciali (0, 0) sono esclusi dalla perdita."""
     etichette = []
     for inizio_tok, fine_tok in offsets:
         if inizio_tok == fine_tok:  # token speciale

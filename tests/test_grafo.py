@@ -1,10 +1,4 @@
-"""Test del knowledge graph (step 7).
-
-Il grafo non calcola numeri: costruisce la struttura su cui lo step 8 deciderà
-che cosa è sicuro prescrivere. Un errore qui non produce una cifra sbagliata,
-produce una decisione clinica sbagliata che sembra giustificata. Questi test
-fissano le proprietà da cui quelle decisioni dipendono.
-"""
+"""Test del knowledge graph (step 7)."""
 
 import sys
 import unittest
@@ -86,14 +80,7 @@ class TestAsserzioniEProvenienza(unittest.TestCase):
 
 
 class TestAgenteDelParser(unittest.TestCase):
-    """I campi di terapia hanno UNA lettura, non tre.
-
-    Le tre pipeline leggono i due campi strutturati con lo stesso parser
-    deterministico. Se il grafo le attribuisse a tre agenti diversi,
-    `ct:numeroPipeline` direbbe 3 dove c'e' una sola lettura ripetuta, e il
-    filtro dello step 8 scambierebbe quella ridondanza per una conferma
-    indipendente — cioe' si fiderebbe di piu' proprio dove non ha imparato nulla.
-    """
+    """I campi di terapia hanno UNA lettura, non tre."""
 
     def _costruisci(self, menzioni):
         g = Graph()

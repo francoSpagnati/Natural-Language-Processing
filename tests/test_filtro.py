@@ -1,10 +1,4 @@
-"""Test del filtro di sicurezza simbolico (step 8).
-
-E' il punto in cui il sistema smette di descrivere e comincia a raccomandare.
-Un errore qui non produce una cifra sbagliata in un rapporto: produce una
-terapia negata o una controindicazione lasciata passare. Questi test fissano le
-proprieta' da cui quelle decisioni dipendono.
-"""
+"""Test del filtro di sicurezza simbolico (step 8)."""
 
 import sys
 import unittest
@@ -112,12 +106,7 @@ class TestGliAssiDelloSchemaProteggonoIlPaziente(unittest.TestCase):
 
 
 class TestIlPrincipioDelFattoMancante(unittest.TestCase):
-    """Una regola che ha bisogno di un fatto non estraibile non puo' vietare.
-
-    Misurato: la regola «betabloccante in blocco atrioventricolare» aveva 14
-    blocchi su prescrizioni reali e in 12 il referto nominava un pacemaker. Un
-    divieto con l'86% di falsi blocchi nega terapie invece di proteggere.
-    """
+    """Una regola che ha bisogno di un fatto non estraibile non puo' vietare."""
 
     def test_una_regola_con_fatto_mancante_segnala_ma_non_vieta(self):
         regola = (Controindicazione(

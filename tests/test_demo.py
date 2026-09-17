@@ -1,18 +1,4 @@
-"""Test della demo end-to-end e dei due difetti che ha fatto emergere.
-
-La demo non e' una comodita' di presentazione: e' il primo punto del progetto in
-cui qualcuno **usa** il contratto dati invece di misurarlo, ed e' per questo che
-ha trovato due lacune che nessuna metrica aveva mostrato.
-
-1. `Non riferisce X` veniva registrato come **affermato**, perche' `riferisce`
-   e' un terminatore di ambito e chiudeva la negazione aperta da `non`.
-2. La pipeline A estraeva le allergie ma **non le codificava mai in ATC**,
-   quindi il filtro di sicurezza — che confronta codici, non nomi — era cieco
-   su tutto cio' che quella pipeline produceva.
-
-Questi test fissano entrambe le correzioni, piu' le proprieta' della demo che
-un errore renderebbe una bugia davanti a chi guarda.
-"""
+"""Test della demo end-to-end e dei due difetti che ha fatto emergere."""
 
 import sys
 import unittest
@@ -54,12 +40,7 @@ class TestAllergieCodificate(unittest.TestCase):
         self.assertIsNone(alle[0].codice_atc)
 
     def test_gli_alimenti_non_vengono_codificati(self):
-        """Un'allergia alimentare va conservata ma non vincola un farmaco.
-
-        E' la distinzione che il campo `categoria` esiste per esprimere, e
-        codificare un alimento come se fosse un principio attivo produrrebbe
-        blocchi senza senso.
-        """
+        """Un'allergia alimentare va conservata ma non vincola un farmaco."""
         alle, _ = allergie_dal_referto(
             self.record("Allergie e intolleranze: Alimenti (crostacei)"),
             RisolutoreATC())

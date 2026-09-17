@@ -1,34 +1,9 @@
-"""
-Step 3 - Pipeline A: estrazione deterministica dello stato paziente.
+"""Step 3 - Pipeline A: estrazione deterministica dello stato paziente.
 
-E' la baseline del progetto: nessuna libertà interpretativa, ogni entità
-riconducibile alla regola che l'ha prodotta. Serve a tre cose insieme:
-
-1. essere il riferimento contro cui misurare le pipeline B (LLM) e C (NER+EL);
-2. produrre le **etichette silver** con cui addestrare il modello NER dello
-   step 5, senza annotazione manuale;
-3. essere l'estrattore predefinito del sistema, perché è l'unico i cui errori
-   si possono spiegare uno per uno.
-
-DA DOVE VIENE OGNI PARTE DELLO STATO PAZIENTE
-
-| Parte | Fonte | Metodo |
-|---|---|---|
-| farmaci in ingresso | campo semi-strutturato | parsing a livelli |
-| farmaci alla dimissione | campo semi-strutturato | parsing a livelli |
-| condizioni | prosa dell'anamnesi | gazetteer + ConText |
-| farmaci citati in prosa | prosa dell'anamnesi | gazetteer + ConText |
-| allergie | sottosezione dell'anamnesi | regex dedicata |
-
-SULLE SONDE DELLO STEP 0
-    Nel documento dello step 0 avevo scritto che le sonde esplorative sarebbero
-    state sostituite da parser definitivi qui. Le riuso invece così come sono, e
-    la ragione è che si sono rivelate migliori dell'attesa: interpretano il 99%
-    delle voci di dimissione e il 98% di quelle di ingresso, sono organizzate a
-    livelli con la provenienza di ogni match, e sono coperte da 29 test.
-    Riscriverle avrebbe prodotto codice equivalente con meno collaudo. Restano
-    in `explore_dataset.py` — il nome non è più esatto, ma spostarle avrebbe
-    rotto i riferimenti nella documentazione degli step precedenti.
+La linea di base tracciabile: farmaci dai campi di terapia con i parser a
+livelli dello step 0 (riusati perche' misurati al 98-99%), condizioni e
+farmaci in prosa con gazetteer + ConText, allergie con una regex dedicata.
+Produce anche le etichette silver dello step 5. Vedi docs/03_pipeline_estrazione_A.md.
 """
 
 from __future__ import annotations
@@ -74,13 +49,7 @@ CAMPO_DIMISSIONE = "Terapia alla Dimissione"
 
 
 def stato_da_attributi(attributi: dict) -> StatoConoscenza:
-    """Traduce gli attributi ConText nello stato di conoscenza dello schema.
-
-    La negazione prevale sull'incertezza: "non si esclude" a parte, quando un
-    referto nega qualcosa lo fa in modo assertivo. La storicità non compare
-    qui perché non cambia la polarità — resta `affermato` e viaggia nella
-    regola registrata in `Provenienza`, così l'informazione non si perde.
-    """
+    """Attributi ConText -> stato di conoscenza; la negazione prevale, la storicita' resta nella regola."""
     if Attributo.NEGAZIONE in attributi:
         return StatoConoscenza.NEGATO
     if Attributo.INCERTEZZA in attributi:
@@ -89,11 +58,7 @@ def stato_da_attributi(attributi: dict) -> StatoConoscenza:
 
 
 def regola_provenienza(attributi: dict, base: str) -> str:
-    """Descrive in una stringa la regola che ha prodotto l'entità.
-
-    È il requisito di tracciabilità del brief: per ogni entità si deve poter
-    dire *quale* regola l'ha generata, non solo che è stata generata.
-    """
+    """La regola che ha prodotto l'entita', in una stringa."""
     if not attributi:
         return base
     dettagli = ", ".join(
@@ -194,11 +159,7 @@ def _entita_dalla_prosa(
         )
 
         if menzione.etichetta == ETICHETTA_CONDIZIONE:
-            # La codifica passa dallo stesso collegatore usato dalla pipeline C.
-            # Prendere qui i codici direttamente dal gazetteer sarebbe piu'
-            # semplice ma renderebbe le due pipeline diverse anche nella
-            # normalizzazione, e il confronto dello step 6 misurerebbe la somma
-            # di due differenze invece del solo riconoscimento delle menzioni.
+            # Stesso collegatore della pipeline C: normalizzazione identica.
             esito = collegatore.collega(menzione.testo)
             codice, stato_norm = esito.codice, esito.stato
             condizioni.append(
@@ -233,23 +194,10 @@ def _entita_dalla_prosa(
 def allergie_dal_referto(
     record: RecordPaziente, risolutore: RisolutoreATC | None = None
 ) -> tuple[list[AllergiaEstratta], StatoConoscenza]:
-    """Estrae le allergie e lo *stato* della sezione, che sono cose diverse.
+    """Le allergie e lo stato della sezione (assente / verificata vuota / presente).
 
-    Una lista vuota può voler dire "il clinico ha verificato che non ce ne sono"
-    oppure "il referto non ne parla": senza distinguerle il filtro di sicurezza
-    non saprebbe quanto fidarsi.
-
-    `risolutore` codifica in ATC gli allergeni della categoria «principi
-    attivi». Senza di esso la pipeline estraeva l'allergene come stringa e non
-    lo codificava mai, e **lo strato di sicurezza era cieco**: il filtro dello
-    step 8 confronta codici ATC, non nomi, quindi un'allergia non codificata
-    non poteva bloccare niente. Il difetto è emerso costruendo la demo — cioè
-    provando a usare il dato invece che a misurarlo, che nel progetto è il modo
-    in cui i difetti del contratto dati si fanno vedere.
-
-    Solo i principi attivi vengono codificati: un'allergia a un alimento o a un
-    polline va conservata ma non vincola la scelta di un farmaco, ed è la
-    distinzione che il campo `categoria` esiste per esprimere.
+    `risolutore` codifica in ATC i soli principi attivi: senza codice il filtro
+    dello step 8, che confronta codici, non potrebbe bloccare nulla.
     """
     testo = record.testo_anamnesi or ""
     esito = sonda_allergie(testo)
@@ -328,22 +276,14 @@ def estrai(
     )
 
 
-# ---------------------------------------------------------------------------
-# Esecuzione su tutto il dataset
-# ---------------------------------------------------------------------------
+# --- Esecuzione su tutto il dataset ---
 
 PERCORSO_DATASET = RADICE / "data" / "raw" / "anamnesiterapie.txt"
 CARTELLA_USCITA = RADICE / "data" / "processed" / "pipeline_a"
 
 
 def main() -> None:
-    """Applica la pipeline A a tutti i record e salva uno stato per ciascuno.
-
-    Un file per record invece di un unico JSON: gli stati vanno letti e
-    confrontati singolarmente negli step successivi (il confronto fra pipeline,
-    il motore, la valutazione), e un file da centinaia di MB andrebbe caricato
-    per intero ogni volta.
-    """
+    """Applica la pipeline A a tutti i record, un file JSON per ricovero."""
     import time
     from collections import Counter
 

@@ -1,24 +1,10 @@
-"""
-Step 0 - Esplorazione del dataset di anamnesi cardiologiche.
+"""Step 0 - Esplorazione del dataset.
 
-Obiettivo: verificare *empiricamente* la struttura reale dei dati prima di
-scrivere qualunque pipeline definitiva, e produrre i materiali grezzi che
-serviranno allo step 1 (schema dello stato paziente e vocabolari chiusi).
+Sonde (non parser definitivi) per misurare quanto i campi siano regolari e
+produrre i vocabolari grezzi in `data/interim/`. I parser di produzione sono
+nello step 3. Risultati e decisioni: docs/00_esplorazione_dati.md.
 
-Lo script e' volutamente *esplorativo*: le regex qui dentro sono sonde per
-misurare quanto i campi siano regolari, non i parser definitivi. I parser di
-produzione nasceranno nello step 3 (pipeline deterministica A), quando avremo
-deciso lo schema. Tenere separate sonda e parser evita di cristallizzare
-assunzioni sbagliate in codice riusato ovunque.
-
-Esecuzione:
     python3 src/explore_dataset.py
-
-Output prodotti (tutti in `reports/` e `data/interim/`, non versionati come
-codice ma rigenerabili in modo deterministico):
-    reports/00_esplorazione.txt              report leggibile a schermo
-    data/interim/vocab_grezzo_farmaci_*.csv  valori distinti dei campi terapia
-    data/interim/eco_questionario_condizioni.csv condizioni riconoscibili a regola
 """
 
 from __future__ import annotations
@@ -42,28 +28,17 @@ CARTELLA_REPORT = RADICE / "reports"
 CARTELLA_INTERIM = RADICE / "data" / "interim"
 
 
-# ---------------------------------------------------------------------------
-# Sonde di parsing (esplorative, non definitive)
-# ---------------------------------------------------------------------------
+# --- Sonde di parsing (esplorative, non definitive) ---
 
 # --- Pattern e guardie condivisi dalle due sonde ----------------------------
 
-# Voci che non descrivono un farmaco ma un gas medicale o un dispositivo
-# (ossigenoterapia, ventilazione non invasiva). Vanno riconosciute ed escluse
-# esplicitamente: finirebbero altrimenti nel vocabolario dei farmaci come
-# entita' spurie, e non hanno un codice ATC.
-#
-# `cicli` e' ancorato a inizio stringa e delimitato da \b: cosi' intercetta
-# "Cicli di NIV con auto C-PAP" e "Cicli notturni di CPAP" senza toccare
-# principi attivi che contengono la stessa sequenza di lettere, come
-# "Doxiciclina".
+# Gas medicali e dispositivi (ossigenoterapia, NIV): non hanno ATC, si escludono.
+# `cicli` ancorato a inizio stringa per non toccare "Doxiciclina".
 PATTERN_NON_FARMACOLOGICO = re.compile(
     r"^\s*(ossigeno|cicli|cpap|c-pap|niv|ventilazione|maschera)\b", re.IGNORECASE
 )
 
-# Segnaposto che il sistema ospedaliero usa quando il principio attivo non e'
-# valorizzato. Non e' un farmaco: comparendo 22 volte alla dimissione,
-# entrerebbe nel vocabolario chiuso come se fosse una sostanza reale.
+# Segnaposto del sistema ospedaliero per principio attivo non valorizzato.
 PATTERN_PRINCIPIO_SEGNAPOSTO = re.compile(
     r"^\s*(nessun\s+principio\s+attivo|n\.?d\.?|non\s+specificat\w*|-+)\s*$",
     re.IGNORECASE,
@@ -76,11 +51,7 @@ PATTERN_NESSUNA_TERAPIA = re.compile(
 )
 
 
-# Unita' di misura, forme farmaceutiche e riferimenti orari: se compaiono nel
-# candidato non siamo davanti a un nome di farmaco ma a un nome con la posologia
-# incollata. Serve in particolare al livello 3 della sonda di dimissione, dove
-# i due punti dell'orario ("...alle ore 08:00") verrebbero altrimenti scambiati
-# per il separatore fra principio attivo e posologia.
+# Unita', forme e orari nel candidato = posologia incollata al nome.
 PATTERN_POSOLOGIA_NEL_NOME = re.compile(
     r"\b(mg|mcg|gr?|ml|ui|u|cp|cpr|cps|cpz|gtt|fl|bust|puff|ore|die|al|alle)\b",
     re.IGNORECASE,
@@ -88,27 +59,10 @@ PATTERN_POSOLOGIA_NEL_NOME = re.compile(
 
 
 def nome_farmaco_plausibile(candidato: str, massimo_parole: int = 4) -> bool:
-    """Guardia: il candidato somiglia a un nome di farmaco e non a prosa?
+    """Guardia sui livelli laschi: il candidato somiglia a un nome di farmaco e non a prosa?
 
-    Serve sui livelli di match piu' laschi. Senza guardia, una voce scritta in
-    prosa dal clinico verrebbe accettata come nome di farmaco e inquinerebbe il
-    vocabolario chiuso, che e' il fondamento di tutti gli step successivi.
-
-    I criteri sono empirici, ricavati ispezionando i candidati reali:
-    - deve iniziare con una lettera (esclude "125 mg di Furosemide...");
-    - non deve contenere virgole (nel dataset compaiono solo in voci descrittive);
-    - non deve superare `massimo_parole` parole;
-    - non deve contenere unita' di misura, forme farmaceutiche o riferimenti
-      orari, segno che la posologia e' rimasta attaccata al nome;
-    - non deve essere un segnaposto del sistema ospedaliero ("Nessun principio
-      attivo", "N.D."), che non denota alcuna sostanza.
-    Cifre e punti sono invece ammessi, perche' compaiono in nomi legittimi
-    ("Natecal d3", "Creon 10000ui", "Furosemide l.f.m.").
-
-    `massimo_parole` e' parametrico perche' i due campi hanno esigenze diverse:
-    in ingresso i nomi sono commerciali e brevi, alla dimissione compaiono
-    associazioni precostituite con molti principi ("Tiamina nitrato/riboflavina/
-    nicotinamide/...") che sono un nome unico anche se lunghe.
+    Inizia con una lettera, niente virgole, al piu' `massimo_parole` parole,
+    nessuna unita' / forma / orario incollati, non un segnaposto ("N.D.").
     """
     candidato = candidato.strip()
     if not candidato or not candidato[0].isalpha():
@@ -122,25 +76,14 @@ def nome_farmaco_plausibile(candidato: str, massimo_parole: int = 4) -> bool:
     return len(candidato.split()) <= massimo_parole
 
 
-# --- Terapia all'ingresso ---------------------------------------------------
+# --- Terapia all'ingresso ---
 # Formato prevalente: "Nome commerciale: 5 mg cp.riv. /die (ore 8) ; Altro: ... ;"
-# Le voci sono separate da ';' e il nome del farmaco e' tutto cio' che precede
-# i primi due punti. Usiamo `split(":", 1)` invece di una regex complessa
-# perche' il nome puo' contenere spazi e abbreviazioni del produttore
-# ("Olmesartan medox al") ma non contiene mai ':'.
 SEPARATORE_VOCI_INGRESSO = ";"
 
-# Livello 3 dell'ingresso: il nome e' cio' che precede la prima cifra. Serve
-# dove manca il ':' fra nome e posologia, o dove l'unico ':' della voce e'
-# quello di un orario. La parentesi e' ammessa nel nome, perche' all'ingresso
-# contiene il principio attivo e non la confezione ("NANCARE (Vitamina D)").
+# Livello 3: il nome e' cio' che precede la prima cifra (manca il ':' o e' di un orario).
 PATTERN_ING_NOME_E_DOSE = re.compile(r"^\s*(?P<principio>[^\d:]+?)\s*(?=\d)")
 
-# Secondo formato osservato: prescrizione infusionale, dove il nome del farmaco
-# non e' in testa ma segue la dose:
-#   "125 mg di Furosemide salf*5fl 250mg/25ml in 100 ml Fisiologica"
-# Va riconosciuto a parte, altrimenti la voce finisce fra gli scarti pur
-# contenendo un farmaco perfettamente identificabile.
+# Prescrizione infusionale: il nome segue la dose ("125 mg di Furosemide ...").
 PATTERN_INFUSIONE = re.compile(
     r"^\s*[\d.,/]+\s*(?:mg|g|ml|mcg|UI|U)\s+di\s+(?P<farmaco>[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s\-]*?)"
     r"\s*(?:\*|\s+in\s+\d|$)",
@@ -158,15 +101,7 @@ def _virgola_di_elenco(voce: str) -> bool:
 
 
 def sonda_terapia_ingresso(testo: str) -> tuple[list[str], list[str], Counter]:
-    """Estrae i nomi (commerciali) dei farmaci dal campo terapia in ingresso.
-
-    Restituisce (nomi, scarti, conteggio_per_livello). Gli scarti sono cio' che
-    interessa davvero in esplorazione: misurano quanto il campo devii dal
-    formato atteso. Si rivelano essere blocchi scritti interamente in prosa dal
-    clinico ("cardirene 75 mg, ansimar 400 mg, ...") oppure voci non
-    farmacologiche (ossigenoterapia): entrambi vanno riconosciuti, non
-    silenziosamente inclusi nel vocabolario.
-    """
+    """Nomi commerciali dal campo terapia in ingresso: (nomi, scarti, conteggio per livello)."""
     nomi: list[str] = []
     scarti: list[str] = []
     livelli: Counter = Counter()
@@ -198,28 +133,10 @@ def sonda_terapia_ingresso(testo: str) -> tuple[list[str], list[str], Counter]:
             livelli["1_nome_posologia"] += 1
             continue
 
-        # Livello 3 - il nome non e' separato dalla posologia da ':', oppure i
-        # due punti che si trovano sono quelli di un orario ("ore 8:00") e il
-        # nome che ne risulta porta la dose incollata. Si riprova prendendo cio'
-        # che precede la prima cifra, e togliendo un'eventuale forma in coda:
-        # "Normast 600 mg 1 cp ore 8:00" -> "Normast".
-        #   Vale la stessa disciplina della dimissione: la guardia non viene
-        #   indebolita, le si ripresenta un nome ripulito.
-        #
-        #   NON si applica se la voce contiene una virgola DI ELENCO. Quello e'
-        #   il blocco scritto a mano dal clinico, che elenca piu' farmaci in un
-        #   segmento solo ("cardirene 75 mg, ansimar 400 mg, lucen 20 mg"):
-        #   prendere il nome che precede la prima cifra ne restituirebbe UNO e
-        #   perderebbe silenziosamente gli altri, che e' peggio che dichiarare
-        #   lo scarto.
-        #
-        #   La virgola DECIMALE non e' un elenco: "Bisoprololo 2,5 mg" e' una
-        #   voce sola. La prima versione della guardia le confondeva, e in
-        #   italiano la virgola decimale e' la notazione normale — «2,5 mg» e'
-        #   il dosaggio piu' comune del bisoprololo. Sul corpus la distinzione
-        #   vale poco (4 voci su 5 605, dal 98,77% al 98,84% di copertura); su
-        #   un testo scritto a mano vale tutto, ed e' cosi' che e' emersa:
-        #   costruendo la demo, non misurando il corpus.
+        # Livello 3: nome = cio' che precede la prima cifra, ripulito della
+        # forma in coda e ripresentato alla stessa guardia. Non si applica se
+        # c'e' una virgola di elenco (piu' farmaci in un segmento: meglio lo
+        # scarto che perderne); la virgola decimale ("2,5 mg") non e' un elenco.
         alternativo = (None if _virgola_di_elenco(voce)
                        else PATTERN_ING_NOME_E_DOSE.match(voce))
         if alternativo:
@@ -236,19 +153,10 @@ def sonda_terapia_ingresso(testo: str) -> tuple[list[str], list[str], Counter]:
     return nomi, scarti, livelli
 
 
-# --- Terapia alla dimissione ------------------------------------------------
-# Formato prevalente:
+# --- Terapia alla dimissione ---
+# Formato prevalente, fra virgolette:
 #   "Principio attivo (Nome commerciale forma dose): da assumere 5 mg (ore 8)"
-# Le voci sono racchiuse tra virgolette doppie. Questo campo e' il piu' ricco:
-# espone il *principio attivo* (denominazione internazionale) come primo
-# elemento, ed e' quindi la fonte migliore sia per il vocabolario chiuso dei
-# farmaci sia per la ground truth della valutazione (sezione 4 del progetto).
-#
-# Il campo non e' pero' uniforme: accanto al formato prevalente esistono
-# varianti compilate a mano. Invece di una sola regex permissiva usiamo una
-# sonda a LIVELLI, dal piu' stringente al piu' lasco, e contiamo quante voci
-# cadono in ciascun livello. Cosi' l'esplorazione misura *quanto* il campo sia
-# regolare, invece di nascondere le irregolarita' dietro un match generoso.
+# Sonda a livelli, dal piu' stringente al piu' lasco, contando le voci per livello.
 PATTERN_VOCE_DIMISSIONE = re.compile(r'"(.*?)"', re.DOTALL)
 
 # Livello 1 - formato pieno: principio, commerciale tra parentesi, ':' e posologia.
@@ -257,11 +165,8 @@ PATTERN_DIM_COMPLETO = re.compile(
     re.DOTALL,
 )
 
-# Livello 2 - come sopra ma con un inciso in piu' fra principio e commerciale:
-# e' un *sinonimo* del principio attivo, es.
+# Livello 2: con un sinonimo del principio fra parentesi
 #   "Idrossiclorochina (idroxiclorochina) (Plaquenil cp.riv. 200 mg): ..."
-# Il sinonimo e' materiale prezioso per il dizionario di normalizzazione dello
-# step 2, quindi lo catturiamo invece di scartarlo.
 PATTERN_DIM_CON_SINONIMO = re.compile(
     r"^\s*(?P<principio>[^(:]+?)\s*\((?P<sinonimo>[^()]*)\)\s*"
     r"\((?P<commerciale>[^()]*)\)\s*:?\s*(?P<posologia>.*)$",
@@ -280,38 +185,23 @@ PATTERN_DIM_SENZA_POSOLOGIA = re.compile(
     re.DOTALL,
 )
 
-# Livello 5 - come il livello 1, ma il nome commerciale contiene a sua volta una
-# parentesi: un farmaco estero porta la sua provenienza fra parentesi dentro la
-# descrizione della confezione. `[^()]*` non puo' attraversarla, e la voce
-# cadeva fra le non interpretate.
-#   Si prova per ULTIMO, dopo i quattro livelli esistenti: cosi' nessuna voce
-#   gia' riconosciuta cambia interpretazione, e il livello nuovo raccoglie solo
-#   cio' che oggi cade. Ammette un solo annidamento, che e' quanto il corpus
-#   mostra: piu' profondita' sarebbe una regola scritta su un caso ipotetico.
+# Livello 5: come il 1, con una parentesi annidata nel nome commerciale (un
+# solo annidamento, quanto il corpus mostra). Si prova dopo gli altri.
 PATTERN_DIM_COMMERCIALE_ANNIDATO = re.compile(
     r"^\s*(?P<principio>[^(:]+?)\s*"
     r"\((?P<commerciale>(?:[^()]|\([^()]*\))*)\)\s*:\s*(?P<posologia>.+)$",
     re.DOTALL,
 )
 
-# Livello 6 - nome e dose senza nome commerciale e senza ':', che e' la forma in
-# cui alcuni reparti scrivono la terapia: "Rosuvastatina 5 mg (ore 22)",
-# "Bisoprololo 3.75 mg 1 cp alle ore 08:00". Il principio e' cio' che precede la
-# prima cifra, saltando un eventuale "da assumere".
-#   Si prova DOPO tutti gli altri: e' il piu' generico e ne oscurerebbe diversi.
-#   Una voce che comincia con una cifra ("500 ml Fisiologica") non lo soddisfa, ed
-#   e' corretto: non e' un farmaco prescritto ma un fluido.
+# Livello 6: nome e dose senza commerciale ne' ':' ("Rosuvastatina 5 mg (ore 22)").
+# Il piu' generico, si prova per ultimo.
 PATTERN_DIM_NOME_E_DOSE = re.compile(
     r"^\s*(?P<principio>[^\d(:]+?)\s*(?:da assumere\s*)?(?P<posologia>\d.*)$",
     re.DOTALL,
 )
 
-# La forma farmaceutica resta talvolta attaccata al nome ("Spironolattone cps
-# 25 mg"). La guardia `nome_farmaco_plausibile` la rifiuta, ed e' giusto: e' il
-# segnale che la posologia non e' stata separata. La risposta pero' non e'
-# indebolire la guardia — che protegge il vocabolario chiuso di tutti gli step
-# successivi — ma togliere la forma dalla coda del nome e ripresentare il nome
-# pulito alla stessa guardia, invariata.
+# Forma farmaceutica in coda al nome ("Spironolattone cps"): si toglie e si
+# ripresenta il nome alla guardia, che resta invariata.
 PATTERN_FORMA_IN_CODA = re.compile(
     r"\s+(?:cp|cpr|cps|cpz|cp\.riv|cpr\.riv|compresse?|capsule?|"
     r"gtt|fl|fiale?|bust|puff|soluz|scir|crema|cerotti?)\.?$",
@@ -324,12 +214,7 @@ MASSIME_PAROLE_PRINCIPIO = 12
 
 
 def sonda_terapia_dimissione(testo: str) -> tuple[list[dict], list[str], Counter]:
-    """Estrae le voci di terapia alla dimissione con una sonda a livelli.
-
-    Restituisce (voci, scarti, conteggio_per_livello). Ogni voce riporta il
-    livello di pattern che l'ha riconosciuta, cosi' da poter valutare a valle
-    quanto fidarsi del dato (livello 1 = formato pieno, il piu' affidabile).
-    """
+    """Voci di terapia alla dimissione con sonda a livelli: (voci, scarti, conteggio per livello)."""
     voci: list[dict] = []
     scarti: list[str] = []
     livelli: Counter = Counter()
@@ -345,17 +230,12 @@ def sonda_terapia_dimissione(testo: str) -> tuple[list[dict], list[str], Counter
             livelli["escluso_non_farmacologico"] += 1
             continue
 
-        # Il segnaposto va riconosciuto qui e non lasciato cadere fra gli
-        # scarti: la voce E' stata interpretata (sappiamo che non denota alcuna
-        # sostanza), quindi contarla come fallimento del parsing farebbe
-        # apparire la copertura peggiore di quanto sia.
+        # Il segnaposto e' una voce interpretata, non uno scarto.
         if PATTERN_PRINCIPIO_SEGNAPOSTO.match(grezza.split("(")[0].strip()):
             livelli["escluso_segnaposto"] += 1
             continue
 
-        # I livelli si provano dal piu' specifico al piu' generico: quello con
-        # sinonimo va prima del completo perche' il completo matcherebbe
-        # comunque, ma attribuirebbe il sinonimo al nome commerciale.
+        # Dal piu' specifico al piu' generico.
         for livello, pattern in (
             ("2_con_sinonimo", PATTERN_DIM_CON_SINONIMO),
             ("1_completo", PATTERN_DIM_COMPLETO),
@@ -391,12 +271,8 @@ def sonda_terapia_dimissione(testo: str) -> tuple[list[dict], list[str], Counter
     return voci, scarti, livelli
 
 
-# --- Condizioni nel testo libero --------------------------------------------
-# Nell'export grezzo non esiste alcun campo strutturato per le condizioni: sono
-# tutte nella prosa. Parte di esse conserva pero' l'eco del questionario
-# dell'EHR, reso in testo nella forma "<Condizione> si." / "<Condizione> no.".
-# Misurarne l'estensione dice quanto si possa contare su questo appiglio
-# regolare e quanto invece serva davvero il riconoscimento di entita'.
+# --- Condizioni nel testo libero ---
+# L'eco del questionario dell'EHR: "<Condizione> si." / "<Condizione> no.".
 PATTERN_ECO_QUESTIONARIO = re.compile(
     r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\- ]{2,45}?)\s+(si|no)\s*(?=[.,;]|$)", re.IGNORECASE
 )
@@ -412,14 +288,8 @@ def sonda_eco_questionario(testo: str) -> list[tuple[str, str]]:
     ]
 
 
-# --- Allergie ---------------------------------------------------------------
-# Le allergie servono al filtro di sicurezza del motore di raccomandazione
-# (sezione 3.4), quindi vanno censite fin da subito. Nell'anamnesi narrativa
-# compaiono in una sezione dedicata, a sua volta semi-strutturata in
-# sottocategorie:
+# --- Allergie ---
 #   "Allergie e intolleranze: Allergie: Principi attivi (<sostanza>) Note (<classe>)"
-# Solo la sottocategoria "Principi attivi" e' clinicamente rilevante per noi:
-# le allergie ad alimenti o pollini non vincolano la scelta del farmaco.
 PATTERN_SEZIONE_ALLERGIE = re.compile(
     r"Allergie e intolleranze\s*:\s*(?P<contenuto>.*?)"
     r"(?=\s(?:Anamnesi|Fattori|Comorbidit|Interventi|Diagnosi|APR|APF|Terapia)\b|$)",
@@ -440,12 +310,7 @@ PATTERN_SOTTOCATEGORIA_ALLERGIA = re.compile(
 )
 
 
-# Nel campo dimissione il nome commerciale e' seguito da forma farmaceutica e
-# dosaggio ("Lasix cpr. 25 mg"), mentre in ingresso compare quasi nudo
-# ("Lasix"). Per confrontare i due campi serve una normalizzazione minima che
-# tagli la coda: e' la base del "ponte" ingresso<->dimissione, cioe' del modo in
-# cui ricaveremo il dizionario nome commerciale -> principio attivo (step 2)
-# dal dataset stesso, invece che da una fonte esterna.
+# Il «ponte» ingresso <-> dimissione: stesso nome commerciale, con e senza coda.
 PATTERN_CODA_FORMA_FARMACEUTICA = re.compile(
     r"\s+(cp|cpr|cps|cpz|compresse|soluz|grat|scir|gtt|spray|puff|polv|"
     r"cerotto|fl|bust|crema|ung|collirio|sosp|sciroppo)\b.*$",
@@ -454,11 +319,7 @@ PATTERN_CODA_FORMA_FARMACEUTICA = re.compile(
 
 
 def radice_nome_commerciale(nome: str) -> str:
-    """Riduce un nome commerciale alla sua radice confrontabile.
-
-    "Lasix cpr. 25 mg" -> "lasix". Il confronto e' fatto in minuscolo perche'
-    la capitalizzazione non e' coerente fra i due campi.
-    """
+    """Radice confrontabile di un nome commerciale: "Lasix cpr. 25 mg" -> "lasix"."""
     radice = PATTERN_CODA_FORMA_FARMACEUTICA.sub("", nome).strip()
     # Rimuove un eventuale dosaggio residuo in coda ("Cacit 1000" resta intero,
     # ma "Lasix 25 mg" perde la dose): togliamo solo cifre seguite da unita'.
@@ -467,13 +328,7 @@ def radice_nome_commerciale(nome: str) -> str:
 
 
 def sonda_allergie(testo: str) -> dict:
-    """Analizza la sezione allergie dell'anamnesi narrativa.
-
-    Restituisce un dizionario con lo *stato* della sezione, distinguendo tre
-    casi che vanno tenuti separati anche nello schema dello stato paziente:
-    sezione assente (informazione ignota), assenza dichiarata (verificata) e
-    allergie presenti (con le sottocategorie trovate).
-    """
+    """Stato della sezione allergie: assente, assenza dichiarata, o presenti (con sottocategorie)."""
     esito = {"stato": "sezione_assente", "categorie": {}}
     if not testo:
         return esito
@@ -496,11 +351,7 @@ def sonda_allergie(testo: str) -> dict:
     return esito
 
 
-# --- Anamnesi narrativa -----------------------------------------------------
-# Il testo libero e' preceduto da intestazioni di sezione non standardizzate
-# ("Anamnesi Remota:", "Anamnesi patologica remota:", "Diagnosi:", ...).
-# Questa sonda le censisce per capire se siano abbastanza regolari da poterci
-# segmentare sopra il testo nella pipeline A.
+# --- Anamnesi narrativa: censimento delle intestazioni di sezione ---
 PATTERN_INTESTAZIONE = re.compile(
     r"(?:^|\s)([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ' ]{2,40}?)\s*:\s"
 )
@@ -513,17 +364,11 @@ def sonda_intestazioni(testo: str) -> list[str]:
     return [m.strip() for m in PATTERN_INTESTAZIONE.findall(testo)]
 
 
-# ---------------------------------------------------------------------------
-# Report
-# ---------------------------------------------------------------------------
+# --- Report ---
 
 
 class Report:
-    """Accumula il testo del report e lo stampa a schermo mentre lo costruisce.
-
-    Semplice wrapper: vogliamo sia vedere l'output durante l'esecuzione sia
-    salvarlo su file per poterlo citare nella documentazione dello step.
-    """
+    """Accumula il report e lo stampa a schermo mentre lo costruisce."""
 
     def __init__(self) -> None:
         self.righe: list[str] = []
@@ -644,9 +489,7 @@ def main() -> None:
     coppie_commerciale_principio: dict[str, Counter] = defaultdict(Counter)
     scarti_dimissione: list[tuple[int, str]] = []
     livelli_dimissione: Counter = Counter()
-    # Due situazioni ben diverse, da non confondere: il referto puo' proprio
-    # non esserci (143 record, caratteristica nota del dataset) oppure esserci
-    # ma non produrre alcuna voce (potenziale difetto della sonda o del dato).
+    # Referto assente (143 record) e referto senza voci sono due cose diverse.
     record_senza_referto_dimissione = 0
     record_dimissione_senza_voci = 0
     for rec in record:
@@ -788,11 +631,7 @@ def main() -> None:
     for principio, n in principi_dimissione.most_common(25):
         rep(f"  {n:5d}  {principio}")
 
-    # --- 3-bis. Ponte ingresso <-> dimissione ------------------------------
-    # Il campo dimissione espone la coppia (principio attivo, nome commerciale);
-    # il campo ingresso espone solo il nome commerciale. Incrociandoli possiamo
-    # ricavare dal dataset stesso buona parte del dizionario di normalizzazione
-    # che servira' allo step 2, senza dipendere solo da fonti esterne.
+    # --- 3-bis. Ponte ingresso <-> dimissione: (principio, commerciale) dal dataset stesso ---
     rep.titolo("3-bis. PONTE INGRESSO <-> DIMISSIONE (base del dizionario di normalizzazione)")
 
     radice_a_principio: dict[str, Counter] = defaultdict(Counter)

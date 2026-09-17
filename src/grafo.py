@@ -1,70 +1,11 @@
 """Step 7 - Knowledge graph RDF dello stato dei pazienti, con la provenienza.
 
-PERCHE' UN GRAFO, E NON UNA TABELLA
-    Le tre pipeline producono tre descrizioni dello stesso ricovero, che si
-    sovrappongono in parte e si contraddicono in parte. Una tabella costringe a
-    scegliere una versione prima di sapere quale sia giusta; un grafo tiene tutte
-    e tre insieme, ciascuna con l'indicazione di chi l'ha prodotta, e rimanda la
-    scelta a chi interroga.
-
-    Lo step 6bis ha reso questa scelta obbligatoria invece che prudente: sulle
-    condizioni le due pipeline simboliche hanno un richiamo del 20% e quella a
-    modello linguistico del 70%. Nessuna delle tre e' sufficiente da sola.
-
-LE TRE FONTI E COSA CIASCUNA CONTRIBUISCE
-    Sulle CONDIZIONI, misurate contro il riferimento annotato:
-
-    A  gazetteer deterministico     precisione 80,1%  richiamo 19,5%
-    B  modello linguistico          precisione 95,5%  richiamo 68,7%
-    C  riconoscitore neurale        precisione 81,6%  richiamo 19,9%
-
-    Sui FARMACI DI TERAPIA non c'e' invece nulla da confrontare, ed e' una
-    proprieta' voluta: i due campi hanno delimitatori e le tre pipeline li
-    leggono con lo **stesso** parser deterministico. Nel grafo quelle menzioni
-    portano l'agente `campo_strutturato`, non la pipeline che le ha emesse,
-    perche' attribuirle a tre agenti diversi fingerebbe un accordo fra metodi
-    dove c'e' una sola lettura ripetuta tre volte.
-
-LA DECISIONE DI MODELLAZIONE CHE CONTA: LA MENZIONE E' UN NODO
-    La tentazione e' collegare il ricovero direttamente alla condizione. Cosi'
-    pero' si perde esattamente cio' che serve allo step 8: *chi* lo dice e *da
-    dove*. Qui ogni menzione e' un nodo con la sua pipeline, il suo campo, i suoi
-    offset e la sua regola, e l'asserzione clinica e' derivata dalle menzioni che
-    la sostengono.
-
-    Ne segue la proprieta' che rende il grafo utile: le menzioni che si
-    sovrappongono nello stesso punto dello stesso referto — anche se prodotte da
-    pipeline diverse — diventano **una sola asserzione sostenuta da piu'
-    menzioni**. Il filtro di sicurezza dello step 8 puo' allora pretendere che una
-    condizione sia vista da almeno due pipeline, o rifiutare i codici che
-    provengono dal solo gazetteer, e sono due interrogazioni SPARQL di tre righe.
-
-VOCABOLARI: STANDARD DOVE ESISTONO, LOCALI DOVE SERVE
-    Il vincolo di provenienza del progetto vale anche per l'ontologia: dove esiste
-    uno standard W3C non se ne inventa uno.
-
-    * **PROV-O** (W3C Recommendation, 2013-04-30) per la provenienza: una
-      menzione e' una `prov:Entity` generata da una `prov:Activity` (l'esecuzione
-      di una pipeline) attribuita a un `prov:Agent` (la pipeline stessa).
-      L'asserzione clinica e' `prov:wasDerivedFrom` le sue menzioni.
-    * **SKOS** (W3C Recommendation, 2009-08-18) per le due terminologie: ATC e
-      ICD-10 sono `skos:ConceptScheme`, i codici sono `skos:Concept`, e la
-      gerarchia e' `skos:broader`.
-    * **DCMI Metadata Terms** per citare la fonte di ogni concetto: ogni codice
-      ATC porta `dcterms:source` verso il file AIFA da cui viene, ogni codice
-      ICD-10 verso il volume italiano.
-
-    Solo cio' che e' specifico di questo dominio — il ricovero, la menzione, lo
-    stato di conoscenza, il soggetto — sta in un vocabolario locale, nello spazio
-    di nomi `ct:`. Quello spazio usa `example.org`, che l'RFC 2606 riserva proprio
-    a questo: dichiarare che l'URI identifica senza pretendere di risolversi.
-
-CIO' CHE IL GRAFO NON FA
-    Non decide. Non fonde le contraddizioni, non sceglie fra uno stato
-    `affermato` e uno `negato` quando due pipeline dissentono, non scarta le
-    menzioni non risolte. Conserva tutto e segna chi dice cosa: la decisione e'
-    dello step 8, che e' simbolico e ispezionabile, e questo modulo deve
-    limitarsi a metterlo in condizione di prenderla.
+Ogni menzione e' un nodo con pipeline, campo, offset e regola (PROV-O); le
+menzioni sovrapposte nello stesso punto del referto sostengono una sola
+asserzione clinica, cosi' «quante pipeline lo dicono» e' una SPARQL. ATC e
+ICD-10 sono schemi SKOS con `dcterms:source`. I farmaci dei campi di terapia
+hanno l'agente `campo_strutturato` (un solo parser, non tre pipeline). Il
+grafo conserva tutto e non decide: decide lo step 8. Vedi docs/07_knowledge_graph.md.
 """
 
 from __future__ import annotations
@@ -124,26 +65,14 @@ DESCRIZIONE_PIPELINE = {
 
 
 def _identificatore(*parti) -> str:
-    """Identificatore stabile e leggibile, non un hash opaco.
-
-    Un URI che si puo' leggere rende ispezionabile un dump Turtle senza dover
-    risalire a una tabella di corrispondenze, e la riproducibilita' e' gratis:
-    due esecuzioni sugli stessi dati producono gli stessi URI.
-    """
+    """Identificatore stabile e leggibile, non un hash opaco."""
     return "-".join(str(p).replace(" ", "_").replace("/", "_") for p in parti)
 
 
-# ---------------------------------------------------------------------------
-# Le terminologie
-# ---------------------------------------------------------------------------
+# --- Le terminologie ---
 
 def aggiungi_atc(g: Graph, percorso: Path) -> int:
-    """La gerarchia ATC completa come schema di concetti SKOS.
-
-    Serve intera, non solo per i codici che compaiono nei referti: la metrica
-    gerarchica dello step 11 misura *quanto* due codici siano vicini, e senza i
-    livelli superiori non ci sarebbe nulla rispetto a cui essere vicini.
-    """
+    """La gerarchia ATC completa come schema SKOS (serve intera per i livelli superiori)."""
     schema = ATC["schema"]
     g.add((schema, RDF.type, SKOS.ConceptScheme))
     g.add((schema, SKOS.prefLabel,
@@ -199,9 +128,7 @@ def aggiungi_icd(g: Graph, percorso: Path) -> int:
     return len(dati["voci"])
 
 
-# ---------------------------------------------------------------------------
-# Le pipeline come agenti PROV
-# ---------------------------------------------------------------------------
+# --- Le pipeline come agenti PROV ---
 
 def aggiungi_pipeline(g: Graph) -> None:
     for sigla, (nome, nota) in DESCRIZIONE_PIPELINE.items():
@@ -212,35 +139,17 @@ def aggiungi_pipeline(g: Graph) -> None:
         g.add((agente, DCTERMS.description, Literal(nota, lang="it")))
 
 
-# ---------------------------------------------------------------------------
-# I fatti clinici
-# ---------------------------------------------------------------------------
+# --- I fatti clinici ---
 
 def _uri_concetto(menzione: Menzione) -> URIRef | None:
-    """Il concetto di terminologia a cui la menzione e' stata risolta.
-
-    Puo' non esistercene uno: una menzione irrisolta resta nel grafo con il suo
-    testo e senza codice. Cancellarla sarebbe la scorciatoia peggiore, perche'
-    nasconderebbe proprio i casi che il progetto deve poter esaminare.
-    """
+    """Il concetto a cui la menzione e' risolta; una menzione irrisolta resta nel grafo senza codice."""
     if not menzione.codice:
         return None
     return ATC[menzione.codice] if menzione.tipo == "farmaco" else ICD[menzione.codice]
 
 
 def agente(m: Menzione) -> URIRef:
-    """Chi ha prodotto la menzione: una pipeline, o il parser condiviso.
-
-    E' la distinzione che tiene onesto `ct:numeroPipeline`. I farmaci dei due
-    campi di terapia sono letti dallo **stesso** parser deterministico da tutte e
-    tre le pipeline: attribuirli a tre agenti diversi mostrerebbe un consenso a
-    tre dove c'e' una sola lettura ripetuta tre volte, e il filtro dello step 8
-    scambierebbe quella ridondanza per una conferma indipendente.
-
-    Attribuendoli a un agente unico, una soglia di consenso a due pipeline
-    scarta correttamente i farmaci di terapia dal conteggio di accordo — perche'
-    su di loro non c'e' nessun accordo da misurare, c'e' un dato letto.
-    """
+    """Chi ha prodotto la menzione: la pipeline, o il parser condiviso per i campi di terapia (un consenso a tre sarebbe finto)."""
     return PIPELINE[SIGLA_PARSER if m.strutturata else m.sigla]
 
 
@@ -255,16 +164,10 @@ def aggiungi_menzione(g: Graph, m: Menzione, n: int) -> URIRef:
     g.add((nodo, CT.stato, Literal(m.stato)))
     g.add((nodo, CT.soggetto, Literal(m.soggetto)))
     g.add((nodo, PROV.wasAttributedTo, agente(m)))
-    # COME la menzione e' stata prodotta, non solo da chi. E' la differenza fra
-    # `icd:termine_esatto` e `icd:generalizzazione_ambigua`, cioe' fra un codice
-    # certo e uno che qualcuno dovrebbe guardare: senza questo anello la traccia
-    # dice che il gazetteer ha assegnato I50.9, ma non che l'ha fatto su una
-    # corrispondenza esatta o su una generalizzazione.
+    # Come e' stata prodotta (la regola), non solo da chi.
     if m.regola:
         g.add((nodo, CT.regola, Literal(m.regola)))
-    # Il testo della menzione NON entra nel grafo quando questo viene
-    # serializzato su disco: e' testo clinico verbatim, e il grafo e' un
-    # artefatto che puo' circolare. Chi ha i dati grezzi lo ritrova dagli offset.
+    # Il testo della menzione non va su disco: si ritrova dagli offset.
     concetto = _uri_concetto(m)
     if concetto is not None:
         g.add((nodo, CT.risolveA, concetto))
@@ -274,12 +177,7 @@ def aggiungi_menzione(g: Graph, m: Menzione, n: int) -> URIRef:
 
 
 def aggiungi_gruppo(g: Graph, gruppo: Gruppo, n: int) -> None:
-    """Un punto del referto diventa un'asserzione sostenuta dalle sue menzioni.
-
-    E' qui che le tre pipeline si incontrano: se A e B hanno riconosciuto la
-    stessa porzione di testo, le loro due menzioni sostengono la stessa
-    asserzione, e il conteggio delle pipeline diventa interrogabile.
-    """
+    """Un punto del referto diventa un'asserzione sostenuta dalle menzioni che vi si sovrappongono."""
     ricovero = RICOVERO[str(gruppo.enc_oid)]
     tipi = {m.tipo for m in gruppo.menzioni}
     tipo = tipi.pop() if len(tipi) == 1 else "misto"
@@ -322,9 +220,7 @@ def aggiungi_ricoveri(g: Graph, per_ricovero: dict[int, list[Menzione]]) -> dict
     return dict(conteggi)
 
 
-# ---------------------------------------------------------------------------
-# Costruzione
-# ---------------------------------------------------------------------------
+# --- Costruzione ---
 
 @dataclass
 class Costruzione:
@@ -356,9 +252,7 @@ def costruisci(radice: Path = RADICE, cartella_b: Path | None = None) -> Costruz
         dati["B"] = carica("B", radice=radice)
     dati["B"], _ = ripulisci(dati["B"], RisolutoreATC())
 
-    # Solo i ricoveri che tutte e tre hanno elaborato: un ricovero visto da due
-    # pipeline su tre falserebbe ogni conteggio di accordo, e la differenza
-    # sarebbe invisibile nel grafo.
+    # Solo i ricoveri elaborati da tutte e tre, o i conteggi di accordo sarebbero falsati.
     comuni = set.intersection(*(set(d) for d in dati.values()))
     per_ricovero: dict[int, list[Menzione]] = {
         enc: [m for sigla in "ABC" for m in dati[sigla].get(enc, [])]

@@ -1,41 +1,8 @@
-"""
-Scarica le knowledge base esterne su cui si fonda la normalizzazione.
+"""Scarica le knowledge base esterne della normalizzazione e ne registra la provenienza.
 
-PERCHE' QUESTO MODULO ESISTE
-    Il progetto ha un vincolo esplicito: ogni mapping (nome commerciale ->
-    principio attivo -> codice ATC) deve provenire da una fonte esterna
-    **citabile**, non dalla conoscenza interna di un modello ne' da una
-    regolarita' osservata nel dataset. Uno script di download separato e
-    rieseguibile serve a rendere quel vincolo verificabile: chiunque puo'
-    rilanciarlo e ottenere gli stessi file, e il manifest registra da dove e
-    quando sono arrivati.
-
-    E' anche il primo mattone del meccanismo di aggiornamento della KB richiesto
-    dallo step 7: stessa logica (import separato + tracciabilita' della fonte),
-    applicata qui alle sole fonti di normalizzazione.
-
-FONTE SCELTA: AIFA (Agenzia Italiana del Farmaco)
-    Scelta rispetto alle alternative per tre motivi concreti:
-
-    1. E' **autorevole per l'Italia**. Il dataset contiene nomi commerciali
-       italiani ("Congescor", "Lasix", "Cardioaspirin"): serve il registro dei
-       medicinali autorizzati in Italia, non un registro internazionale che
-       quei nomi non contiene.
-    2. Le descrizioni ATC sono **in italiano** ("BISOPROLOLO", "BETABLOCCANTI,
-       SELETTIVI"), il che rende le motivazioni del sistema leggibili nella
-       stessa lingua delle anamnesi.
-    3. La licenza e' **CC-BY 4.0** e il download non richiede autenticazione,
-       quindi il dato e' ridistribuibile citando la fonte.
-
-    Alternative valutate e scartate:
-    - *WHO ATC/DDD Index*: e' la fonte primaria della classificazione ATC, ma
-      l'indice ufficiale e' consultabile via interfaccia web e il download
-      massivo e' soggetto a licenza; inoltre e' in inglese e non contiene i
-      nomi commerciali italiani.
-    - *Wikidata*: libera (CC0) e interrogabile in SPARQL, ma con appena ~3 800
-      entita' dotate di codice ATC (proprieta' P267), copertura troppo bassa
-      per fare da fonte primaria. Resta candidata per lo step 7 (relazioni
-      farmaco-condizione), dove il compito e' diverso.
+Fonte: AIFA (autorevole per l'Italia, descrizioni ATC in italiano, CC-BY 4.0);
+WHO ATC/DDD e Wikidata valutate e scartate (docs/02b). Il manifest in `kb/`
+(versionato) registra origine, data e impronta di ogni file.
 """
 
 from __future__ import annotations
@@ -48,18 +15,14 @@ from pathlib import Path
 
 RADICE = Path(__file__).resolve().parent.parent
 CARTELLA_FONTI = RADICE / "data" / "external" / "aifa"
-# Il manifest sta in `kb/` e NON in `data/`, perche' `data/` e' escluso dal
-# versionamento: le citazioni delle fonti devono invece finire nel repository,
-# altrimenti la tracciabilita' si perderebbe al primo clone.
+# Il manifest sta in `kb/`, versionato, non in `data/`.
 PERCORSO_MANIFEST = RADICE / "kb" / "manifest_fonti.json"
 
 # Identificarsi e' buona educazione verso un servizio pubblico e riduce il
 # rischio di essere bloccati da filtri anti-bot.
 USER_AGENT = "NLP-DigitalHealth-Project/0.1 (progetto universitario)"
 
-# Le fonti, con il ruolo che ciascuna ha nel progetto. Il campo `serve_per`
-# finisce nel manifest: a distanza di tempo deve essere chiaro *perche'* un
-# file e' stato scaricato, non solo da dove.
+# Le fonti, con il ruolo di ciascuna (`serve_per` finisce nel manifest).
 FONTI = [
     {
         "nome": "aifa_atc",
@@ -112,12 +75,7 @@ CITAZIONE = {
 
 
 def impronta_sha256(percorso: Path) -> str:
-    """Calcola lo SHA-256 di un file leggendolo a blocchi.
-
-    L'impronta va nel manifest: permette di accorgersi se una fonte esterna e'
-    cambiata fra due esecuzioni, che e' esattamente cio' che rende necessario
-    rigenerare la knowledge base.
-    """
+    """SHA-256 di un file, per accorgersi nel manifest se una fonte e' cambiata."""
     digest = hashlib.sha256()
     with percorso.open("rb") as f:
         # A blocchi e non tutto in memoria: `confezioni_fornitura.csv` supera
@@ -156,8 +114,7 @@ def main() -> None:
         try:
             voce = scarica(fonte, CARTELLA_FONTI)
         except Exception as errore:  # noqa: BLE001 - vogliamo continuare con le altre
-            # Una fonte irraggiungibile non deve impedire di aggiornare le altre:
-            # l'esito negativo viene comunque registrato nel manifest.
+            # Una fonte irraggiungibile non ferma le altre; l'esito va nel manifest.
             print(f"  FALLITO: {type(errore).__name__}: {errore}")
             voci.append({"nome": fonte["nome"], "url": fonte["url"], "errore": str(errore)})
             continue

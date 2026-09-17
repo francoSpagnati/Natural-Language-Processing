@@ -1,14 +1,4 @@
-"""Test dei tre ranker (step 9).
-
-Il ranker e' lo strato che decide che cosa proporre a un medico. Gli errori che
-questi test fermano sono di tre tipi, in ordine di gravita':
-
-1. **di sicurezza** — il ranker propone una classe che il filtro dello step 8
-   aveva escluso, scavalcando l'unico strato che protegge dalle allergie;
-2. **di metodo** — il ranker impara dai casi su cui viene misurato, e il
-   risultato e' gonfiato;
-3. **di misura** — il richiamo conta cose che non sono nel bersaglio.
-"""
+"""Test dei tre ranker (step 9)."""
 
 import sys
 import unittest
@@ -121,14 +111,7 @@ class TestRankerSimbolico(unittest.TestCase):
 class TestRankerIbrido(unittest.TestCase):
 
     def addestramento(self):
-        """Venti ricoveri con `I50` -> `C03CA`, trenta con `Z99` -> `A02BC`.
-
-        Le proporzioni sono scelte perche' **il ranker di frequenza sbagli**:
-        `A02BC` e' la classe piu' aggiunta in assoluto (30 contro 20), quindi
-        chi guarda solo la frequenza la mette prima anche in un paziente con
-        `I50`. Se la fixture le rendesse equiprobabili il test passerebbe senza
-        dimostrare niente.
-        """
+        """Venti ricoveri con `I50` -> `C03CA`, trenta con `Z99` -> `A02BC`."""
         casi = [caso(enc=i, condizioni=["I50.9"], dimissione=["C03CA"])
                 for i in range(20)]
         casi += [caso(enc=20 + i, condizioni=["Z99"], dimissione=["A02BC"])
@@ -136,13 +119,7 @@ class TestRankerIbrido(unittest.TestCase):
         return casi
 
     def test_a_peso_zero_non_fa_peggio_della_frequenza(self):
-        """La proprieta' che la correzione della PMI ha stabilito.
-
-        La prima versione ordinava per informazione mutua e finiva sotto la
-        linea di base di frequenza. In spazio logaritmico il punteggio parte
-        dalla frequenza, quindi senza evidenza condizionale i due ordini
-        coincidono.
-        """
+        """La proprieta' che la correzione della PMI ha stabilito."""
         casi = self.addestramento()
         freq = RankerFrequenza()
         ibr = RankerIbrido(peso_guida=0.0)
@@ -232,12 +209,7 @@ class TestRankerLLM(unittest.TestCase):
         return RankerLLM(BackendFittizio(lambda r: {"ordine": ordine}))
 
     def test_scarta_i_codici_fuori_dall_elenco_candidato(self):
-        """L'errore osservato alla prima prova del modello locale.
-
-        Un codice fuori elenco e' un farmaco che il filtro dello step 8 non ha
-        mai ammesso. Farlo passare significherebbe poter proporre un farmaco a
-        cui il paziente e' allergico.
-        """
+        """L'errore osservato alla prima prova del modello locale."""
         r = self.ranker(["C09AA", "C07AB07", "B01AF"])
         ordine = [x.classe_atc for x in r.ordina(caso(), ["C09AA", "B01AF"])]
         self.assertEqual(ordine, ["C09AA", "B01AF"])
@@ -263,13 +235,7 @@ class TestRankerLLM(unittest.TestCase):
         self.assertEqual(set(ordine), {"C09AA", "B01AF", "M04AA"})
 
     def test_il_prompt_non_contiene_la_verita_di_riferimento(self):
-        """Il test che impedisce la forma piu' silenziosa di imbroglio.
-
-        `Caso` porta la terapia di dimissione perche' e' anche l'unita' di
-        valutazione. Se finisse nel testo mandato al modello, il ranker
-        leggerebbe la risposta invece di produrla, e il risultato sarebbe
-        perfetto e privo di significato.
-        """
+        """Il test che impedisce la forma piu' silenziosa di imbroglio."""
         c = caso(condizioni=["I50.9"], ingresso=["C07AB"],
                  dimissione=["C03DA", "A10BK"])
         testo = descrivi_caso(c, ["C03DA", "A10BK", "M04AA"])
@@ -332,12 +298,7 @@ class TestInnestoConIlFiltro(unittest.TestCase):
         self.assertNotIn("B01AF", applica_filtro(c, ["B01AF", "C07AB"]))
 
     def test_da_verificare_resta_candidato(self):
-        """Un avvertimento non e' un'esclusione.
-
-        Il betabloccante in broncopneumopatia e' `da_verificare`: i
-        cardioselettivi sono spesso tollerati, e toglierlo dai candidati
-        negherebbe una terapia che quasi sempre si puo' dare.
-        """
+        """Un avvertimento non e' un'esclusione."""
         c = caso(condizioni=["J44"])
         self.assertIn("C07AB", applica_filtro(c, ["C07AB"]))
 
@@ -347,14 +308,7 @@ class TestInnestoConIlFiltro(unittest.TestCase):
         self.assertEqual(applica_filtro(c, candidati), candidati)
 
     def test_l_allergia_a_una_sostanza_non_esclude_la_sua_classe(self):
-        """Il caso reale che ha fermato una regola sbagliata.
-
-        Un paziente allergico all'acido acetilsalicilico (`B01AC06`) riceve
-        correttamente il clopidogrel (`B01AC04`), che e' della stessa classe
-        `B01AC`. Escludere la classe gli negherebbe l'unica alternativa: e' la
-        terza volta nel progetto che una regola di sicurezza troppo larga nega
-        una terapia corretta.
-        """
+        """Il caso reale che ha fermato una regola sbagliata."""
         c = caso(condizioni=["I25"], allergie=["B01AC06"])
         self.assertIn("B01AC", applica_filtro(c, ["B01AC", "C10AA"]))
 

@@ -1,35 +1,9 @@
-"""Accesso ai modelli linguistici, isolato dietro un'interfaccia astratta.
+"""Accesso ai modelli linguistici dietro un'interfaccia comune, con cache su disco.
 
-Perche' un'astrazione e non chiamate dirette
---------------------------------------------
-La pipeline B usa un LLM, ma il resto del progetto non deve dipendere ne' dal
-fornitore ne' dalla rete. Tre esigenze concrete lo impongono:
-
-1. i test devono girare senza chiamate remote e senza chiave (`BackendFittizio`);
-2. la valutazione dello step 11 deve essere riproducibile, quindi le risposte
-   vanno messe in cache su disco e riusate invece di essere richieste di nuovo;
-3. il fornitore puo' cambiare, e in questo progetto e' cambiato tre volte:
-   Google AI Studio (gratuito ma 20 richieste al giorno), Ollama in locale
-   (gratuito ma 235 secondi per record), OpenRouter (a consumo, ma l'intero
-   corpus costa poco piu' di un dollaro). I tre backend hanno la stessa
-   interfaccia e la stessa cache, quindi lo step 6 puo' confrontarli a parita'
-   di prompt senza che il resto della pipeline se ne accorga.
-
-Perche' `urllib` e non un SDK
------------------------------
-Il protocollo usato e' una singola POST JSON. Farla con la libreria standard
-tiene il formato del messaggio visibile nel codice invece che nascosto dentro
-una dipendenza, coerentemente con `fetch_external_kb.py`, ed evita di legare la
-riproducibilita' dei risultati alla versione di un pacchetto esterno. Il costo e'
-una trentina di righe fra ritentativi e decodifica degli errori.
-
-Fonte del protocollo
---------------------
-Google AI Studio -- Gemini API, endpoint `v1beta/models/{modello}:generateContent`
-con `generationConfig.responseJsonSchema` per l'output vincolato a schema
-(https://ai.google.dev/gemini-api/docs/structured-output). Forma della richiesta,
-nomi dei campi e comportamento di `thinkingConfig` sono stati verificati contro
-l'API reale, non dedotti dalla documentazione: vedi `docs/04_pipeline_estrazione_B.md`.
+Tre backend con la stessa interfaccia e la stessa cache: Gemini (AI Studio),
+Ollama in locale, OpenRouter (protocollo OpenAI); piu' `BackendFittizio` per i
+test. Tutto con `urllib`: una POST JSON, senza SDK. Ogni risposta e' vincolata
+a uno JSON Schema. Scelte, protocolli e misure: docs/04_pipeline_estrazione_B.md.
 """
 
 from __future__ import annotations
@@ -51,48 +25,21 @@ RADICE = Path(__file__).resolve().parents[1]
 PERCORSO_ENV = RADICE / ".env.local"
 CARTELLA_CACHE = RADICE / "data" / "interim" / "cache_llm"
 
-# Scelto per disponibilita' misurata, non per essere il piu' recente: su una
-# raffica di prove ravvicinate gemini-3.8-flash ha risposto 1 volta su 4 e
-# gemini-3.7-flash 2 su 4, mentre gemini-3.5-flash 4 su 4. Su una corsa di
-# centinaia di record la reperibilita' conta piu' della versione, e restare
-# su un modello stabile (non "preview") tiene i risultati confrontabili nel
-# tempo. Si puo' comunque sceglierne un altro con --modello.
+# Scelto per disponibilita' misurata (docs/04), non perche' il piu' recente.
 MODELLO_PREDEFINITO = "gemini-3.5-flash"
 
-# Modello locale. La macchina ha 11 GiB di RAM e nessuna GPU utilizzabile,
-# quindi il tetto pratico e' un modello da ~4 miliardi di parametri
-# quantizzato: gemma2:9b (5,4 GB) ha fatto intervenire l'OOM killer.
+# Modello locale: con 11 GiB di RAM e senza GPU il tetto e' ~4 miliardi di parametri.
 MODELLO_LOCALE_PREDEFINITO = "qwen3:4b"
 OLLAMA_HOST = "http://127.0.0.1:11434"
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{modello}:generateContent"
 
-# OpenRouter espone dietro un'unica chiave i modelli di molti fornitori con il
-# protocollo di OpenAI. Serve a questo progetto per un motivo preciso: e' l'unico
-# modo di provare piu' modelli sullo stesso prompt senza aprire un conto con
-# ciascun fornitore. Il modello predefinito e' scelto perche' dichiara
-# `structured_outputs` fra i parametri supportati (verificato interrogando
-# https://openrouter.ai/api/v1/models): senza decodifica vincolata questa
-# pipeline perde la proprieta' su cui e' costruita.
+# Modello OpenRouter predefinito: dichiara `structured_outputs` (verificato su /api/v1/models).
 ENDPOINT_OPENROUTER = "https://openrouter.ai/api/v1/chat/completions"
 MODELLO_OPENROUTER_PREDEFINITO = "deepseek/deepseek-v4.1-flash"
 
-# 429 = quota esaurita, 5xx = capacita' del servizio. Entrambi transitori: durante
-# le prove il 503 e' comparso di frequente e su modelli diversi nello stesso minuto.
-# Guasti di rete che vanno ritentati invece che propagati.
-#
-# `http.client.HTTPException` e' l'aggiunta che mancava, e costa cara scoprirlo
-# tardi: `IncompleteRead` ne discende ma NON discende da `URLError`, quindi una
-# risposta troncata a meta' — un guasto transitorio per eccellenza — usciva dal
-# ciclo dei tentativi come se fosse definitiva e abbatteva la corsa. E' successo
-# a 510 record su 1 000.
-#
-# `ConnectionError` copre la connessione chiusa dall'altro capo. `TimeoutError`
-# e' gia' una sua sorella (entrambe sotto `OSError`) ma resta esplicita perche'
-# e' il caso che si verifica piu' spesso e vale la pena leggerlo nel codice.
-#
-# Non si cattura `OSError` intero: un file non trovato o un permesso negato non
-# sono guasti di rete, e ritentarli nasconderebbe un difetto invece di
-# assorbirlo.
+# Guasti transitori da ritentare. `HTTPException` copre `IncompleteRead`, che
+# non discende da `URLError`; non si cattura `OSError` intero (file mancanti
+# non sono guasti di rete).
 ERRORI_DI_RETE = (
     urllib.error.URLError,
     http.client.HTTPException,
@@ -109,33 +56,15 @@ class ErroreLLM(RuntimeError):
 
 
 class ErroreRitentabile(ErroreLLM):
-    """Risposta inutilizzabile per una ragione transitoria del fornitore.
-
-    Va distinta da un errore definitivo: una risposta troncata a meta' di una
-    stringa, o chiusa con `finish_reason=error`, non dice che la richiesta e'
-    sbagliata — dice che quella singola generazione e' andata male. Sulla corsa
-    da 200 record ne sono capitate due, e **rilanciando sono riuscite entrambe
-    al primo colpo**, il che e' la prova che erano transitorie. Prima questo
-    errore usciva dal ciclo dei ritentativi e serviva una mano.
-    """
+    """Risposta inutilizzabile per una ragione transitoria (troncata, `finish_reason=error`): si ritenta."""
 
 
 class ErroreQuotaGiornaliera(ErroreLLM):
-    """La quota giornaliera del modello e' esaurita.
-
-    Va distinta dagli altri 429: un limite al minuto si supera aspettando, uno
-    al giorno no. Ritentare sarebbe tempo perso e maschererebbe la vera causa,
-    quindi questo errore interrompe la corsa invece di essere assorbito.
-    """
+    """Quota giornaliera esaurita: a differenza degli altri 429, ritentare non serve."""
 
 
 def _dettagli_errore(corpo: str) -> tuple[bool, float | None]:
-    """Legge un corpo di errore 429: (quota giornaliera esaurita, attesa suggerita).
-
-    L'API indica nei dettagli sia la quota violata sia da quanto tempo riprovare.
-    Usare l'attesa che suggerisce e' piu' affidabile che indovinarla con un
-    ritardo esponenziale, che puo' essere tanto troppo corto quanto troppo lungo.
-    """
+    """Legge un corpo di errore 429: (quota giornaliera esaurita, attesa suggerita dall'API)."""
     try:
         errore = json.loads(corpo).get("error", {})
     except json.JSONDecodeError:
@@ -159,11 +88,7 @@ def _dettagli_errore(corpo: str) -> tuple[bool, float | None]:
 
 
 def chiave_api(nome_variabile: str = "GEMINI_API_KEY") -> str:
-    """Legge la chiave dall'ambiente, con ripiego su `.env.local` non versionato.
-
-    La chiave non compare mai nel codice ne' nei file versionati: `.env.local` e'
-    escluso da git.
-    """
+    """Legge la chiave dall'ambiente, con ripiego su `.env.local` (non versionato)."""
     valore = os.environ.get(nome_variabile)
     if valore:
         return valore
@@ -183,12 +108,7 @@ def chiave_api(nome_variabile: str = "GEMINI_API_KEY") -> str:
 
 @dataclass(frozen=True)
 class Richiesta:
-    """Una domanda al modello, con la forma della risposta attesa.
-
-    `schema` e' uno JSON Schema: il modello e' vincolato a produrre un JSON che
-    lo rispetta, quindi la risposta non puo' essere malformata per costruzione e
-    la pipeline non ha bisogno di ripescare il JSON dentro del testo libero.
-    """
+    """Una domanda al modello; `schema` e' lo JSON Schema a cui la risposta e' vincolata."""
 
     istruzioni: str
     testo: str
@@ -197,11 +117,7 @@ class Richiesta:
     livello_ragionamento: str = "low"
 
     def impronta(self, modello: str) -> str:
-        """Identificatore stabile della richiesta, usato come chiave di cache.
-
-        Include il modello e ogni parametro che possa cambiare la risposta: se si
-        modifica il prompt o si cambia modello la cache si invalida da sola.
-        """
+        """Chiave di cache: modello e ogni parametro che cambia la risposta."""
         materiale = json.dumps(
             {
                 "modello": modello,
@@ -229,9 +145,7 @@ class Risposta:
     tentativi: int = 1
     da_cache: bool = False
     secondi: float = 0.0
-    # Costo in dollari dichiarato dal fornitore, quando lo dichiara. Tenerlo
-    # nella risposta (e nella cache) evita di doverlo ristimare dai token con
-    # un listino che nel frattempo puo' essere cambiato.
+    # Costo dichiarato dal fornitore, conservato in cache: non si ristima da un listino.
     costo: float = 0.0
 
 
@@ -244,16 +158,7 @@ class BackendLLM(ABC):
 
 
 class CacheRisposte:
-    """Risposte del modello su disco, indicizzate per impronta della richiesta.
-
-    Serve a due cose diverse che si sostengono a vicenda: non ripagare (in
-    denaro o in ore di CPU) una risposta gia' ottenuta, e rendere **ripetibile**
-    la valutazione dello step 11, che altrimenti dipenderebbe da una generazione
-    non deterministica.
-
-    E' condivisa fra i backend: passare dal modello remoto a quello locale non
-    deve cambiare il modo in cui i risultati vengono conservati.
-    """
+    """Risposte su disco per impronta della richiesta, condivisa fra i backend: niente doppi pagamenti, valutazione ripetibile."""
 
     def __init__(self, cartella: Path | None) -> None:
         self.cartella = cartella
@@ -378,9 +283,7 @@ class BackendGemini(BackendLLM):
                 return risposta
 
             if tentativo < self.tentativi_massimi:
-                # Se l'API dice quanto aspettare, si aspetta quello. Altrimenti
-                # attesa esponenziale con jitter: senza il termine casuale piu'
-                # richieste respinte insieme ritenterebbero all'unisono.
+                # Attesa suggerita dall'API, altrimenti esponenziale con jitter.
                 if attesa_suggerita is not None:
                     time.sleep(attesa_suggerita + random.uniform(0, 1))
                 else:
@@ -399,8 +302,7 @@ class BackendGemini(BackendLLM):
         candidato = candidati[0]
         motivo = candidato.get("finishReason")
         if motivo not in (None, "STOP"):
-            # MAX_TOKENS o un blocco di sicurezza producono JSON troncato: meglio
-            # fallire qui che propagare un'estrazione parziale silenziosamente.
+            # JSON troncato (MAX_TOKENS o blocco): meglio fallire che propagarlo.
             raise ErroreLLM(f"Generazione interrotta ({motivo}).")
 
         parti = candidato.get("content", {}).get("parts") or []
@@ -423,22 +325,7 @@ class BackendGemini(BackendLLM):
 
 
 class BackendOllama(BackendLLM):
-    """Backend su un modello eseguito in locale tramite Ollama.
-
-    Stessa interfaccia e stessa cache del backend remoto: la pipeline non sa
-    quale dei due sta usando, e i due sono confrontabili a parita' di prompt.
-
-    Anche qui la generazione e' **vincolata allo schema**: Ollama accetta uno
-    JSON Schema nel campo `format` e lo impone al decodificatore, quindi un
-    modello locale piccolo non puo' comunque produrre JSON malformato. E' la
-    ragione per cui la pipeline regge il passaggio a un modello molto meno
-    capace: la struttura e' garantita dal motore, non dalla bravura del modello.
-
-    Vincoli reali della macchina su cui gira: l'inferenza e' su CPU (il
-    rilevamento della GPU integrata fallisce) e la memoria disponibile e' poca,
-    quindi il timeout predefinito e' generoso e il servizio va tenuto sotto un
-    limite di memoria -- vedi `docs/04_pipeline_estrazione_B.md`.
-    """
+    """Backend su un modello locale via Ollama; lo schema va nel campo `format`. Inferenza su CPU: timeout generoso."""
 
     def __init__(
         self,
@@ -458,26 +345,15 @@ class BackendOllama(BackendLLM):
         self.attesa_iniziale = attesa_iniziale
         self.timeout = timeout
         self.contesto = contesto
-        # I modelli a ragionamento ibrido (qwen3) altrimenti spendono la maggior
-        # parte dei token generati a pensare. Su CPU e' il costo che decide se
-        # una corsa sul dataset dura ore o giorni.
-        #
-        # Accetta anche le stringhe della riga di comando ("no", "low", "high")
-        # perche' prima le ignorava in silenzio: il registro di una corsa
-        # dichiarava `ragionamento: "low"` mentre il modello girava senza, e
-        # l'impronta della configurazione registrava l'intenzione invece di cio'
-        # che ha raggiunto il modello.
+        # Ragionamento (qwen3): su CPU decide se la corsa dura ore o giorni.
+        # Accetta anche le stringhe della riga di comando.
         if isinstance(ragionamento, str):
             ragionamento = False if ragionamento in ("no", "") else ragionamento
         self.ragionamento = ragionamento
 
     def _corpo(self, richiesta: Richiesta) -> dict:
-        # Le istruzioni vanno nel prompt, non nel campo `system`. Misurato sullo
-        # stesso record con qwen3:4b: con le istruzioni in `system` il modello
-        # genera 39 token e restituisce liste vuote; con le stesse identiche
-        # istruzioni in testa al prompt ne genera 3.063 e trova 40 condizioni e
-        # 6 farmaci. Il campo `system` di Ollama non raggiunge il modello in modo
-        # efficace, almeno con questo template e in presenza di `format`.
+        # Istruzioni nel prompt, non in `system`: con `format` attivo il campo
+        # `system` di Ollama non arriva al modello (misurato, docs/04).
         return {
             "model": self.modello,
             "prompt": f"{richiesta.istruzioni}\n\nREFERTI DEL RICOVERO:\n{richiesta.testo}",
@@ -516,8 +392,7 @@ class BackendOllama(BackendLLM):
             except urllib.error.HTTPError as errore:
                 with errore:
                     dettaglio = errore.read().decode("utf-8", errors="replace")[:300]
-                # Un modello assente o una richiesta malformata non migliorano
-                # ritentando: meglio dirlo subito e con il messaggio del server.
+                # Modello assente o richiesta malformata: non si ritenta.
                 raise ErroreLLM(f"HTTP {errore.code}: {dettaglio}") from errore
             except ERRORI_DI_RETE as errore:
                 ultimo_errore = ErroreLLM(f"{type(errore).__name__}: {errore}")
@@ -555,20 +430,7 @@ class BackendOllama(BackendLLM):
 
 
 def schema_stretto(schema: dict) -> dict:
-    """Rende uno JSON Schema accettabile dalla modalita' `strict`.
-
-    La modalita' strict del protocollo OpenAI pretende `additionalProperties:
-    false` su **ogni** oggetto, altrimenti rifiuta la richiesta con un 400. Lo
-    schema generato da Pydantic non lo mette, quindi va aggiunto qui invece che
-    sporcare i modelli del dominio con un dettaglio di un fornitore.
-
-    Che cosa questa funzione NON fa, deliberatamente: non toglie `maxItems`. Il
-    tetto di 60 elementi e' una delle correzioni che hanno eliminato i timeout
-    della corsa locale, e non e' fra le parole chiave che il sottoinsieme strict
-    garantisce. Toglierlo in silenzio perderebbe la protezione senza dirlo;
-    lasciarlo fa emergere il problema come errore esplicito alla prima
-    richiesta, dove lo si vede. Il pre-volo serve anche a questo.
-    """
+    """Aggiunge `additionalProperties: false` a ogni oggetto (modalita' strict). Non toglie `maxItems`, di proposito."""
     if not isinstance(schema, dict):
         return schema
 
@@ -590,32 +452,11 @@ def schema_stretto(schema: dict) -> dict:
 
 
 class BackendOpenRouter(BackendLLM):
-    """Backend su OpenRouter, protocollo OpenAI, con cache e ritentativi.
+    """Backend su OpenRouter (protocollo OpenAI): un conto, molti modelli.
 
-    Perche' OpenRouter e non l'API del singolo fornitore
-    ----------------------------------------------------
-    Lo step 6 confronta metodi di estrazione. Per confrontare piu' modelli sullo
-    stesso prompt servirebbe un conto presso ciascun fornitore; qui ne basta uno,
-    e il codice della pipeline non cambia fra un modello e l'altro. Il ricarico
-    e' irrilevante ai volumi di questo progetto (l'intero corpus costa poco piu'
-    di un dollaro sul modello predefinito).
-
-    Il dettaglio che conta piu' del prezzo
-    --------------------------------------
-    OpenRouter instrada la stessa richiesta a fornitori diversi, e non tutti
-    applicano `response_format`. Un fornitore che lo ignora restituisce comunque
-    una risposta: JSON plausibile, prodotto senza vincolo, e **la pipeline non se
-    ne accorgerebbe**. `provider.require_parameters` impedisce l'instradamento
-    verso chi non supporta i parametri della richiesta. Senza quel campo la
-    garanzia strutturale su cui e' costruita la pipeline B diventa una speranza.
-
-    Fonte del protocollo
-    --------------------
-    https://openrouter.ai/docs/features/structured-outputs (forma di
-    `response_format` e `provider.require_parameters`) e
-    https://openrouter.ai/docs/use-cases/reasoning-tokens (campo `reasoning`).
-    I nomi dei parametri supportati da ciascun modello sono verificabili su
-    https://openrouter.ai/api/v1/models, campo `supported_parameters`.
+    `provider.require_parameters` e' essenziale: senza, la richiesta puo'
+    finire a un fornitore che ignora `response_format` e restituisce JSON non
+    vincolato. Protocollo: https://openrouter.ai/docs/features/structured-outputs.
     """
 
     def __init__(
@@ -639,10 +480,8 @@ class BackendOpenRouter(BackendLLM):
         self.ragionamento = ragionamento
 
     def _corpo(self, richiesta: Richiesta) -> dict:
-        # Il ragionamento e' spento per impostazione. Non e' una scelta di costo:
-        # su piu' modelli e' documentato che, con `response_format` attivo, il
-        # vincolo dello schema finisce applicato al canale di ragionamento e
-        # `content` torna vuoto. Spento, il problema non si pone.
+        # Ragionamento spento: con `response_format` attivo alcuni modelli
+        # tornano `content` vuoto.
         corpo = {
             "model": self.modello,
             "messages": [
@@ -696,8 +535,7 @@ class BackendOpenRouter(BackendLLM):
                 with errore:
                     dettaglio = errore.read().decode("utf-8", errors="replace")
                 ultimo_errore = ErroreLLM(f"HTTP {errore.code}: {dettaglio[:400]}")
-                # 402 = credito esaurito. Come la quota giornaliera di Gemini:
-                # ritentare non lo ricarica, e insistere maschererebbe la causa.
+                # 402 = credito esaurito: non si ritenta.
                 if errore.code == 402:
                     raise ErroreQuotaGiornaliera(
                         f"Credito OpenRouter esaurito: {dettaglio[:200]}"
@@ -724,9 +562,7 @@ class BackendOpenRouter(BackendLLM):
         )
 
     def _interpreta(self, grezza: dict, tentativi: int, secondi: float) -> Risposta:
-        # OpenRouter riporta anche gli errori del fornitore dentro una risposta
-        # 200, in un campo `error`. Senza questo controllo finirebbero in
-        # `json.loads` come contenuto mancante, con un messaggio incomprensibile.
+        # OpenRouter riporta gli errori del fornitore anche dentro un 200.
         if "error" in grezza and not grezza.get("choices"):
             raise ErroreLLM(f"Errore dal fornitore: {json.dumps(grezza['error'])[:300]}")
 
@@ -737,9 +573,7 @@ class BackendOpenRouter(BackendLLM):
         scelta = scelte[0]
         motivo = scelta.get("finish_reason")
         if motivo not in (None, "stop"):
-            # Mai propagare un'estrazione parziale come se fosse completa: sia
-            # `length` (uscita troncata) sia `error` (guasto del fornitore)
-            # danno un JSON monco. Sono pero' transitori, quindi si ritenta.
+            # `length` o `error` danno un JSON monco: transitorio, si ritenta.
             raise ErroreRitentabile(f"Generazione interrotta (finish_reason={motivo}).")
 
         testo = (scelta.get("message") or {}).get("content") or ""
@@ -748,8 +582,7 @@ class BackendOpenRouter(BackendLLM):
         try:
             contenuto = json.loads(testo)
         except json.JSONDecodeError as errore:
-            # Con `response_format` attivo un JSON malformato non puo' venire da
-            # un errore del modello: viene da una generazione interrotta a meta'.
+            # JSON malformato con `response_format` attivo = generazione interrotta.
             raise ErroreRitentabile(f"JSON non valido nella risposta: {errore}") from errore
 
         uso = grezza.get("usage") or {}
@@ -767,13 +600,7 @@ class BackendOpenRouter(BackendLLM):
 
 
 class BackendFittizio(BackendLLM):
-    """Backend deterministico per i test: nessuna rete, nessuna chiave.
-
-    `risposte` puo' essere un dizionario indicizzato per testo, oppure una
-    funzione che riceve la `Richiesta` e restituisce il contenuto. Le richieste
-    ricevute restano in `ricevute`, cosi' i test possono verificare cosa e' stato
-    effettivamente chiesto al modello.
-    """
+    """Backend per i test: `risposte` e' un dizionario per testo o una funzione; le richieste restano in `ricevute`."""
 
     def __init__(
         self,

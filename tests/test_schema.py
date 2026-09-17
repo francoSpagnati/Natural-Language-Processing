@@ -1,14 +1,4 @@
-"""
-Test dello schema dello stato paziente (step 1).
-
-Verificano soprattutto le proprieta' che hanno un *significato clinico*, non la
-serializzazione: che i tre stati di conoscenza restino distinti, e che i due
-filtri esposti come proprieta' selezionino davvero cio' che dicono. Sono i punti
-in cui un errore silenzioso arriverebbe fino al motore di raccomandazione.
-
-Esecuzione:
-    python3 -m unittest discover -s tests -v
-"""
+"""Test dello schema dello stato paziente (step 1)."""
 
 import sys
 import unittest
@@ -41,12 +31,7 @@ def provenienza() -> Provenienza:
 
 class TestStatiDiConoscenza(unittest.TestCase):
     def test_negato_e_ignoto_restano_distinti(self):
-        """"Il paziente non e' iperteso" e "non se ne parla" sono cose diverse.
-
-        E' la distinzione su cui poggia il filtro di sicurezza: una lista di
-        allergie vuota puo' significare "verificato, nessuna" oppure "non
-        sappiamo", e le due cose non autorizzano le stesse decisioni.
-        """
+        """"Il paziente non e' iperteso" e "non se ne parla" sono cose diverse."""
         self.assertNotEqual(StatoConoscenza.NEGATO, StatoConoscenza.IGNOTO)
         self.assertEqual(StatoConoscenza.NEGATO.value, "negato")
 

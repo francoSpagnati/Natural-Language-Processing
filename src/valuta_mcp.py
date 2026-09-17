@@ -1,20 +1,9 @@
 """Step 10bis - La valutazione del server MCP: dieci domande scritte prima.
 
-Le quattro corse dello step 10 hanno trovato tre difetti, ma quattro corse non
-sono una misura. Qui le domande sono **scritte prima di eseguirle**, ciascuna
-con l'esito atteso, e il modello locale le affronta una per una. Si conta:
-
-1. **strumento giusto** — il primo strumento chiamato e' quello atteso?
-2. **testo intatto** — se lo strumento riceve un'anamnesi, e' un pezzo del testo
-   dell'utente o una riscrittura? (il difetto della corsa 3 dello step 10)
-3. **risposta arrivata** — il modello chiude entro i giri previsti?
-
-Il modello e' `qwen3.5:4b` via ollama: costa zero, e la valutazione della skill
-`mcp-builder` la prevede con l'API Anthropic, che qui non si usa.
-
-Le anamnesi sono sintetiche.
-
-## Uso
+Per ogni domanda (con esito atteso) si conta: strumento giusto al primo
+colpo, testo passato intatto (non parafrasato), risposta entro i giri
+previsti. Modello `qwen3.5:4b` via ollama, anamnesi sintetiche.
+Vedi docs/10_tool_mcp.md.
 
     python3 src/valuta_mcp.py                 # tutte e dieci, ~1 h di CPU
     python3 src/valuta_mcp.py --solo 1 4 10   # un sottoinsieme
@@ -44,9 +33,7 @@ class Domanda:
     nota: str
 
 
-# Le dieci domande, decise prima della prima esecuzione. Coprono i cinque
-# strumenti, i due stili di scrittura (prosa e telegrafico) che allo step 10
-# hanno dato esiti diversi, un caso di sicurezza, e una domanda fuori ambito.
+# Le dieci domande, decise prima della prima esecuzione.
 DOMANDE: tuple[Domanda, ...] = (
     Domanda(1, "Segue cura per ipertensione arteriosa dal 2004. Scompenso cardiaco. "
                "In terapia: Furosemide 25 mg; Ramipril 5 mg. Che cosa aggiungeresti "

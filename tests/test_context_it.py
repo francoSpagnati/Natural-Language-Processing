@@ -1,12 +1,4 @@
-"""
-Test della logica ConText italiana (step 3).
-
-Ogni caso riproduce una formulazione realmente presente nelle anamnesi. Sono i
-test piu' importanti del progetto finora: un errore qui inverte il significato
-clinico di un'affermazione, e lo step 2 ha gia' mostrato dove porta — una
-menzione di "versamento pericardico" collegata al codice del versamento quando
-il referto dice che NON c'e'.
-"""
+"""Test della logica ConText italiana (step 3)."""
 
 import sys
 import unittest
@@ -50,18 +42,7 @@ class BaseConText(unittest.TestCase):
 
 
 class TestNonRiferisce(BaseConText):
-    """«Non riferisce X» e' una negazione, non un'affermazione.
-
-    Il difetto non era in un marcatore ma nella loro interazione: `non` apriva
-    l'ambito e `riferisce`, che e' un **terminatore**, lo chiudeva subito dopo,
-    lasciando l'entita' fuori dalla negazione. La correzione riconosce l'intera
-    espressione, cosi' l'ambito parte dopo di essa.
-
-    E' emerso costruendo la demo dello step 9, su un paziente scritto a mano:
-    il difetto e' stato trovato **usando** il dato, non misurandolo. Nel corpus
-    la famiglia "non riferit*" compare 48 volte in 48 referti, piu' di altre
-    espressioni gia' nel lessico.
-    """
+    """«Non riferisce X» e' una negazione, non un'affermazione."""
 
     def test_non_riferisce_nega(self):
         self.assertIn(Attributo.NEGAZIONE,
@@ -83,13 +64,7 @@ class TestNonRiferisce(BaseConText):
                 self.assertIn(Attributo.NEGAZIONE, self.attributi(frase, entita))
 
     def test_riferisce_da_solo_resta_un_terminatore(self):
-        """La correzione non deve rompere cio' per cui il terminatore esiste.
-
-        In «Nega diabete ma riferisce ipertensione» l'ipertensione NON e'
-        negata, ed e' esattamente il caso che ha messo `riferisce` fra i
-        terminatori. Se questo test si rompe, la correzione ha barattato un
-        errore con il suo opposto.
-        """
+        """La correzione non deve rompere cio' per cui il terminatore esiste."""
         testo = "Nega diabete ma riferisce ipertensione arteriosa."
         self.assertIn(Attributo.NEGAZIONE, self.attributi(testo, "diabete"))
         self.assertNotIn(Attributo.NEGAZIONE,
@@ -214,12 +189,7 @@ class TestNessunAttributo(BaseConText):
 
 
 class TestSoggettoFamiliare(unittest.TestCase):
-    """L'asse *experiencer*: distinguere il paziente dai suoi parenti.
-
-    Ogni frase e' presa dal corpus grezzo. Questi casi nascono dal confronto fra
-    pipeline A e B su 198 record, dove 21 disaccordi su 55 erano frasi di
-    familiarita' che nessuna delle due sapeva rappresentare.
-    """
+    """L'asse *experiencer*: distinguere il paziente dai suoi parenti."""
 
     def ambito(self, testo: str) -> str | None:
         ambiti = ambiti_familiarita(testo)
@@ -285,19 +255,7 @@ class TestSoggettoFamiliare(unittest.TestCase):
 
 
 class TestParenteNominatoDirettamente(unittest.TestCase):
-    """Il secondo modo di parlare di un parente: nominarlo, senza dire
-    "familiarita'".
-
-    Trovato aggiudicando a mano le menzioni dello step 6: «Zia e nonna
-    fibrillanti» riceveva il codice I48 attribuito al PAZIENTE. Condizione
-    giusta, codice giusto, persona sbagliata — il caso peggiore per il filtro
-    di sicurezza.
-
-    La regola e' stretta di proposito. Sulle 436 occorrenze di un termine di
-    parentela nel corpus, il 4% e' l'INFORMATORE e non il malato: marcare
-    quelle come familiari nasconderebbe una condizione vera del paziente, che
-    e' un errore peggiore di quello riparato qui.
-    """
+    """Il secondo modo di parlare di un parente: nominarlo, senza dire "familiarita'"."""
 
     def _familiari(self, testo):
         return [testo[a.inizio:a.fine] for a in ambiti_familiarita(testo)]

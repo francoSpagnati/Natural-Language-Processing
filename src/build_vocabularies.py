@@ -1,29 +1,11 @@
-"""
-Step 1 - Costruzione dei vocabolari chiusi (farmaci e condizioni).
+"""Step 1 - Costruzione dei vocabolari chiusi (farmaci e condizioni).
 
-Il vocabolario chiuso definisce lo *scope* del progetto: quali farmaci e quali
-condizioni sono rilevanti. Non definisce le relazioni cliniche fra loro, che
-verranno dalle knowledge base esterne allo step 7.
+Il vocabolario chiuso definisce lo scope: i farmaci osservati nei campi di
+terapia e confermati contro AIFA, le condizioni candidate ricavate dalla prosa
+(validate allo step 2). Nessuna voce si butta: quella non confermata si marca.
+Vedi docs/01_schema_e_vocabolari.md.
 
-PRINCIPIO SEGUITO: NON SI BUTTA VIA NIENTE
-    I file prodotti contengono ogni voce osservata, comprese quelle che nessuna
-    fonte esterna conferma. Una voce non confermata non viene scartata ne'
-    "aggiustata": viene marcata. Questo perche' il vocabolario serve anche a
-    ispezionare cosa il sistema ha mancato, e una voce cancellata in silenzio e'
-    invisibile, mentre una voce marcata `non_trovata` e' una domanda aperta che
-    si puo' andare a guardare.
-
-DIFFERENZA FRA I DUE VOCABOLARI
-    I farmaci sono elencati esplicitamente in due campi semi-strutturati del
-    dataset, quindi il loro vocabolario e' *osservato* e poi confermato contro
-    AIFA. Le condizioni non sono in nessun campo strutturato (verificato nello
-    step 0): il loro vocabolario e' solo *candidato*, ricavato dalla prosa, e
-    andra' validato contro una terminologia esterna nello step 2. La differenza
-    e' esplicita nei modelli: `VoceCondizione.codice` resta nullo per
-    costruzione in questo step.
-
-Esecuzione (richiede `src/explore_dataset.py` e `src/fetch_external_kb.py`):
-    python3 src/build_vocabularies.py
+    python3 src/build_vocabularies.py   (dopo explore_dataset.py e fetch_external_kb.py)
 """
 
 from __future__ import annotations
@@ -64,32 +46,17 @@ FONTE_AIFA = "AIFA - anagrafica confezioni (confezioni_fornitura.csv), CC-BY 4.0
 csv.field_size_limit(10**7)
 
 
-# ---------------------------------------------------------------------------
-# Indici AIFA
-# ---------------------------------------------------------------------------
+# --- Indici AIFA ---
 
 
 def normalizza(testo: str) -> str:
-    """Minuscolo, punteggiatura ridotta a spazi, spazi collassati.
-
-    La punteggiatura va neutralizzata perche' le due fonti separano
-    diversamente le associazioni: "Rosuvastatina/ezetimibe" contro
-    "rosuvastatina ezetimibe".
-    """
+    """Minuscolo, punteggiatura ridotta a spazi ("Rosuvastatina/ezetimibe" -> "rosuvastatina ezetimibe")."""
     testo = re.sub(r"[^a-z0-9/ ]", " ", testo.strip().lower())
     return re.sub(r"\s+", " ", testo).strip()
 
 
 def carica_indici_aifa() -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, str]]:
-    """Costruisce gli indici AIFA usati per confermare le voci del vocabolario.
-
-    Restituisce:
-      - denominazione commerciale -> principi attivi;
-      - denominazione commerciale -> codici ATC;
-      - descrizione ATC (5o livello) -> codice ATC.
-    Il terzo permette di confermare i principi attivi, che nel dataset compaiono
-    per nome e non per codice.
-    """
+    """Indici AIFA: commerciale -> principi, commerciale -> ATC, descrizione ATC (5o livello) -> codice."""
     den_a_principi: dict[str, set[str]] = defaultdict(set)
     den_a_atc: dict[str, set[str]] = defaultdict(set)
 
@@ -120,15 +87,7 @@ def carica_indici_aifa() -> tuple[dict[str, set[str]], dict[str, set[str]], dict
 def conferma_principio_attivo(
     principio: str, descrizione_a_atc: dict[str, str]
 ) -> tuple[EsitoConfermaEsterna, list[str]]:
-    """Cerca il principio attivo fra le descrizioni ATC di 5o livello.
-
-    Prima si tenta la corrispondenza esatta; se fallisce, si cerca una
-    descrizione ATC che *inizi* con il termine. Serve per le forme saline, che
-    AIFA scrive per esteso mentre il referto abbrevia: "Enoxaparina" contro
-    "ENOXAPARINA SODICA". Il prefisso e' sicuro nella direzione giusta
-    (dataset piu' corto di AIFA) e non nell'altra, quindi non genera falsi
-    accoppiamenti fra sostanze diverse.
-    """
+    """Il principio attivo fra le descrizioni ATC: esatto, poi per prefisso ("Enoxaparina" -> "ENOXAPARINA SODICA")."""
     chiave = normalizza(principio)
     if chiave in descrizione_a_atc:
         return EsitoConfermaEsterna.CONFERMATA, [descrizione_a_atc[chiave]]
@@ -143,9 +102,7 @@ def conferma_principio_attivo(
     return EsitoConfermaEsterna.NON_TROVATA, []
 
 
-# ---------------------------------------------------------------------------
-# Vocabolario dei farmaci
-# ---------------------------------------------------------------------------
+# --- Vocabolario dei farmaci ---
 
 
 def costruisci_vocabolario_farmaci(record, indici) -> Vocabolario:
@@ -159,7 +116,7 @@ def costruisci_vocabolario_farmaci(record, indici) -> Vocabolario:
     record_commerciali_dim: dict[str, set[int]] = defaultdict(set)
     occorrenze_ingresso: Counter = Counter()
     record_ingresso: dict[str, set[int]] = defaultdict(set)
-    # Evidenza interna: quale principio attivo il dataset associa a una radice.
+    # evidenza : quale principio attivo il dataset associa a una radice.
     radice_a_principio: dict[str, Counter] = defaultdict(Counter)
 
     for rec in record:
@@ -205,10 +162,7 @@ def costruisci_vocabolario_farmaci(record, indici) -> Vocabolario:
             )
         )
 
-    # --- nomi commerciali (ingresso + dimissione) --------------------------
-    # Uniti in una sola voce quando la radice coincide: "Lasix" in ingresso e
-    # "Lasix cpr. 25 mg" alla dimissione sono lo stesso medicinale, e tenerli
-    # separati gonfierebbe il vocabolario con duplicati.
+    # --- nomi commerciali (ingresso + dimissione), uniti per radice ---
     commerciali: dict[str, dict] = {}
     for nome, n in occorrenze_ingresso.most_common():
         radice = radice_nome_commerciale(nome)
@@ -245,9 +199,7 @@ def costruisci_vocabolario_farmaci(record, indici) -> Vocabolario:
         if not principi_aifa:
             esito = EsitoConfermaEsterna.NON_TROVATA
         elif principio_dataset is None:
-            # AIFA conosce il medicinale ma il dataset non ne dichiara mai il
-            # principio attivo: non c'e' nulla da confrontare, non e' un
-            # disaccordo.
+            # Il dataset non dichiara il principio: nulla da confrontare.
             esito = EsitoConfermaEsterna.NON_VERIFICATA
         else:
             testo_aifa = " | ".join(principi_aifa)
@@ -289,22 +241,16 @@ def costruisci_vocabolario_farmaci(record, indici) -> Vocabolario:
     )
 
 
-# ---------------------------------------------------------------------------
-# Vocabolario (candidato) delle condizioni
-# ---------------------------------------------------------------------------
+# --- Vocabolario (candidato) delle condizioni ---
 
-# Marcatori di negazione e incertezza osservati nel corpus. Qui servono solo a
-# *annotare* le voci candidate, cosi' si vede subito quali compaiono spesso in
-# contesto negato; la logica ConText vera e propria e' materiale dello step 3.
+# Marcatori di negazione e incertezza, qui solo per annotare le voci candidate.
 INDIZI_NEGAZIONE = [
     "nega", "non ", "assenza di", "esclude", "si esclude", "escluso",
     "negativo per", "no ", "mai ",
 ]
 INDIZI_INCERTEZZA = ["sospetta", "sospetto", "possibile", "probabile", "verosimile", "dubbio"]
 
-# Frasi che non sono condizioni ma frammenti narrativi ricorrenti: iniziano con
-# un verbo o descrivono il ricovero invece del paziente. Escluderle a monte
-# tiene il vocabolario candidato leggibile.
+# Frammenti narrativi ricorrenti che non sono condizioni.
 PATTERN_FRAMMENTO_NARRATIVO = re.compile(
     r"^(si ricovera|ricovero|si esegue|esegue|eseguit|effettuat|in data|"
     r"viene |veniva |prosegue|riferisce|si segnala|come da|nella norma|"
@@ -312,10 +258,7 @@ PATTERN_FRAMMENTO_NARRATIVO = re.compile(
     re.IGNORECASE,
 )
 
-# Intestazione di sezione rimasta attaccata al frammento: nelle anamnesi il
-# testo e' scritto come "Fattori di rischio: obesita si", e senza rimuovere il
-# prefisso la stessa condizione genererebbe piu' voci distinte a seconda della
-# sezione in cui compare.
+# Intestazione di sezione attaccata al frammento ("Fattori di rischio: obesita si").
 PATTERN_INTESTAZIONE_INCOLLATA = re.compile(
     r"^(fattori di rischio|comorbidit[aà]|interventi pregressi|anamnesi\s*\w*|"
     r"diagnosi|allergie e intolleranze|apr|apf|terapia domiciliare|"
@@ -325,13 +268,7 @@ PATTERN_INTESTAZIONE_INCOLLATA = re.compile(
 
 
 def ripulisci_frammento(frammento: str) -> str:
-    """Toglie intestazione di sezione e punteggiatura di coda.
-
-    Senza questa normalizzazione lo stesso concetto si presenta piu' volte:
-    "nega episodi sincopali" e "nega episodi sincopali." erano due voci
-    separate, e "obesita si" compariva sia nuda sia preceduta da
-    "Fattori di rischio:".
-    """
+    """Toglie intestazione di sezione e punteggiatura di coda, per non sdoppiare le voci."""
     frammento = PATTERN_INTESTAZIONE_INCOLLATA.sub("", frammento.strip())
     return frammento.strip(" .,;:-").strip()
 
@@ -343,13 +280,7 @@ PATTERN_MISURA_O_DATA = re.compile(r"\d{2}[./]\d{2}|\d+\s*(mg|ml|mm|cm|%|mmhg|bp
 
 
 def costruisci_vocabolario_condizioni(record, occorrenze_minime: int = 3) -> Vocabolario:
-    """Ricava dalla prosa le condizioni candidate, con contesti e indizi.
-
-    `occorrenze_minime` filtra la coda: sotto le 3 occorrenze il rapporto fra
-    condizioni reali e rumore narrativo peggiora molto, e queste voci vanno
-    comunque validate a mano contro una terminologia. La soglia e' un parametro
-    proprio per poterla abbassare quando la terminologia sara' disponibile.
-    """
+    """Le condizioni candidate dalla prosa, con contesti e indizi; `occorrenze_minime` taglia la coda rumorosa."""
     occorrenze: Counter = Counter()
     record_per_voce: dict[str, set[int]] = defaultdict(set)
     contesti: dict[str, list[str]] = defaultdict(list)
@@ -384,9 +315,7 @@ def costruisci_vocabolario_condizioni(record, occorrenze_minime: int = 3) -> Voc
             record_distinti=len(record_per_voce[testo]),
             esempi_contesto=contesti[testo],
             indizi_negazione=sorted(negazioni[testo]),
-            # Nullo per costruzione: nessuna terminologia esterna e' ancora
-            # stata scelta, e inventare un codice sarebbe esattamente il tipo di
-            # ambiguita' che il progetto vuole evitare.
+            # Nullo per costruzione: la terminologia arriva allo step 2.
             codice=None,
             sistema_codifica=None,
             stato_normalizzazione=StatoNormalizzazione.NON_TENTATO,
@@ -414,12 +343,7 @@ def costruisci_vocabolario_condizioni(record, occorrenze_minime: int = 3) -> Voc
 
 
 def scrivi_json(modello, percorso: Path) -> None:
-    """Serializza un modello Pydantic in JSON indentato e leggibile.
-
-    `indent=2` e `ensure_ascii` disattivato non sono estetica: questi file vanno
-    ispezionati a mano per capire cosa il sistema ha mancato, e un JSON su una
-    riga sola con gli accenti sfuggiti non e' ispezionabile.
-    """
+    """Un modello Pydantic in JSON indentato e leggibile (i file vanno ispezionati a mano)."""
     percorso.parent.mkdir(parents=True, exist_ok=True)
     percorso.write_text(
         modello.model_dump_json(indent=2, exclude_none=False), encoding="utf-8"

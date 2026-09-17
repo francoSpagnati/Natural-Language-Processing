@@ -1,34 +1,12 @@
-"""
-Step 2 - Estrazione della terminologia ICD-10 italiana dal PDF ufficiale.
+"""Step 2 - Estrazione della terminologia ICD-10 italiana dal PDF ufficiale.
 
-FONTE
-    "ICD-10 2019 in italiano - Volume 1, Elenco sistematico", pubblicato dal
-    Centro Collaboratore Italiano dell'OMS per la Famiglia delle Classificazioni
-    Internazionali (Regione Autonoma Friuli Venezia Giulia - Azienda Sanitaria
-    Universitaria Giuliano Isontina), distribuito da reteclassificazioni.it.
-    E' la traduzione italiana ufficiale dell'ICD-10 dell'OMS.
+Fonte: "ICD-10 2019 in italiano - Volume 1, Elenco sistematico" (Centro
+Collaboratore Italiano OMS, reteclassificazioni.it), l'unica terminologia
+autorevole e in italiano disponibile (alternative misurate in docs/02). Il
+PDF ha testo estraibile: `pdftotext -layout`, poi un parser a stati che
+raccoglie titoli e termini "Incl." (i sinonimi che servono al gazetteer); gli
+"Escl." sono rimandi e restano a parte.
 
-PERCHE' PARTIRE DA UN PDF
-    Non e' la strada che si sceglierebbe potendo. E' pero' l'unica fonte
-    verificata che soddisfi i due vincoli del progetto: essere una terminologia
-    autorevole e citabile, e essere **in italiano** come i referti. Le
-    alternative sono state misurate e scartate (vedi docs/02): Wikidata copre 8
-    su 20 dei termini cardiologici che ci servono, SNOMED CT non e' licenziabile
-    in Italia, e l'API del portale delle classificazioni richiede credenziali.
-    Il PDF ha testo estraibile (e' generato da Word, non scansionato), quindi
-    l'estrazione e' deterministica e ripetibile, non un OCR probabilistico.
-
-I TERMINI "Incl." SONO IL VERO VALORE
-    Oltre al titolo ufficiale di ogni codice, l'ICD elenca i termini inclusi:
-    sono i sinonimi con cui la stessa condizione compare nella pratica clinica,
-    ed e' esattamente cio' che serve al gazetteer della pipeline A e alla
-    generazione dei candidati per l'entity linking della pipeline C.
-
-    I termini "Escl." NON vengono raccolti come sinonimi: per definizione
-    rimandano ad *altri* codici, quindi usarli qui produrrebbe collegamenti
-    sbagliati. Vengono conservati a parte come rimandi.
-
-Esecuzione:
     python3 src/extract_icd10.py
 """
 
@@ -71,17 +49,8 @@ PATTERN_ESCLUSI = re.compile(r"^\s*Escl\.\s*:\s*(.*)$")
 MARCATORI_ELENCO = "⚬•"
 PATTERN_ELENCO = re.compile(rf"^\s*[{MARCATORI_ELENCO}]\s*(.*)$")
 
-# Nel volume cartaceo i sotto-elenchi sono spesso raccolti da una *graffa* che
-# porta un suffisso comune a destra, cosi':
-#     ipertrofia:
-#      * adenofibromatosa            della prostata
-#      * (benigna)
-#      * del lobo medio
-# dove "della prostata" vale per tutte e tre le voci. `pdftotext` appiattisce la
-# graffa accodando il suffisso alla prima riga del gruppo, separato da molti
-# spazi. Senza riconoscerlo, due termini su tre perderebbero la parte che li
-# rende identificabili ("ipertrofia benigna" invece di "ipertrofia benigna
-# della prostata"). Tre o piu' spazi interni segnalano questa situazione.
+# La graffa del volume ("* adenofibromatosa       della prostata"): il
+# suffisso comune vale per tutto il gruppo; tre o piu' spazi lo segnalano.
 PATTERN_SUFFISSO_GRAFFA = re.compile(r"^(.*?\S)\s{3,}(\S.*)$")
 
 # Rimandi ad altri codici in coda a un termine: "(I27.2)", "(O10-O11, O13-O16)".
@@ -112,14 +81,7 @@ class VoceICD:
 
 
 def estrai_testo(pdf: Path, destinazione: Path) -> str:
-    """Converte il PDF in testo con `pdftotext -layout`.
-
-    L'opzione `-layout` conserva la spaziatura delle colonne: e' cio' che
-    permette di distinguere una categoria a 3 caratteri (rientrata) da una
-    sottocategoria a 4 (a margine), che altrimenti sarebbero indistinguibili.
-    Il testo estratto viene salvato per non dover riconvertire 890 pagine a
-    ogni esecuzione e per poter ispezionare a mano cosa il parser ha letto.
-    """
+    """PDF -> testo con `pdftotext -layout` (la spaziatura distingue categorie e sottocategorie); salvato su disco."""
     if destinazione.exists():
         return destinazione.read_text(encoding="utf-8")
 
@@ -133,26 +95,11 @@ def estrai_testo(pdf: Path, destinazione: Path) -> str:
 
 
 def espandi_parentetici(termine: str) -> list[str]:
-    """Espande la convenzione ICD dei modificatori fra parentesi.
+    """Espande i modificatori opzionali fra parentesi dell'ICD, nella loro posizione.
 
-    Nell'ICD le parole fra parentesi sono *opzionali*: il termine
-        "diabete (mellito) (non obeso) a esordio nell'eta' adulta"
-    vale come "diabete a esordio nell'eta' adulta", come "diabete mellito a
-    esordio nell'eta' adulta", e cosi' via.
-
-    I modificatori vanno reinseriti **nella posizione in cui stanno**, non
-    accodati in fondo. Accodarli funzionava per i casi in cui la parentesi e'
-    gia' finale ("ipertensione (arteriosa)") ma produceva forme prive di senso
-    quando e' in mezzo, e soprattutto **non generava** la forma piu' comune di
-    tutte: da "diabete (mellito) ..." non usciva mai "diabete mellito".
-
-    Generiamo tre gruppi di forme: nessun modificatore, ciascun modificatore
-    preso singolarmente, e tutti insieme. Non l'insieme delle combinazioni:
-    con sette parentetici sarebbero 128 forme, quasi tutte mai scritte da
-    nessuno, e gonfierebbero il gazetteer di rumore.
-
-    I parentetici che contengono un codice sono rimandi, non modificatori, e
-    vengono rimossi in ogni forma.
+    "diabete (mellito) (non obeso) ..." -> senza modificatori, con ciascuno da
+    solo, con tutti; non tutte le combinazioni. Le parentesi con un codice
+    sono rimandi e si tolgono.
     """
     # Segmenta il termine alternando testo fisso e parentetici, cosi' la
     # ricostruzione puo' decidere per ciascuno se tenerlo o toglierlo.
@@ -201,24 +148,14 @@ def pulisci_termine(testo: str) -> str:
 
 
 def analizza(testo: str) -> list[VoceICD]:
-    """Percorre il testo estratto e ricostruisce le voci della classificazione.
-
-    Il parser e' a stati: tiene traccia della voce corrente e del blocco
-    (inclusi/esclusi) in cui si trova, perche' un termine puo' occupare piu'
-    righe e i sotto-elenchi puntati vanno ricomposti con il loro prefisso
-    ("malattia:" + "cardiorenale" -> "malattia cardiorenale").
-    """
+    """Parser a stati sul testo estratto: voce corrente, blocco Incl./Escl., sotto-elenchi ricomposti col prefisso."""
     voci: dict[str, VoceICD] = {}
     corrente: VoceICD | None = None
     blocco: str | None = None      # "inclusi" | "esclusi" | None
     prefisso_elenco = ""           # termine che introduce un sotto-elenco
     gruppo_corrente: list[tuple] = []   # bullet in attesa del suffisso di graffa
     suffisso_graffa = ""
-    # Le note istruttive dell'ICD ("Utilizzare un codice aggiuntivo...") vanno
-    # a capo. Filtrare solo la prima riga lascerebbe passare la coda come se
-    # fosse un termine: da "...manifestazione in atto del diabete / mellito."
-    # sopravviveva "mellito", che nel gazetteer diventava un falso positivo
-    # verso il diabete in gravidanza.
+    # Le note istruttive vanno a capo: si scarta anche la coda.
     dentro_nota = False
     capitolo: str | None = None
 
@@ -245,9 +182,7 @@ def analizza(testo: str) -> list[VoceICD]:
                 suffisso_graffa = ""
                 dentro_nota = False
                 codice, titolo = match.group(1), pulisci_termine(match.group(2))
-                # Il PDF ripete le categorie nell'indice iniziale e poi
-                # nell'elenco sistematico: teniamo la prima occorrenza con un
-                # titolo e arricchiamo quella, invece di creare doppioni.
+                # Le categorie compaiono due volte nel PDF: si arricchisce la prima.
                 if codice not in voci:
                     voci[codice] = VoceICD(
                         codice=codice, titolo=titolo, livello=livello, capitolo=capitolo
@@ -325,20 +260,14 @@ def analizza(testo: str) -> list[VoceICD]:
 
 
 def _chiudi_gruppo(gruppo: list[tuple], suffisso: str) -> None:
-    """Registra i termini di un gruppo di elenco, applicando il suffisso comune.
-
-    Il suffisso della graffa si applica a *tutte* le voci del gruppo, non solo a
-    quella su cui `pdftotext` lo ha appiattito.
-    """
+    """Registra i termini di un gruppo, applicando a tutti il suffisso della graffa."""
     for voce_icd, blocco, prefisso, termine in gruppo:
         parti = [prefisso, termine, suffisso]
         completo = " ".join(p for p in parti if p).strip()
         _aggiungi(voce_icd, blocco, pulisci_termine(completo))
 
 
-# Righe che nell'ICD sono istruzioni al codificatore, non termini clinici.
-# Finivano fra i sinonimi ("Utilizzare un codice aggiuntivo se si desidera
-# identificare...") e da li' nel gazetteer.
+# Istruzioni al codificatore, non termini clinici.
 PATTERN_NOTA_ISTRUTTIVA = re.compile(
     r"^(utilizzare|usare|codificare|questa categoria|questo capitolo|nota|"
     r"include|comprende|per |se si desidera|i codici|il codice)\b",
@@ -358,12 +287,7 @@ def _aggiungi(voce: VoceICD, blocco: str, termine: str) -> None:
 
 
 def costruisci_indice_termini(voci: list[VoceICD]) -> dict[str, list[str]]:
-    """Costruisce l'indice termine -> codici, con i parentetici espansi.
-
-    E' la struttura che servira' davvero al gazetteer e all'entity linking: dato
-    un testo, quali codici puo' denotare. Un termine puo' mappare a piu' codici;
-    non scegliamo qui, la disambiguazione e' compito della pipeline.
-    """
+    """Indice termine -> codici con i parentetici espansi; la disambiguazione e' delle pipeline."""
     indice: dict[str, set[str]] = {}
     for voce in voci:
         for termine in [voce.titolo, *voce.inclusi]:

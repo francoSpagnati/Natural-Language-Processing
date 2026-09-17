@@ -1,12 +1,4 @@
-"""Test della traccia di provenienza sul grafo (step 9ter).
-
-La traccia e' la risposta alla domanda «da dove viene questa raccomandazione»,
-e la sua proprieta' fondante e' che **la risposta viene dal grafo**, non dai
-dizionari da cui il grafo e' stato costruito. Se qualcuno la riscrivesse come
-un attraversamento di strutture Python i test continuerebbero a passare sui
-valori ma la proprieta' sarebbe persa — per questo alcuni di questi test
-verificano la *forma del grafo*, non solo il risultato.
-"""
+"""Test della traccia di provenienza sul grafo (step 9ter)."""
 
 import sys
 import unittest
@@ -66,12 +58,7 @@ class TestGrafoDelPaziente(unittest.TestCase):
         self.assertEqual(len(asserzioni), 1)
 
     def test_le_menzioni_sovrapposte_di_due_pipeline_fanno_UNA_asserzione(self):
-        """E' la decisione di modellazione dello step 7.
-
-        Due pipeline che riconoscono lo stesso punto del referto non producono
-        due fatti: producono un fatto sostenuto da due menzioni, e il numero di
-        agenti diventa interrogabile.
-        """
+        """E' la decisione di modellazione dello step 7."""
         g = grafo_del_paziente({
             "A": stato_paziente([condizione("scompenso", "I50.9", 0, 9)]),
             "B": stato_paziente([condizione("scompenso cardiaco", "I50.9", 0, 18,
@@ -107,12 +94,7 @@ class TestGrafoDelPaziente(unittest.TestCase):
         self.assertTrue(any("ICD-10" in str(f) for f in fonti))
 
     def test_la_regola_finisce_nel_grafo(self):
-        """Non solo CHI ha prodotto la menzione, ma COME.
-
-        E' la differenza fra `icd:termine_esatto` e
-        `icd:generalizzazione_ambigua`, cioe' fra un codice certo e uno che
-        qualcuno dovrebbe guardare.
-        """
+        """Non solo CHI ha prodotto la menzione, ma COME."""
         g = grafo_del_paziente(
             {"A": stato_paziente([condizione("scompenso", "I50.9", 0, 9,
                                              regola="icd:generalizzazione_ambigua")])},
@@ -172,12 +154,7 @@ class TestTracciaDellaRaccomandazione(unittest.TestCase):
         self.assertEqual((menzione["inizio"], menzione["fine"]), (0, 9))
 
     def test_una_proposta_senza_regola_lo_dichiara(self):
-        """Il 40% delle prescrizioni che nessuna linea guida regola.
-
-        Dirlo e' parte della risposta: «non so perche', ma in questo reparto si
-        fa» e' un'informazione diversa da una raccomandazione citata, e
-        confonderle sarebbe la bugia piu' facile da raccontare.
-        """
+        """Il 40% delle prescrizioni che nessuna linea guida regola."""
         t = traccia_raccomandazione(self.g, "D07AC", self.caso,
                                     RankerSimbolico(()))
         self.assertEqual(t["indicazioni"], [])
@@ -207,20 +184,7 @@ class TestTracciaDellaRaccomandazione(unittest.TestCase):
 
 
 class TestLeDueProiezioniNonDivergono(unittest.TestCase):
-    """Il grafo e lo stato compatto devono dire gli stessi fatti.
-
-    Il sistema legge le uscite delle pipeline in due forme: lo **stato
-    compatto** (dizionari) che usano il filtro dello step 8 e il ranker dello
-    step 9, e il **grafo** che usa la traccia. La divisione e' voluta e
-    misurata — un'interrogazione SPARQL costa 12,4 ms contro 0,073 µs di una
-    lettura da dizionario, e le 5 863 valutazioni dello step 8 diventerebbero
-    73 secondi di sole interrogazioni — ma apre un rischio: due proiezioni
-    della stessa sorgente che si allontanano in silenzio.
-
-    Questo test e' la guardia. Se si rompe, una delle due proiezioni ha
-    cominciato a vedere fatti che l'altra non vede, e la traccia mostrerebbe la
-    provenienza di una raccomandazione decisa su altro.
-    """
+    """Il grafo e lo stato compatto devono dire gli stessi fatti."""
 
     def test_i_codici_del_grafo_sono_quelli_dello_stato_compatto(self):
         condizioni = [condizione("scompenso", "I50.9", 0, 9),
@@ -250,12 +214,7 @@ class TestLeDueProiezioniNonDivergono(unittest.TestCase):
         self.assertEqual(compatta, {"I50.9", "I10"})
 
     def test_il_grafo_conserva_anche_cio_che_lo_stato_scarta(self):
-        """Conservare, non cancellare: il vincolo del progetto.
-
-        La condizione negata non e' un fatto del paziente e il filtro non deve
-        vederla, ma deve restare **nel grafo**, marcata. E' il modo in cui si
-        puo' controllare che sia stata scartata per la ragione giusta.
-        """
+        """Conservare, non cancellare: il vincolo del progetto."""
         g = grafo_del_paziente({"A": stato_paziente([
             condizione("angina", "I20", 0, 6, stato=StatoConoscenza.NEGATO)])},
             0, {}, {})

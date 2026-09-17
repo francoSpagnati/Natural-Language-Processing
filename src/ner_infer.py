@@ -1,16 +1,8 @@
 """Step 5 - Riconoscimento delle entita' con il modello addestrato.
 
-Separato da `ner_train.py` perche' i due hanno cicli di vita diversi:
-l'addestramento si esegue una volta e produce un artefatto, l'inferenza viene
-importata dalla pipeline e deve restare leggera.
-
-LA SEGMENTAZIONE DEVE ESSERE LA STESSA DELL'ADDESTRAMENTO
-    Il modello ha visto segmenti tagliati ai confini di frase e lunghi al
-    massimo 1.000 caratteri. Dandogli in inferenza un referto intero, tutto cio'
-    che eccede la finestra verrebbe troncato in silenzio e le menzioni nella
-    coda sparirebbero senza che nulla lo segnali. Si riusa quindi la stessa
-    funzione `segmenta` di `silver_labels`, e gli offset vengono riportati sul
-    testo completo sommando l'inizio del segmento.
+Separato dall'addestramento perche' importato dalla pipeline. Usa la stessa
+`segmenta` di `silver_labels`: un referto intero eccederebbe la finestra del
+modello e la coda sparirebbe in silenzio; gli offset tornano sul testo completo.
 """
 
 from __future__ import annotations

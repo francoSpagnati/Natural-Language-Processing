@@ -1,11 +1,4 @@
-"""
-Test del gazetteer e della pipeline A (step 3).
-
-I test sul gazetteer usano i vocabolari veri, perche' il loro comportamento
-dipende dal contenuto: verificarne le regole su un vocabolario finto direbbe
-poco. Vengono saltati se i file intermedi non sono stati generati, cosi' chi
-clona il repository non vede fallimenti spuri.
-"""
+"""Test del gazetteer e della pipeline A (step 3)."""
 
 import sys
 import unittest

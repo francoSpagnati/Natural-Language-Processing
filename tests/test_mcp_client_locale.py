@@ -1,13 +1,4 @@
-"""L'host MCP locale: il controllo a valle contro la parafrasi.
-
-Il server non puo' sapere se l'anamnesi che riceve e' quella del clinico: nella
-corsa 3 dello step 10 il modello l'ha riscritta trasformando «iperteso» in
-«Ipotensione», e la catena di provenienza e' rimasta formalmente corretta su un
-fatto invertito. Il client invece il testo dell'utente lo ha, e puo'
-confrontarlo. Questi test fissano che cosa conta come «intatto».
-
-Nessun test parla con ollama o con il server: le funzioni sono pure.
-"""
+"""L'host MCP locale: il controllo a valle contro la parafrasi."""
 
 from __future__ import annotations
 

@@ -1,14 +1,4 @@
-"""
-Test della pipeline C (step 5): etichette silver e allineamento del NER.
-
-Le parti che qui si verificano sono quelle dove un errore e' silenzioso e
-distruttivo: un allineamento sbagliato fra intervalli di caratteri e sottotoken
-non fa fallire nulla, addestra semplicemente il modello sulle etichette sbagliate
-e si manifesta molto piu' tardi come "il NER non funziona".
-
-Nessun test scarica un modello: l'allineamento e' provato su offset costruiti a
-mano, che e' anche il modo per controllarne i casi limite.
-"""
+"""Test della pipeline C (step 5): etichette silver e allineamento del NER."""
 
 import sys
 import unittest
@@ -166,12 +156,7 @@ class TestAllineamento(unittest.TestCase):
         self.assertEqual(allinea(offsets, entita), [0, 0])
 
     def test_sovrapposizione_parziale_conta(self):
-        """Un sottotoken che entra anche solo in parte nell'entita' va etichettato.
-
-        Se contiene l'inizio dell'entita' e' il suo primo sottotoken, quindi `B-`
-        anche se comincia prima: il tokenizzatore puo' fondere la fine della
-        parola precedente con l'inizio della menzione.
-        """
+        """Un sottotoken che entra anche solo in parte nell'entita' va etichettato."""
         offsets = [(0, 8)]
         entita = [{"inizio": 4, "fine": 12, "etichetta": ETICHETTA_CONDIZIONE}]
         self.assertEqual(allinea(offsets, entita), [self._indice(f"B-{ETICHETTA_CONDIZIONE}")])
@@ -263,14 +248,7 @@ class TestIndiceSimilarita(unittest.TestCase):
     "terminologia ICD-10 non generata",
 )
 class TestCollegatoreICD(unittest.TestCase):
-    """Il punto piu' delicato dello step 5.
-
-    La similarita' ortografica NON separa i collegamenti corretti da quelli
-    sbagliati: misurata sul lessico reale, il punteggio piu' alto (0,60) e'
-    l'errore "insufficienza mitralica moderata" -> "...congenita", mentre il
-    collegamento corretto "precordialgie" -> "dolore precordiale" sta a 0,41.
-    Per questo la similarita' propone e non risolve mai.
-    """
+    """Il punto piu' delicato dello step 5."""
 
     @classmethod
     def setUpClass(cls):

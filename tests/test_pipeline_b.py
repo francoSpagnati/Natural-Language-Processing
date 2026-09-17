@@ -1,16 +1,4 @@
-"""
-Test della pipeline B (step 4): backend LLM, ancoraggio e conversione.
-
-Girano tutti senza rete e senza chiave: il backend reale e' sostituito da
-`BackendFittizio` e i risolutori da doppi minimi. E' una scelta deliberata --
-una suite che dipendesse dall'API sarebbe lenta, costosa e verde o rossa a
-seconda del carico dei server, quindi inutile come rete di sicurezza.
-
-Cio' che qui si verifica non e' la bravura del modello, che non e'
-deterministica, ma il contratto che gli sta intorno: che una citazione inventata
-venga riconosciuta come tale, che il codice non provenga mai dal modello, e che
-la cache non restituisca la risposta di una domanda diversa.
-"""
+"""Test della pipeline B (step 4): backend LLM, ancoraggio e conversione."""
 
 import io
 import json
@@ -195,12 +183,7 @@ class TestCache(unittest.TestCase):
 
 
 class TestQuota(unittest.TestCase):
-    """La quota gratuita e' giornaliera, non al minuto: la distinzione conta.
-
-    Un limite al minuto si supera aspettando; uno al giorno no. Trattarli allo
-    stesso modo significa spendere minuti in ritentativi gia' persi e nascondere
-    la vera causa dell'interruzione.
-    """
+    """La quota gratuita e' giornaliera, non al minuto: la distinzione conta."""
 
     CORPO_GIORNALIERO = json.dumps(
         {
@@ -325,12 +308,7 @@ class TestInterpretazioneRisposta(unittest.TestCase):
 
 
 class TestBackendLocale(unittest.TestCase):
-    """Il backend locale deve essere intercambiabile con quello remoto.
-
-    Non si verifica la bravura del modello ma il contratto: stessa interfaccia,
-    stessa cache, schema imposto al decodificatore, e un errore leggibile quando
-    la risposta non e' utilizzabile.
-    """
+    """Il backend locale deve essere intercambiabile con quello remoto."""
 
     class BackendFinto(BackendOllama):
         risposte: list = []
@@ -486,14 +464,7 @@ class TestBackendOpenRouter(unittest.TestCase):
         }
 
     def test_una_risposta_troncata_viene_ritentata(self):
-        """Regressione costata 490 record su 1 000.
-
-        `IncompleteRead` — la connessione chiusa a meta' risposta — discende da
-        `http.client.HTTPException` e NON da `URLError`. Il ciclo dei tentativi
-        catturava solo la seconda famiglia, quindi il guasto piu' transitorio
-        che esista usciva dal ciclo come se fosse definitivo e abbatteva la
-        corsa dopo 75 minuti di lavoro.
-        """
+        """Regressione costata 490 record su 1 000."""
         import http.client
 
         backend = self._backend([http.client.IncompleteRead(b"met"), self._ok()])
@@ -531,14 +502,7 @@ class TestBackendOpenRouter(unittest.TestCase):
         self.assertFalse(formato["json_schema"]["schema"]["additionalProperties"])
 
     def test_instrada_solo_verso_chi_applica_i_parametri(self):
-        """Il test che conta piu' di tutti gli altri.
-
-        OpenRouter puo' servire la stessa richiesta da fornitori diversi, e non
-        tutti applicano `response_format`. Uno che lo ignora restituisce
-        comunque un JSON plausibile, generato senza vincolo, e nulla nella
-        pipeline se ne accorgerebbe: la garanzia strutturale diventerebbe una
-        speranza, in silenzio. `require_parameters` lo impedisce.
-        """
+        """Il test che conta piu' di tutti gli altri."""
         backend = self._backend([self._ok()])
         backend.genera(Richiesta(istruzioni="i", testo="t", schema={}))
         self.assertTrue(self.BackendFinto.corpi[0]["provider"]["require_parameters"])
@@ -581,13 +545,7 @@ class TestBackendOpenRouter(unittest.TestCase):
             )
 
     def test_una_generazione_interrotta_viene_ritentata(self):
-        """Regressione dalla corsa vera.
-
-        Su 200 record due sono falliti — uno con JSON troncato a meta' di una
-        stringa, uno con `finish_reason=error` — e **rilanciandoli sono riusciti
-        entrambi al primo colpo**. Erano guasti transitori del fornitore, ma
-        uscivano dal ciclo dei ritentativi e richiedevano una mano.
-        """
+        """Regressione dalla corsa vera."""
         backend = self._backend([
             {"choices": [{"finish_reason": "error", "message": {"content": ""}}]},
             self._ok('{"a": 1}'),
@@ -747,13 +705,8 @@ class TestConversione(unittest.TestCase):
         self.assertTrue(any("non ritrovate" in n for n in stato.note_estrazione))
 
     def test_un_farmaco_del_modello_e_sempre_narrativo(self):
-        """Il modello vede solo l'anamnesi, quindi ogni farmaco che segnala e'
-        un farmaco raccontato, non una voce di terapia.
-
-        Se dichiarasse un altro campo — lo schema ammette ancora i tre valori,
-        perche' e' condiviso con le altre pipeline — la citazione verrebbe
-        cercata nel campo sbagliato, dove potrebbe perfino trovarsi per caso.
-        `campo_del_modello` rende quell'errore impossibile invece che raro.
+        """Il modello vede solo l'anamnesi, quindi ogni farmaco che segnala e' un
+        farmaco raccontato, non una voce di terapia.
         """
         stato = self._converti(
             EstrazioneLLM.model_validate(
@@ -895,13 +848,7 @@ class TestMenzioniComposte(unittest.TestCase):
     "terminologia ICD-10 non generata",
 )
 class TestGeneralizzazioneICD(unittest.TestCase):
-    """Il lessico clinico e quello del volume ICD divergono.
-
-    Il volume elenca la fibrillazione atriale nelle sue varie forme ma
-    non "fibrillazione atriale" da sola. Quando tutte le forme qualificate
-    ricadono in un'unica categoria, quella categoria e' cio' che la menzione
-    generica denota, e il suo codice a 3 caratteri e' una codifica ICD-10 valida.
-    """
+    """Il lessico clinico e quello del volume ICD divergono."""
 
     @classmethod
     def setUpClass(cls):
@@ -999,13 +946,7 @@ class TestTerapiaDalParserDeterministico(unittest.TestCase):
 
 
 class TestComposizioneTesto(unittest.TestCase):
-    """Al modello arriva la sola anamnesi.
-
-    I due campi di terapia sono liste con delimitatori, che un parser
-    deterministico legge col 100% di precisione e richiamo contro il campo
-    stesso, mentre il modello si fermava al 99,3%. Mandarceli costava circa un
-    terzo della corsa per rifare peggio un lavoro gia' fatto.
-    """
+    """Al modello arriva la sola anamnesi."""
 
     def test_i_campi_di_terapia_non_arrivano_al_modello(self):
         testo = extract_b.componi_testo(
@@ -1079,13 +1020,7 @@ class TestCampionamento(unittest.TestCase):
 
 
 class TestRipresaDellaCorsa(unittest.TestCase):
-    """Il checkpoint serve proprio quando qualcosa va storto.
-
-    Una corsa di undici ore verra' interrotta: quello che conta e' che
-    riprenderla non rifaccia il lavoro e, soprattutto, che non mescoli nella
-    stessa cartella risultati ottenuti con modelli o prompt diversi -- una
-    cartella cosi' non sarebbe piu' interpretabile da nessuno.
-    """
+    """Il checkpoint serve proprio quando qualcosa va storto."""
 
     class Opzioni:
         motore = "locale"
@@ -1189,14 +1124,7 @@ class TestMisuraProduzione(unittest.TestCase):
             self.assertEqual(m["per_stato"]["affermato"], 1)
 
     def test_conta_anche_le_allergie_non_ancorate(self):
-        """Le allergie contavano nel denominatore ma non nel numeratore.
-
-        Il tasso di menzioni non ritrovate risultava piu' basso del vero, e su
-        200 record ha nascosto il difetto piu' grave della pipeline: allergie a
-        farmaci che il paziente sta assumendo, inventate su referti che di
-        allergie non parlano. Sono anzi il tipo di menzione che il modello
-        parafrasa piu' spesso.
-        """
+        """Le allergie contavano nel denominatore ma non nel numeratore."""
         with tempfile.TemporaryDirectory() as cartella:
             percorso = Path(cartella)
             stato = extract_b.converti(
@@ -1221,13 +1149,7 @@ class TestMisuraProduzione(unittest.TestCase):
 
 
 class TestTettoElementi(unittest.TestCase):
-    """Il tetto agli elementi degli array e' un vincolo, non un consiglio.
-
-    Due record su 200 hanno esaurito trenta minuti di generazione perche' il
-    modello trasformava ogni proposizione della narrazione in una "condizione" e
-    l'array non si chiudeva mai. Un'istruzione nel prompt il modello puo'
-    ignorarla; `maxItems` lo applica il decodificatore vincolato.
-    """
+    """Il tetto agli elementi degli array e' un vincolo, non un consiglio."""
 
     def test_lo_schema_dichiara_il_tetto_al_decodificatore(self):
         grezzo = schema_estrazione_llm()
@@ -1252,13 +1174,7 @@ class TestTettoElementi(unittest.TestCase):
 
 
 class TestCampoDelleAllergie(unittest.TestCase):
-    """Le allergie devono dichiarare da quale campo vengono, come le altre entita'.
-
-    Prima la pipeline le attribuiva d'ufficio all'anamnesi: quando il modello
-    citava correttamente un altro campo l'ancoraggio falliva per costruzione, e
-    59 delle 111 allergie non ancorate della prima corsa erano testo che nel
-    record esisteva davvero, altrove.
-    """
+    """Le allergie devono dichiarare da quale campo vengono, come le altre entita'."""
 
     def test_un_allergia_si_ancora_sempre_sull_anamnesi(self):
         """Regressione al contrario. Prima il modello leggeva anche le terapie e

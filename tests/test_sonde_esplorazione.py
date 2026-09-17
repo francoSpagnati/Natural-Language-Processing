@@ -1,18 +1,4 @@
-"""
-Test delle sonde di parsing dello step 0.
-
-Ogni test riproduce un caso **realmente osservato** nel dataset e documentato in
-`docs/00_esplorazione_dati.md`. Servono come rete di sicurezza: le sonde sono
-esplorative e verranno sostituite dai parser definitivi nello step 3, ma finche'
-sono la fonte dei vocabolari chiusi una regressione qui si propagherebbe a tutti
-gli step successivi.
-
-Le stringhe di test sono formati, non dati clinici: contengono nomi di farmaci
-in commercio, non informazioni su pazienti.
-
-Esecuzione:
-    python3 -m unittest discover -s tests -v
-"""
+"""Test delle sonde di parsing dello step 0."""
 
 import sys
 import unittest
@@ -47,13 +33,7 @@ class TestSondaTerapiaIngresso(unittest.TestCase):
         self.assertEqual(livelli["nessuna_terapia_dichiarata"], 1)
 
     def test_prescrizione_infusionale(self):
-        """Secondo formato: il farmaco segue la dose invece di precederla.
-
-        Il suffisso del produttore ("salf" = SALF S.p.A.) viene conservato,
-        coerentemente con il resto del campo ingresso, dove i nomi arrivano
-        sempre in questa forma ("Atorvastatina sa"). Toglierlo e' compito della
-        normalizzazione dello step 2, non della sonda.
-        """
+        """Secondo formato: il farmaco segue la dose invece di precederla."""
         testo = "125 mg di Furosemide salf*5fl 250mg/25ml in 100 ml Fisiologica ;"
         nomi, _, livelli = sonda_terapia_ingresso(testo)
 
@@ -79,14 +59,7 @@ class TestSondaTerapiaIngresso(unittest.TestCase):
         self.assertEqual(len(scarti), 1)
 
     def test_la_virgola_decimale_non_e_un_elenco(self):
-        """«Bisoprololo 2,5 mg» e' una voce sola, non due.
-
-        La guardia contro i blocchi in prosa scartava ogni voce con una virgola,
-        e in italiano la virgola decimale e' la notazione normale: 2,5 mg e' il
-        dosaggio piu' comune del bisoprololo. Il difetto e' emerso costruendo la
-        demo, scrivendo una prescrizione a mano — non misurando il corpus, dove
-        vale solo 4 voci su 5 605.
-        """
+        """«Bisoprololo 2,5 mg» e' una voce sola, non due."""
         nomi, scarti, _ = sonda_terapia_ingresso("Bisoprololo 2,5 mg: 1 cp ;")
 
         self.assertEqual(nomi, ["Bisoprololo"])
@@ -154,13 +127,8 @@ class TestSondaTerapiaDimissione(unittest.TestCase):
         self.assertEqual(voci[0]["principio"], "Sacubitril/valsartan")
 
     def test_posologia_incollata_al_nome_viene_separata(self):
-        """Regressione: i due punti di '08:00' fingevano da separatore, e il
-        vocabolario acquisiva voci come 'Bisoprololo 3.75 mg 1 cp alle ore 08'.
-
-        La prima risposta fu **scartare** la voce intera. Costava un farmaco per
-        salvare il vocabolario, e nel corpus costava 40 prescrizioni di
-        dimissione. Il livello 6 la interpreta invece di scartarla: il nome resta
-        pulito — che era l'intento della guardia — e la posologia va al suo posto.
+        """Regressione: i due punti di '08:00' fingevano da separatore, e il vocabolario
+        acquisiva voci come 'Bisoprololo 3.75 mg 1 cp alle ore 08'.
         """
         testo = '"Bisoprololo 3.75 mg 1 cp alle ore 08:00"'
         voci, scarti, _ = sonda_terapia_dimissione(testo)
@@ -253,15 +221,7 @@ class TestGuardiaNomeFarmaco(unittest.TestCase):
                 self.assertFalse(nome_farmaco_plausibile(nome))
 
     def test_soglia_parole_parametrica(self):
-        """Alla dimissione i nomi possono essere piu' lunghi che in ingresso.
-
-        La soglia conta le parole separate da SPAZIO: le barre delle
-        associazioni ("Macrogol 3350/sodio bicarbonato/...") non creano
-        confini di parola. Serve quindi un nome realmente prolisso per
-        distinguere le due soglie. Alzarla da 4 a 12 recupera 5 principi
-        attivi legittimi e dimezza i frammenti scartati (106 -> 56),
-        misurato sul dataset.
-        """
+        """Alla dimissione i nomi possono essere piu' lunghi che in ingresso."""
         lungo = "Insulina lispro da dna ricombinante"
 
         self.assertFalse(nome_farmaco_plausibile(lungo))          # soglia ingresso

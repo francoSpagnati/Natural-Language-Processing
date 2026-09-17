@@ -1,33 +1,9 @@
-"""Step 9 — la valutazione dei ranker contro la decisione dei cardiologi.
+"""Step 9 - La valutazione dei ranker contro la terapia di dimissione reale.
 
-Misura i ranker di `ranker.py` sui due compiti descritti li': la terapia
-completa e le sole aggiunte. Il riferimento e' la terapia di dimissione
-realmente prescritta, quindi non c'e' nulla da annotare e la misura copre tutti
-gli 841 ricoveri valutabili invece dei 25 del riferimento manuale.
-
-## Le metriche, e perche' queste
-
-**Richiamo@k** e' la metrica che conta: di cio' che il medico ha prescritto,
-quanto compare fra le prime k proposte. Un supporto alla decisione si giudica
-da cosa **non** suggerisce.
-
-**Precisione@k** va letta con cautela e non e' il bersaglio. Una classe proposta
-e non prescritta non e' necessariamente un errore: puo' essere una terapia
-corretta che quel medico non ha scelto, o che il paziente non tollerava per una
-ragione che il referto non scrive. Il riferimento e' *una* decisione giusta, non
-*l'insieme* delle decisioni giuste. Questo e' il limite strutturale dello step 9
-e va detto prima dei numeri, non dopo.
-
-**MAP** riassume l'ordine: premia le proposte giuste messe in alto, non solo
-presenti.
-
-## La soglia di significativita'
-
-Lo step 6bis ha stabilito il pavimento di rumore del progetto: fra due corse
-dello stesso metodo, due punti percentuali non significano nulla. Qui la
-divisione addestramento/prova e' deterministica e i tre ranker vedono gli stessi
-casi, quindi la variabilita' fra ranker e' reale, ma la stessa prudenza vale per
-differenze piccole.
+Richiamo@k, precisione@k e MAP sui due compiti (terapia completa e sole
+aggiunte), divisione singola deterministica. La precisione non e' correttezza:
+il riferimento e' una decisione, non l'insieme delle decisioni giuste. La
+misura finale del progetto e' nello step 11. Vedi docs/09_ranker.md.
 """
 
 from __future__ import annotations
@@ -57,17 +33,10 @@ RADICE = Path(__file__).resolve().parent.parent
 K_MISURATI = (3, 5, 10)
 
 
-# ---------------------------------------------------------------------------
-# Metriche
-# ---------------------------------------------------------------------------
+# --- Metriche ---
 
 def precisione_media(ordine: Sequence[str], bersaglio: frozenset[str]) -> float:
-    """Average precision: la media delle precisioni ai punti in cui si azzecca.
-
-    Vale 0 quando non c'e' nulla da trovare, e quel caso va escluso dalla media
-    invece che contato come fallimento — un ricovero senza aggiunte non e' un
-    ricovero su cui il ranker ha sbagliato.
-    """
+    """Average precision; un ricovero senza bersagli va escluso dalla media, non contato come zero."""
     if not bersaglio:
         return 0.0
     presi = 0
@@ -102,9 +71,7 @@ def misura(ordini: dict[int, list[str]], bersagli: dict[int, frozenset[str]]) ->
     return esito
 
 
-# ---------------------------------------------------------------------------
-# La valutazione
-# ---------------------------------------------------------------------------
+# --- La valutazione ---
 
 def valuta_ranker(r: Ranker, casi: Sequence[Caso], candidati: Sequence[str],
                   usa_filtro: bool = True) -> dict:
@@ -128,9 +95,7 @@ def valuta_ranker(r: Ranker, casi: Sequence[Caso], candidati: Sequence[str],
         # non e' un errore del ranker, ed e' contabilizzato a parte come tetto.
         bersagli_completa[caso.enc_oid] = caso.dimissione & set(per_caso)
 
-        # Compito 2: si tolgono dall'ordine le classi gia' in terapia. La
-        # continuita' e' informazione vera ma gratuita, e lasciarla dentro
-        # renderebbe il compito 2 una copia del compito 1.
+        # Compito 2: senza le classi gia' in terapia.
         nuovi = [c for c in codici if c not in caso.terapia_ingresso]
         ordini_aggiunte[caso.enc_oid] = nuovi
         bersagli_aggiunte[caso.enc_oid] = caso.aggiunte & set(per_caso)
@@ -145,12 +110,7 @@ def valuta_ranker(r: Ranker, casi: Sequence[Caso], candidati: Sequence[str],
 
 
 def tetto_dei_candidati(casi: Sequence[Caso], candidati: Sequence[str]) -> dict:
-    """Quanta parte della verita' e' raggiungibile con questo insieme candidato.
-
-    Nessun ranker puo' superare questo tetto: e' il richiamo di un oracolo che
-    proponesse tutti i candidati. Riportarlo evita di attribuire a un ranker un
-    limite che e' dell'insieme da cui sceglie.
-    """
+    """Quanta parte della verita' e' raggiungibile con questo insieme candidato: il tetto di ogni ranker."""
     insieme = set(candidati)
     dim = sum(len(c.dimissione) for c in casi)
     dim_dentro = sum(len(c.dimissione & insieme) for c in casi)
@@ -163,9 +123,7 @@ def tetto_dei_candidati(casi: Sequence[Caso], candidati: Sequence[str]) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Presentazione
-# ---------------------------------------------------------------------------
+# --- Presentazione ---
 
 def stampa(risultati: list[dict], tetto: dict, prova: Sequence[Caso]) -> None:
     print(f"\nRicoveri di prova: {len(prova)}")
@@ -250,19 +208,13 @@ def main() -> None:
                           "openrouter": BackendOpenRouter}[opzioni.llm]
         argomenti_backend: dict = {"ragionamento": "no"}
         if opzioni.llm == "locale":
-            # Il prompt del ranker e' lungo circa 1 800 token e la risposta
-            # poche centinaia. Il predefinito del progetto e' 8 192, tarato sui
-            # referti interi della pipeline B: su una macchina senza GPU quel
-            # contesto si paga in memoria per la cache delle chiavi, e allocarlo
-            # per un prompt quattro volte piu' corto e' tempo speso a vuoto.
+            # Contesto ridotto: il prompt del ranker e' quattro volte piu' corto di un referto.
             argomenti_backend["contesto"] = 4096
         if opzioni.modello:
             argomenti_backend["modello"] = opzioni.modello
         backend = classe_backend(**argomenti_backend)
 
-        # Il sottoinsieme e' un prefisso dell'ordine per enc_oid, non un
-        # campione casuale: cosi' una corsa interrotta e ripresa con un numero
-        # piu' grande riusa la cache di quella precedente invece di ripagarla.
+        # Prefisso per enc_oid, non campione casuale: la cache si riusa.
         prova_llm = sorted(prova, key=lambda c: c.enc_oid)
         if opzioni.record_llm:
             prova_llm = prova_llm[:opzioni.record_llm]

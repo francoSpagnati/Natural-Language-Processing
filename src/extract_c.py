@@ -1,28 +1,10 @@
 """Step 5 - Pipeline C: riconoscimento con NER e collegamento alla knowledge base.
 
-COSA CAMBIA RISPETTO ALLA PIPELINE A, E COSA NO
-    Cambia **solo il modo di trovare le menzioni nella prosa**: al posto del
-    gazetteer sui vocabolari chiusi c'e' un modello a token addestrato sulle
-    annotazioni della pipeline A (`ner_train.py`).
-
-    Resta identico tutto il resto, e non per pigrizia ma per poter attribuire la
-    differenza a una causa sola:
-
-    * la **negazione e l'incertezza** vengono da `context_it`, le stesse regole
-      della pipeline A;
-    * i **farmaci dei campi semi-strutturati** vengono dallo stesso parser a
-      livelli, che li interpreta al 99% e non ha nulla da guadagnare da un NER;
-    * le **allergie** vengono dalla stessa sonda a regole;
-    * la **codifica** passa dagli stessi risolutori su AIFA e ICD-10.
-
-    Se anche solo uno di questi differisse, il confronto dello step 6
-    misurerebbe la somma di due differenze invece del riconoscimento delle
-    menzioni, che e' cio' che si vuole confrontare.
-
-    L'unica aggiunta e' il collegamento per similarita' di `entity_linking`, che
-    entra in gioco solo dove tutti i metodi esatti hanno fallito e che non
-    produce mai un codice risolto: propone e basta. Serve a rendere visibile
-    quali menzioni *nuove* il NER porta e quanto sono lontane dal lessico ICD.
+Rispetto alla A cambia solo il modo di trovare le menzioni nella prosa (il
+modello di `ner_train.py` al posto del gazetteer); negazione, parser dei campi
+di terapia, allergie e codifica sono identici, cosi' il confronto misura una
+differenza sola. L'entity linking per similarita' propone e non risolve.
+Vedi docs/05_pipeline_estrazione_C.md.
 """
 
 from __future__ import annotations
@@ -79,9 +61,7 @@ def _entita_dalla_prosa(
     if not menzioni:
         return condizioni, farmaci
 
-    # ConText ragiona su frasi e distanze in token: serve lo stesso documento
-    # tokenizzato usato dalla pipeline A. Gli offset di carattere del NER vanno
-    # quindi riportati a indici di token.
+    # ConText ragiona in token: gli offset di carattere del NER vanno riportati a indici di token.
     documento = nlp(testo)
     ambiti = trova_ambiti(documento)
 

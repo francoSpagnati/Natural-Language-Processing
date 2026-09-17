@@ -1,10 +1,4 @@
-"""
-Test della costruzione dei vocabolari (step 1).
-
-Coprono le funzioni di normalizzazione, che sono il punto in cui una svista
-produce silenziosamente voci duplicate o mancate nel vocabolario chiuso — e il
-vocabolario chiuso e' il fondamento di tutti gli step successivi.
-"""
+"""Test della costruzione dei vocabolari (step 1)."""
 
 import sys
 import unittest

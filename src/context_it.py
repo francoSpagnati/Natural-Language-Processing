@@ -1,33 +1,10 @@
-"""
-Step 3 - Logica di negazione, incertezza e storicita' per l'italiano clinico.
+"""Step 3 - Negazione, incertezza, storicita' e soggetto per l'italiano clinico.
 
-Implementa un adattamento italiano dell'algoritmo **ConText** (Harkema et al.),
-quello usato da medspaCy. medspaCy e scispaCy non sono utilizzabili qui perche'
-i loro marcatori e le loro regole sono scritti per l'inglese: "denies", "no
-evidence of", "rule out" non compaiono mai in un referto italiano.
-
-COME FUNZIONA ConText, IN BREVE
-    Ogni marcatore (un'espressione come "nega" o "sospetta") apre un *ambito*
-    che si propaga in una direzione fino a un punto di terminazione. Le entita'
-    che cadono dentro l'ambito ereditano l'attributo del marcatore. Non c'e'
-    analisi sintattica: e' una regola di prossimita', ed e' precisamente questo
-    che la rende ispezionabile e adatta a fare da baseline.
-
-I MARCATORI SONO RICAVATI DAL CORPUS, NON TRADOTTI DALL'INGLESE
-    Le liste sotto vengono da un conteggio sulle 1000 anamnesi (docs/03):
-    "non" 2665 occorrenze, "nega" 522, "assenza di" 370, "senza" 319,
-    "negativo per" 102. Tradurre i marcatori inglesi di medspaCy avrebbe
-    prodotto espressioni che nel corpus non compaiono.
-
-TRE ATTRIBUTI, NON UNO
-    - **negazione**: l'affermazione e' esclusa ("nega diabete");
-    - **incertezza**: e' ipotizzata ("sospetta cardiopatia ischemica");
-    - **storicita'**: appartiene al passato ("pregressa fibrillazione atriale").
-
-    La storicita' non cambia la polarita' ma e' clinicamente decisiva: una
-    fibrillazione atriale pregressa e una in atto portano a terapie diverse.
-    Nello schema resta `affermato`, e la storicita' viaggia nella regola
-    registrata in `Provenienza`, cosi' nessuna informazione si perde.
+Adattamento dell'algoritmo ConText (Harkema et al.): ogni marcatore apre un
+ambito che si propaga fino a un terminatore, a fine frase o al limite di
+ampiezza; le entita' nell'ambito ereditano l'attributo. I marcatori vengono
+dal conteggio sul corpus, non dalla traduzione di medspaCy. Conteggi e
+decisioni: docs/03_pipeline_estrazione_A.md.
 """
 
 from __future__ import annotations
@@ -59,16 +36,12 @@ class Marcatore:
     espressione: str
     attributo: Attributo
     direzione: Direzione
-    # Ampiezza massima dell'ambito in token. Serve a evitare che un marcatore
-    # a inizio referto qualifichi entita' a venti parole di distanza, che nella
-    # prosa clinica italiana quasi sempre appartengono a un'altra affermazione.
+    # Ampiezza massima dell'ambito in token.
     ampiezza: int = 8
 
 
-# --- Marcatori di negazione -------------------------------------------------
-# Ordinati per frequenza osservata nel corpus. Le espressioni composte devono
-# precedere quelle semplici ("negativo per" prima di "non"), altrimenti la
-# semplice consuma la composta e l'ambito risulta sbagliato.
+# --- Marcatori di negazione ---
+# Per frequenza nel corpus; le espressioni composte precedono le semplici.
 MARCATORI_NEGAZIONE = [
     Marcatore("negativo per", Attributo.NEGAZIONE, Direzione.AVANTI, 10),
     Marcatore("in assenza di", Attributo.NEGAZIONE, Direzione.AVANTI, 10),
@@ -78,35 +51,18 @@ MARCATORI_NEGAZIONE = [
     Marcatore("esclusa", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
     Marcatore("escluso", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
     Marcatore("esclude", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
-    # "nega" ha ampiezza generosa perche' introduce quasi sempre un elenco:
-    # "Nega diabete mellito, ipertensione e dislipidemia."
+    # "nega" introduce quasi sempre un elenco: ampiezza generosa.
     Marcatore("nega", Attributo.NEGAZIONE, Direzione.AVANTI, 14),
     Marcatore("negati", Attributo.NEGAZIONE, Direzione.AVANTI, 14),
     Marcatore("senza", Attributo.NEGAZIONE, Direzione.AVANTI, 6),
     Marcatore("mai", Attributo.NEGAZIONE, Direzione.AVANTI, 6),
-    # La famiglia "non riferit*" deve stare PRIMA di "non", e come espressione
-    # composta, per una ragione precisa: `riferisce` e' un terminatore di
-    # ambito — serve a "Nega diabete ma riferisce ipertensione" — e con il solo
-    # marcatore "non" chiuderebbe la negazione all'istante, lasciando
-    # "Non riferisce angina ne' cardiopatia ischemica" come un'affermazione.
-    # Riconoscendo l'intera espressione l'ambito parte dopo di essa e il
-    # terminatore non entra in gioco.
-    #
-    # Il difetto e' emerso dalla demo dello step 9bis, su un paziente scritto a
-    # mano: un sistema che raccomanda lo trova perche' prova a usare il dato,
-    # non perche' lo misura. E' la stessa forma dello step 8.
-    #
-    # Giustificato con lo stesso metodo del resto del lessico, cioe' contando
-    # il corpus: "non riferisce" 23 occorrenze in 23 referti, "non riferiti" 18,
-    # "non riferita" 6, "non riferito" 1 — 48 in tutto, piu' di "non presenta"
-    # (6) e "non risultano" (2), che infatti non sono nel lessico.
+    # "non riferit*" come espressione composta, prima di "non": `riferisce` e'
+    # un terminatore e chiuderebbe subito l'ambito del solo "non" (docs/09b).
     Marcatore("non riferisce", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
     Marcatore("non riferiti", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
     Marcatore("non riferita", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
     Marcatore("non riferito", Attributo.NEGAZIONE, Direzione.AVANTI, 8),
-    # "non" e' il marcatore piu' frequente ma anche il piu' rischioso: compare
-    # in "non in terapia con X" (negazione vera) e in "non ha eseguito il
-    # dosaggio" (dove non nega alcuna entita'). L'ambito e' quindi stretto.
+    # "non": il piu' frequente e il piu' rischioso, quindi ambito stretto.
     Marcatore("non", Attributo.NEGAZIONE, Direzione.AVANTI, 4),
     Marcatore("assente", Attributo.NEGAZIONE, Direzione.INDIETRO, 4),
     Marcatore("assenti", Attributo.NEGAZIONE, Direzione.INDIETRO, 4),
@@ -144,23 +100,16 @@ MARCATORI_STORICITA = [
 
 MARCATORI = MARCATORI_NEGAZIONE + MARCATORI_INCERTEZZA + MARCATORI_STORICITA
 
-# --- Terminatori ------------------------------------------------------------
-# Espressioni che chiudono un ambito prima del limite di ampiezza. Sono il
-# meccanismo che impedisce a una negazione di propagarsi su un'affermazione
-# successiva: in "Nega diabete ma riferisce ipertensione", l'ipertensione NON
-# e' negata.
-#
-# La virgola e la congiunzione "e" NON terminano l'ambito, di proposito: in
-# italiano clinico la negazione si estende regolarmente su un elenco
-# ("Nega diabete, ipertensione e dislipidemia").
+# --- Terminatori ---
+# Chiudono l'ambito prima dell'ampiezza ("Nega diabete ma riferisce
+# ipertensione"). Virgola ed "e" non chiudono: la negazione copre gli elenchi.
 TERMINATORI = {
     "ma", "tuttavia", "pero", "però", "mentre", "salvo", "eccetto",
     "riferisce", "presenta", "in terapia", "in trattamento", "portatore",
     "si segnala", "evidenza", "riscontro", "quadro di",
 }
 
-# Un ambito non attraversa mai il confine di frase: e' il limite piu' forte, e
-# spaCy ce lo da' gia' con il sentencizzatore.
+# Un ambito non attraversa mai il confine di frase.
 
 
 @dataclass
@@ -193,14 +142,9 @@ def _e_terminatore(documento, indice: int) -> bool:
 
 
 def trova_ambiti(documento) -> list[AmbitoAttivo]:
-    """Individua i marcatori nel documento e calcola l'ambito di ciascuno.
-
-    L'ambito si estende dal marcatore fino al primo fra: un terminatore, la
-    fine della frase, o il limite di ampiezza del marcatore.
-    """
+    """I marcatori del documento con il loro ambito (fino a terminatore, fine frase o ampiezza)."""
     ambiti: list[AmbitoAttivo] = []
-    # Le espressioni piu' lunghe vanno provate per prime: "negativo per" deve
-    # vincere su "non", altrimenti l'ambito sarebbe quello sbagliato.
+    # Le espressioni piu' lunghe per prime: "negativo per" vince su "non".
     marcatori_ordinati = sorted(MARCATORI, key=lambda m: -len(m.espressione.split()))
 
     limiti_frase = {frase.end for frase in documento.sents}
@@ -230,11 +174,7 @@ def trova_ambiti(documento) -> list[AmbitoAttivo]:
 
 
 def _estendi(documento, partenza: int, ampiezza: int, limiti_frase: set[int], passo: int) -> int:
-    """Estende l'ambito da `partenza` per al piu' `ampiezza` token.
-
-    Si ferma sul primo terminatore o sul confine di frase. Restituisce il
-    limite esclusivo (in avanti) o inclusivo-a-sinistra (all'indietro).
-    """
+    """Estende l'ambito da `partenza` per al piu' `ampiezza` token, fermandosi a terminatore o frase."""
     posizione = partenza
     for _ in range(ampiezza):
         if posizione < 0 or posizione >= len(documento):
@@ -252,47 +192,22 @@ def _estendi(documento, partenza: int, ampiezza: int, limiti_frase: set[int], pa
 def attributi_per_entita(
     ambiti: list[AmbitoAttivo], inizio_token: int, fine_token: int
 ) -> dict[Attributo, Marcatore]:
-    """Gli attributi che si applicano a un'entita', con il marcatore che li ha causati.
-
-    Restituisce un dizionario e non un singolo valore perche' gli attributi non
-    si escludono: "nega pregressa fibrillazione atriale" e' insieme negata e
-    storica, e servono entrambe le informazioni.
-    """
+    """Gli attributi di un'entita' con il marcatore che li causa; non si escludono a vicenda."""
     risultato: dict[Attributo, Marcatore] = {}
     for ambito in ambiti:
         if ambito.copre(inizio_token, fine_token):
-            # A parita' di attributo tiene il marcatore piu' vicino, che e'
-            # quello che governa davvero l'entita'.
+            # A parita' di attributo vince il marcatore piu' vicino.
             precedente = risultato.get(ambito.marcatore.attributo)
             if precedente is None:
                 risultato[ambito.marcatore.attributo] = ambito.marcatore
     return risultato
 
 
-# ---------------------------------------------------------------------------
-# L'asse dell'*experiencer*: di chi si sta parlando
-# ---------------------------------------------------------------------------
-# ConText ha quattro assi, non tre. Oltre a negazione, incertezza e storicita'
-# c'e' l'**experiencer**: se l'affermazione riguardi il paziente o qualcun
-# altro. Nella prima versione dello schema mancava, e il confronto fra pipeline
-# A e B su 198 record ne ha mostrato il costo: 21 dei 55 disaccordi sullo stato
-# clinico erano frasi di familiarita', dove A leggeva `affermato` e B `negato`
-# e **nessuna delle due aveva ragione**, perche' la frase non dice che il
-# paziente ha la malattia ne' che non ce l'ha: dice che ce l'ha un parente.
-#
-# I marcatori vengono dal conteggio sul corpus grezzo (1000 ricoveri):
-# "familiarita" 508 occorrenze, di cui "familiarita per" 431, "familiarita
-# positiva" 27, "familiarita negativa" 18; "anamnesi familiare" 28; "storia
-# familiare" 2. Espressioni come "padre" o "madre" NON sono marcatori: nel
-# corpus compaiono quasi sempre come precisazione fra parentesi *dentro* un
-# ambito gia' aperto da "familiarita", e usarle da sole aprirebbe ambiti su
-# frasi che parlano del paziente.
-#
-# L'asse e' indipendente dagli altri tre, e il corpus lo dimostra:
-# "familiarita negativa per cad" e' insieme familiare e negata.
+# --- L'asse dell'experiencer: di chi si sta parlando ---
+# Il quarto asse di ConText, aggiunto dopo il confronto A/B (docs/06).
+# Marcatori dal conteggio sul corpus; "padre" e "madre" da soli non lo sono.
 
-# `familiarita;` con il punto e virgola compare davvero nel corpus (un refuso),
-# quindi fra il sostantivo e "per" si tollera qualche carattere non alfabetico.
+# Fra "familiarita" e "per" si tollera qualche carattere non alfabetico (refusi nel corpus).
 PATTERN_SOGGETTO_FAMILIARE = re.compile(
     r"familiarit[aà]\W{0,3}(?:positiva|negativa)?\W{0,3}per\b"
     r"|familiarit[aà]\b"
@@ -301,25 +216,9 @@ PATTERN_SOGGETTO_FAMILIARE = re.compile(
     re.IGNORECASE,
 )
 
-# Un secondo modo di parlare di un parente, che il marcatore esplicito non copre:
-# nominarlo direttamente. «Madre deceduta a 76 anni per fibrillazione atriale» non
-# contiene la parola "familiarita", ma la fibrillazione e' della madre.
-#
-# La regola e' stretta di proposito, perche' costruita sul corpus e non
-# sull'intuizione. Sulle 436 occorrenze di un termine di parentela nell'anamnesi:
-#
-#   54%  stanno gia' dentro un ambito di "familiarita' per ..." -> coperte
-#    4%  sono l'INFORMATORE, non il malato («la madre riferisce», «segnalata
-#        dalla figlia»): li' la condizione e' del PAZIENTE, e marcarle familiari
-#        sarebbe un errore peggiore di quello che questa regola ripara, perche'
-#        nasconderebbe al filtro di sicurezza una condizione vera;
-#   42%  restano, e in gran parte non parlano di malattia affatto («vive con il
-#        fratello», «due fratelli in buona salute», «un figlio»).
-#
-# Quindi non basta il termine di parentela: serve che sia **immediatamente
-# seguito** da una parola che dica che quel parente e' il malato. L'elenco viene
-# dalle occorrenze vere, in ordine di frequenza: deceduto 27, affetto 7,
-# sottoposto 6, portatore 2, piu' gli aggettivi di malattia della coda lunga.
+# Il parente nominato direttamente («Madre deceduta per fibrillazione atriale»):
+# serve il termine di parentela seguito subito da una parola di malattia,
+# perche' «la madre riferisce» parla del paziente (conteggi in docs/03).
 PARENTE = (
     r"madre|padre|mamma|fratell[oi]|sorell[ae]|nonn[aoi]|zi[aoi]"
     r"|cugin[ao]|genitori|consanguine[oi]"
@@ -337,22 +236,14 @@ PATTERN_SOGGETTO_PARENTE = re.compile(
     re.IGNORECASE,
 )
 
-# Un ambito di familiarita' si chiude a fine frase. La virgola non lo chiude,
-# per la stessa ragione della negazione: gli elenchi sono la norma
-# ("familiarita positiva per ipotiroidismo (madre), cardiopatia ischemica").
+# L'ambito di familiarita' si chiude a fine frase, non alla virgola (elenchi).
 PATTERN_FINE_FRASE = re.compile(r"[.;:\n]|\bma\b|\btuttavia\b|\bnega\b|\briferisce\b")
 
-# I referti incollano piu' affermazioni senza punteggiatura, segnalando l'inizio
-# della successiva con la maiuscola: "familiarita per cardiopatia ischemica ed
-# ipertensione arteriosa Ex fumatore". Senza questo terminatore l'ambito
-# assorbirebbe abitudini e patologie che sono del paziente. La maiuscola deve
-# essere seguita da una minuscola, altrimenti si spezzerebbe su ogni acronimo
-# (CAD, MCV, IMA, HCM), che nel corpus sono frequentissimi.
+# Nuova affermazione senza punteggiatura: maiuscola seguita da minuscola
+# ("... ipertensione arteriosa Ex fumatore"); non spezza sugli acronimi.
 PATTERN_NUOVA_AFFERMAZIONE = re.compile(r"(?<=[a-zà-ù]) (?=[A-Z][a-zà-ù])")
 
-# Oltre questa distanza l'ambito non si propaga: nel corpus le frasi di
-# familiarita' sono brevi, e un tetto evita che una frase senza punteggiatura
-# finale trascini con se' meta' anamnesi.
+# Tetto di distanza: le frasi di familiarita' sono brevi.
 MASSIMA_AMPIEZZA_SOGGETTO = 160
 
 
@@ -366,19 +257,10 @@ class AmbitoSoggetto:
 
 
 def ambiti_familiarita(testo: str) -> list[AmbitoSoggetto]:
-    """Trova i tratti di testo governati da un marcatore di familiarita'.
-
-    Lavora su offset di carattere e non su token di spaCy, di proposito: e' la
-    sola forma che tutte e tre le pipeline possono usare senza modifiche. La
-    pipeline B non costruisce un documento spaCy — ha solo il testo del campo e
-    gli offset della citazione del modello — e avere due implementazioni della
-    stessa regola le farebbe divergere.
-    """
+    """I tratti di testo governati da un marcatore di familiarita', su offset di carattere (usabile da tutte le pipeline)."""
     ambiti: list[AmbitoSoggetto] = []
-    # Il marcatore esplicito apre l'ambito DOPO di se': in «familiarita per X»
-    # il malato e' X. Il nome del parente invece fa parte dell'affermazione — in
-    # «Madre deceduta per fibrillazione atriale» la menzione estratta comprende
-    # spesso la parola "Madre" — quindi li' l'ambito parte dall'inizio.
+    # Il marcatore esplicito apre l'ambito dopo di se'; il nome del parente
+    # fa parte dell'affermazione, quindi l'ambito parte dall'inizio.
     for pattern, parte_da_inizio in (
         (PATTERN_SOGGETTO_FAMILIARE, False),
         (PATTERN_SOGGETTO_PARENTE, True),
@@ -395,12 +277,7 @@ def ambiti_familiarita(testo: str) -> list[AmbitoSoggetto]:
 
 
 def _taglia_su_nuova_affermazione(testo: str, inizio: int, fine: int) -> int:
-    """Accorcia l'ambito dove ricomincia una nuova affermazione senza punteggiatura.
-
-    Il taglio non si applica dentro una parentesi: le precisazioni sui parenti
-    ne sono piene ("ipotiroidismo (padre, in cura per morbo di Parkinson)") e
-    spezzarle toglierebbe la marcatura a condizioni che sono davvero familiari.
-    """
+    """Accorcia l'ambito dove ricomincia un'affermazione senza punteggiatura (non dentro parentesi)."""
     for candidato in PATTERN_NUOVA_AFFERMAZIONE.finditer(testo, inizio, fine):
         tratto = testo[inizio:candidato.start()]
         if tratto.count("(") > tratto.count(")"):
@@ -412,23 +289,12 @@ def _taglia_su_nuova_affermazione(testo: str, inizio: int, fine: int) -> int:
 def soggetto_familiare(
     testo: str, inizio: int | None, fine: int | None
 ) -> AmbitoSoggetto | None:
-    """L'ambito di familiarita' che governa una menzione, se ce n'e' uno.
-
-    Restituisce l'ambito invece di un booleano perche' l'espressione che lo ha
-    aperto va registrata nella regola di `Provenienza`: chi rilegge il dato deve
-    poter risalire alla parola che ha deciso.
-    """
+    """L'ambito di familiarita' che governa una menzione (l'espressione va in `Provenienza`)."""
     if inizio is None or fine is None:
         return None  # menzione non ancorata: senza offset la regola non si applica
     sovrapposti = [a for a in ambiti_familiarita(testo)
                    if a.inizio < fine and inizio < a.fine]
     if not sovrapposti:
         return None
-    # Fra piu' ambiti che coprono la menzione vince quello che comincia piu'
-    # tardi, cioe' il piu' vicino. La conclusione non cambia — la menzione e'
-    # familiare in entrambi i casi — ma la regola registrata in `Provenienza`
-    # deve nominare il marcatore giusto: in «Madre deceduta per FA, padre
-    # deceduto per asbestosi» l'asbestosi va attribuita a «padre deceduto», non
-    # a «madre deceduta», altrimenti chi rilegge il dato risale al parente
-    # sbagliato.
+    # Vince l'ambito piu' vicino: la regola in `Provenienza` deve nominare il parente giusto.
     return max(sovrapposti, key=lambda a: a.inizio)

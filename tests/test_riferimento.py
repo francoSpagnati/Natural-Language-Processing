@@ -1,10 +1,4 @@
-"""Test del riferimento annotato e delle misure che ne derivano (step 6bis).
-
-Il conteggio di veri positivi, falsi positivi e falsi negativi decide ogni
-numero di precisione e richiamo del progetto. Se sbaglia, i numeri restano
-plausibili e nessuno se ne accorge: questi test lo fissano sui casi limite che
-nei dati veri ricorrono davvero.
-"""
+"""Test del riferimento annotato e delle misure che ne derivano (step 6bis)."""
 
 import json
 import sys

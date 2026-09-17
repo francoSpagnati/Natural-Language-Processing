@@ -1,42 +1,10 @@
-"""Step 9ter — Da dove viene questa raccomandazione: la traccia sul grafo.
+"""Step 9ter - Da dove viene questa raccomandazione: la traccia sul grafo.
 
-## La domanda che ha reso necessario questo modulo
-
-Fino a qui il knowledge graph dello step 7 era **un artefatto parallelo**. Lo
-leggevano `interroga.py`, il suo notebook e i suoi test; il filtro dello step 8,
-il ranker dello step 9 e la demo leggevano invece i JSON delle pipeline e il
-grafo lo scavalcavano. Un milione e duecentomila triple che nessuno consumava.
-
-Non era inutile — il numero che ha deciso il disegno dello step 8 (il 76,3% di
-asserzioni che poggiano su un solo agente, e il 14,8% di ridondanza vera invece
-del 46,6% apparente) e' uscito interrogando quel grafo, e senza di esso il
-filtro avrebbe preteso una soglia di consenso che scarta tre quarti dei fatti.
-Ma era un artefatto **di analisi**, non uno strato del sistema.
-
-Questo modulo lo rende uno strato: risponde a *«da dove viene questa
-raccomandazione»* **interrogando il grafo in SPARQL**, non ristampando il JSON
-da cui il grafo e' stato costruito. La differenza non e' estetica:
-
-* la stessa interrogazione funziona sul grafo di un paziente e su quello dei
-  1 000 ricoveri, perche' la forma del dato e' la stessa;
-* la catena e' **navigabile all'indietro** — dalla proposta alla linea guida,
-  alla condizione, all'asserzione, alle menzioni, fino agli offset di carattere
-  nel referto;
-* la provenienza e' modellata in **PROV-O**, quindi chi legge il grafo non deve
-  conoscere le convenzioni di questo progetto.
-
-## La catena
-
-    raccomandazione   C03DA  (ranker, step 9)
-      └─ indicazione   ESC 2021, classe I           ← regola citata
-          └─ condizione I50.9                        ← ct:concetto
-              └─ asserzione clinica                  ← prov:wasDerivedFrom
-                  ├─ menzione  agente A  Anamnesi 31–49  gazetteer:...
-                  └─ menzione  agente B  Anamnesi 31–49  llm:...
-
-L'ultimo anello e' quello che conta davanti a un medico: **gli offset di
-carattere nel referto originale.** Una raccomandazione che sa dire per quali
-parole la propone si puo' contestare; una che non lo sa, si puo' solo credere.
+Risponde interrogando il grafo in SPARQL (PROV-O), non ristampando i JSON:
+la stessa interrogazione gira sul grafo di un paziente e su quello dei 1 000
+ricoveri. La catena: raccomandazione -> indicazione citata -> condizione ->
+asserzione clinica -> menzioni con agente, campo e offset nel referto.
+Vedi docs/09c_traccia.md.
 """
 
 from __future__ import annotations
@@ -70,17 +38,10 @@ FONTE_ICD = ("ICD-10 2019, Elenco Sistematico (edizione italiana), "
 FONTE_ATC = ("AIFA - registro ATC (atc.csv), CC-BY 4.0")
 
 
-# ---------------------------------------------------------------------------
-# Il grafo di un paziente solo
-# ---------------------------------------------------------------------------
+# --- Il grafo di un paziente solo ---
 
 def menzioni_da_stato(stato, sigla: str, enc_oid: int = 0) -> list[Menzione]:
-    """Converte uno `StatoPaziente` nelle menzioni che il grafo sa modellare.
-
-    E' lo stesso adattatore che `confronto.py` applica ai file su disco, qui
-    applicato a uno stato in memoria: la demo non scrive niente, e il grafo di
-    un paziente nuovo deve poter esistere senza passare dal filesystem.
-    """
+    """Uno `StatoPaziente` in memoria -> le menzioni del grafo (stesso adattatore di `confronto.py`)."""
     fuori: list[Menzione] = []
     for c in stato.condizioni:
         p = c.provenienza
@@ -106,14 +67,7 @@ def menzioni_da_stato(stato, sigla: str, enc_oid: int = 0) -> list[Menzione]:
 def _aggiungi_concetti_usati(g: Graph, menzioni: list[Menzione],
                              etichette_icd: dict[str, str],
                              etichette_atc: dict[str, str]) -> None:
-    """Solo i concetti che servono, con etichetta e fonte.
-
-    Il grafo del corpus porta le terminologie intere — 7 211 codici ATC e
-    10 803 voci ICD-10 — perche' la metrica gerarchica dello step 11 ha bisogno
-    dei livelli superiori. Per la traccia di un paziente bastano i concetti
-    nominati: caricarne diciottomila per spiegarne quattro renderebbe la demo
-    inutilizzabile senza aggiungere nulla.
-    """
+    """Solo i concetti nominati, con etichetta e fonte: le terminologie intere servono al grafo del corpus, non qui."""
     for m in menzioni:
         if not m.codice:
             continue
@@ -132,13 +86,7 @@ def _aggiungi_concetti_usati(g: Graph, menzioni: list[Menzione],
 def grafo_del_paziente(stati: dict[str, object], enc_oid: int = 0,
                        etichette_icd: dict[str, str] | None = None,
                        etichette_atc: dict[str, str] | None = None) -> Graph:
-    """Il grafo di un paziente, dalle uscite di una o piu' pipeline.
-
-    `stati` mappa la sigla della pipeline (`"A"`, `"B"`, `"C"`) al suo
-    `StatoPaziente`. Con una sola pipeline il grafo ha la stessa forma, e le
-    asserzioni risultano sostenute da un agente solo — che e' l'informazione
-    onesta, non una mancanza.
-    """
+    """Il grafo di un paziente da una o piu' pipeline (`stati`: sigla -> `StatoPaziente`)."""
     g = Graph()
     for prefisso, spazio in (("ct", CT), ("ric", RICOVERO), ("men", MENZIONE),
                              ("atc", ATC), ("icd", ICD), ("pipe", PIPELINE),
@@ -158,20 +106,14 @@ def grafo_del_paziente(stati: dict[str, object], enc_oid: int = 0,
     for i, gruppo in enumerate(raggruppa(menzioni)):
         aggiungi_gruppo(g, gruppo, i)
 
-    # Il testo della menzione non entra nel grafo serializzato (e' testo clinico
-    # verbatim). Per la traccia serve pero' mostrarlo, e il grafo di un paziente
-    # della demo non viene mai scritto su disco: lo si tiene in un indice a
-    # parte, non fra le triple, cosi' la regola resta valida per ogni grafo che
-    # possa circolare.
+    # Il testo della menzione sta in un indice a parte, non fra le triple.
     g.testi_menzione = {  # type: ignore[attr-defined]
         (m.inizio, m.fine, m.sigla, m.tipo): m.testo for m in menzioni
     }
     return g
 
 
-# ---------------------------------------------------------------------------
-# Le interrogazioni
-# ---------------------------------------------------------------------------
+# --- Le interrogazioni ---
 
 SPARQL_SOSTEGNO = """
 PREFIX ct:   <%(ct)s>
@@ -202,13 +144,7 @@ ORDER BY ?inizio ?agente
 
 
 def sostegno_del_concetto(g: Graph, codice: str, tipo: str = "condizione") -> list[dict]:
-    """Le menzioni che sostengono l'asserzione di quel codice, dal grafo.
-
-    In SPARQL e non in Python: la stessa interrogazione, con lo stesso testo,
-    gira sul grafo di questo paziente e su quello dei 1 000 ricoveri. Se la
-    traccia fosse scritta come un attraversamento di dizionari, funzionerebbe
-    solo qui.
-    """
+    """Le menzioni che sostengono l'asserzione di quel codice, in SPARQL."""
     concetto = (ATC if tipo == "farmaco" else ICD)[codice]
     righe = g.query(SPARQL_SOSTEGNO, initBindings={"concetto": concetto})
     testi = getattr(g, "testi_menzione", {})
@@ -234,14 +170,7 @@ def sostegno_del_concetto(g: Graph, codice: str, tipo: str = "condizione") -> li
 
 
 def traccia_raccomandazione(g: Graph, classe_atc: str, caso, simbolico) -> dict:
-    """La catena completa dietro una classe proposta.
-
-    Unisce i due mondi che il progetto aveva tenuto separati: la **regola**
-    (l'indicazione citata dello step 9) e il **fatto** (l'asserzione del grafo,
-    con la sua provenienza). L'anello che li collega e' il codice ICD-10: la
-    regola dice *per quale condizione*, il grafo dice *da quali parole di quale
-    referto, viste da chi*.
-    """
+    """La catena completa dietro una classe proposta: la regola (indicazione) e il fatto (asserzione con provenienza), uniti dal codice ICD-10."""
     anelli: list[dict] = []
     for ind in simbolico.motivazioni(caso, classe_atc):
         condizioni = sorted(c for c in caso.condizioni
@@ -261,9 +190,7 @@ def traccia_raccomandazione(g: Graph, classe_atc: str, caso, simbolico) -> dict:
     return {"classe_atc": classe_atc, "indicazioni": anelli}
 
 
-# ---------------------------------------------------------------------------
-# Presentazione
-# ---------------------------------------------------------------------------
+# --- Presentazione ---
 
 def stampa_traccia(traccia: dict, nome_classe: str = "") -> None:
     """La catena come albero leggibile. Vedi il docstring del modulo."""

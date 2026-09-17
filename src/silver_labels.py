@@ -1,47 +1,10 @@
 """Step 5 - Etichette silver per il NER, ricavate dalla pipeline A.
 
-PERCHE' ADDESTRARE UN NER SULL'USCITA DI UN GAZETTEER
-    A prima vista sembra un circolo: la pipeline A riconosce solo cio' che sta
-    nei vocabolari chiusi, quindi un modello addestrato sulle sue annotazioni
-    dovrebbe al massimo reimparare il vocabolario. La ragione per cui non e'
-    cosi' -- ed e' l'ipotesi che lo step 5 mette alla prova -- e' che le due
-    cose generalizzano in modo diverso:
-
-    * il gazetteer riconosce **stringhe**: "dislipidemia" non e' nel volume
-      ICD-10, quindi per la pipeline A semplicemente non esiste;
-    * un modello a token impara **contesti e morfologia**: vede migliaia di
-      volte che dopo "in anamnesi", "nota", "pregressa" compare una diagnosi, e
-      che i nomi di patologia in italiano hanno terminazioni ricorrenti
-      (-emia, -patia, -osi, -ite). Puo' quindi etichettare come condizione una
-      parola che nel vocabolario non c'e'.
-
-    Se il NER si limitasse a riprodurre il gazetteer, la pipeline C non
-    aggiungerebbe nulla: **anche questo sarebbe un risultato**, misurabile allo
-    step 6 come numero di menzioni trovate da C e non da A.
-
-    L'alternativa sarebbe annotare a mano qualche centinaio di referti. Il
-    brief la esclude, e le etichette silver sono la tecnica standard per
-    evitarla: si accetta che le annotazioni contengano gli errori della
-    pipeline A, e li si dichiara.
-
-COSA VIENE ETICHETTATO, E COSA NO
-    Solo i **confini** delle menzioni, con due etichette (CONDIZIONE, FARMACO).
-    Non lo stato clinico: negazione e incertezza restano affidate a ConText,
-    esattamente come nella pipeline A. E' una scelta di metodo, non di comodo:
-    se anche l'attribuzione dello stato cambiasse fra A e C, il confronto dello
-    step 6 misurerebbe due differenze sommate invece di quella che interessa,
-    cioe' il **riconoscimento delle menzioni**.
-
-    Vengono usate solo le entita' con offset nell'**anamnesi**: i farmaci dei
-    campi semi-strutturati provengono da un parser a regole, non dalla prosa, e
-    non sono materiale di addestramento per un NER.
-
-LA DIVISIONE E' PER RECORD, NON PER FRASE
-    Due frasi dello stesso referto si somigliano molto: la stessa patologia
-    ricompare nell'anamnesi remota e nella storia recente, spesso con le stesse
-    parole. Dividere per frase metterebbe frasi quasi identiche in
-    addestramento e in prova, gonfiando i risultati. La divisione avviene quindi
-    a livello di ricovero.
+Un modello a token impara contesti e morfologia, non stringhe: puo' quindi
+trovare cio' che il gazetteer non ha nel vocabolario (l'ipotesi che lo step 5
+mette alla prova). Si etichettano solo i confini (CONDIZIONE, FARMACO)
+nell'anamnesi; lo stato resta a ConText. Divisione per ricovero, non per
+frase. Vedi docs/05_pipeline_estrazione_C.md.
 """
 
 from __future__ import annotations
@@ -64,10 +27,7 @@ ETICHETTE = (ETICHETTA_CONDIZIONE, ETICHETTA_FARMACO)
 # rappresentare entita' adiacenti dello stesso tipo senza fonderle.
 ETICHETTE_BIO = ["O"] + [f"{p}-{e}" for e in ETICHETTE for p in ("B", "I")]
 
-# Un segmento deve stare nella finestra del modello (512 sottotoken). In
-# italiano clinico un sottotoken vale circa 3 caratteri, quindi 1.000 caratteri
-# lasciano margine abbondante anche per le abbreviazioni, che si frammentano
-# in piu' sottotoken del normale.
+# Finestra del modello 512 sottotoken (~3 caratteri l'uno): 1 000 caratteri lasciano margine.
 MAX_CARATTERI_SEGMENTO = 1000
 
 PROPORZIONI = {"addestramento": 0.70, "sviluppo": 0.15, "prova": 0.15}
@@ -86,13 +46,7 @@ class EntitaSilver:
 
 @dataclass
 class Segmento:
-    """Un'unita' di addestramento: un pezzo di anamnesi con le sue entita'.
-
-    Conserva `enc_oid` e `inizio_nel_referto` per poter sempre risalire dal
-    segmento al punto esatto del referto da cui viene: e' il requisito di
-    tracciabilita' del progetto, e serve anche a ispezionare a mano i casi in
-    cui il modello sbaglia.
-    """
+    """Un'unita' di addestramento: un pezzo di anamnesi con le sue entita' e la posizione nel referto."""
 
     enc_oid: int
     inizio_nel_referto: int
@@ -121,9 +75,7 @@ def carica_annotazioni(cartella: Path = CARTELLA_PIPELINE_A) -> list[tuple[int, 
                 inizio, fine = provenienza["inizio"], provenienza["fine"]
                 if inizio is None or fine is None:
                     continue
-                # Difesa contro annotazioni incoerenti: se l'offset non ritaglia
-                # esattamente il testo dichiarato, l'annotazione e' inutilizzabile
-                # e va scartata invece di insegnare al modello un confine sbagliato.
+                # Offset che non ritaglia il testo dichiarato: si scarta.
                 if testo[inizio:fine] != provenienza["testo_originale"]:
                     continue
                 entita.append(EntitaSilver(inizio, fine, etichetta, testo[inizio:fine]))
@@ -133,12 +85,7 @@ def carica_annotazioni(cartella: Path = CARTELLA_PIPELINE_A) -> list[tuple[int, 
 
 
 def _senza_sovrapposizioni(entita: list[EntitaSilver]) -> list[EntitaSilver]:
-    """Tiene la menzione piu' lunga quando due si sovrappongono.
-
-    Lo schema BIO non sa rappresentare due entita' sovrapposte: bisogna
-    sceglierne una. Si tiene la piu' lunga, coerentemente con la regola gia'
-    usata dal gazetteer, dove la menzione piu' lunga e' anche la piu' specifica.
-    """
+    """Fra menzioni sovrapposte tiene la piu' lunga (BIO non ne rappresenta due)."""
     ordinate = sorted(entita, key=lambda e: (-(e.fine - e.inizio), e.inizio))
     tenute: list[EntitaSilver] = []
     occupati: set[int] = set()
@@ -151,13 +98,7 @@ def _senza_sovrapposizioni(entita: list[EntitaSilver]) -> list[EntitaSilver]:
 
 
 def _confini_di_frase(testo: str) -> list[int]:
-    """Posizioni dopo cui si puo' tagliare senza spezzare una frase.
-
-    Deliberatamente a regole e non con un modello statistico: la prosa clinica
-    e' piena di abbreviazioni puntate ("aa.", "sec.", "pz.") e di date, dove un
-    segmentatore appreso sbaglia; qui basta un taglio *sicuro*, e se ne salta
-    uno l'unico effetto e' un segmento piu' lungo.
-    """
+    """Posizioni dopo cui si puo' tagliare senza spezzare una frase (a regole: bastano tagli sicuri)."""
     confini = []
     for indice, carattere in enumerate(testo):
         if carattere == "\n" or (
@@ -179,12 +120,7 @@ def segmenta(
     entita: list[EntitaSilver],
     massimo: int = MAX_CARATTERI_SEGMENTO,
 ) -> tuple[list[Segmento], int]:
-    """Divide un'anamnesi in segmenti che stiano nella finestra del modello.
-
-    Restituisce anche quante entita' sono andate perse: un taglio forzato dentro
-    una frase molto lunga puo' spezzare una menzione, e quel numero va
-    dichiarato invece che ignorato.
-    """
+    """Divide un'anamnesi in segmenti che stiano nella finestra del modello; conta le entita' perse."""
     if len(testo) <= massimo:
         tagli = [0, len(testo)]
     else:
@@ -194,9 +130,7 @@ def segmenta(
             if confine - corrente >= massimo:
                 tagli.append(confine)
                 corrente = confine
-        # Se una singola frase supera il massimo il taglio arriva comunque, ma
-        # solo dopo di essa: si preferisce un segmento lungo a una menzione
-        # spezzata.
+        # Meglio un segmento lungo che una menzione spezzata.
         if tagli[-1] != len(testo):
             tagli.append(len(testo))
 

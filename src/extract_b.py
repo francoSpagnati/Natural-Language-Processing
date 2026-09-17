@@ -1,31 +1,11 @@
 """Step 4 - Pipeline B: estrazione dello stato paziente con un modello linguistico.
 
-Cosa fa il modello e cosa non fa
---------------------------------
-Il modello riceve il referto e restituisce un elenco di menzioni: condizioni,
-farmaci, allergie, ciascuna con il proprio stato clinico. **Non produce codici.**
-ATC e ICD-10 vengono assegnati dopo, dagli stessi risolutori che usa la pipeline
-A (`risolutori.py`), che poggiano su AIFA e sul volume ICD-10 italiano. Sono due
-scelte di progetto, non un dettaglio implementativo:
-
-* il vincolo di provenienza del progetto vieta che un codice nasca dalla
-  conoscenza interna di un LLM, per quanto plausibile sembri;
-* a normalizzazione identica, il confronto dello step 6 misura la sola
-  differenza di *estrazione*, che e' cio' che si vuole confrontare.
-
-Come si verifica che il modello non stia inventando
----------------------------------------------------
-Ogni menzione deve riportare la porzione di referto da cui proviene, copiata
-alla lettera. La pipeline la ricerca nel testo originale: se non la trova, la
-menzione e' segnalata come non ancorata e l'entita' resta senza offset. E' un
-rilevatore di allucinazioni automatico e quantificabile, e il suo tasso e' una
-delle metriche riportate allo step 6.
-
-Costo e riproducibilita'
-------------------------
-Ogni chiamata passa dalla cache su disco di `llm_backend`: una seconda
-esecuzione sugli stessi record non consuma quota e restituisce esattamente gli
-stessi risultati, il che rende ripetibile la valutazione dello step 11.
+Il modello riceve la sola anamnesi e restituisce menzioni (condizioni, farmaci,
+allergie) citate alla lettera, mai codici: ATC e ICD-10 li assegnano i
+risolutori della pipeline A. La citazione viene cercata nel testo: se non c'e',
+la menzione e' «non ancorata» (rilevatore di allucinazioni). I campi di terapia
+li legge il parser deterministico, come in A e C. Ogni chiamata passa dalla
+cache su disco. Scelte e misure: docs/04_pipeline_estrazione_B.md.
 """
 
 from __future__ import annotations
@@ -72,15 +52,11 @@ from schema import (
 RADICE = Path(__file__).resolve().parent.parent
 PERCORSO_DATASET = RADICE / "data" / "raw" / "anamnesiterapie.txt"
 CARTELLA_USCITA = RADICE / "data" / "processed" / "pipeline_b"
-# Registro della corsa: consente di riprendere dopo un'interruzione senza
-# rifare cio' che e' gia' stato prodotto, e impedisce di mescolare in una
-# stessa cartella risultati ottenuti con configurazioni diverse.
+# Registro della corsa: per riprendere, e per non mescolare configurazioni.
 NOME_REGISTRO = "_corsa.json"
 NOME_RIEPILOGO = "_riepilogo.json"
 
-# Il campo dichiarato dal modello determina il momento della terapia: dedurlo
-# dalla struttura del record invece di chiederlo elimina una possibile
-# incoerenza fra i due valori.
+# Il momento della terapia si deduce dal campo, non si chiede al modello.
 MOMENTO_PER_CAMPO = {
     CampoReferto.ANAMNESI: MomentoTerapia.NARRATIVO,
     CampoReferto.TERAPIA_INGRESSO: MomentoTerapia.INGRESSO,
@@ -247,43 +223,16 @@ della sostanza e non il nome del campo.
 
 
 def componi_testo(record: RecordPaziente) -> str:
-    """Il testo inviato al modello: **la sola anamnesi**.
+    """Il testo inviato al modello: la sola anamnesi.
 
-    PERCHE' NON I CAMPI DI TERAPIA
-        Sono liste con delimitatori (`;` all'ingresso, voci fra virgolette alla
-        dimissione) e un parser deterministico li legge meglio del modello:
-        misurato contro il campo stesso, il parser ha precisione e richiamo del
-        100% sull'ingresso, il modello il 99,3%. Mandarci un modello linguistico
-        non aggiunge capacita': aggiunge costo e una sorgente di errore dove non
-        ce n'era.
-
-        Erano anche il 29% del testo inviato e il 42% delle voci prodotte, cioe'
-        circa un terzo del costo di una corsa, speso per rifare peggio un lavoro
-        gia' fatto.
-
-        I farmaci di terapia entrano quindi dallo stesso
-        `farmaci_da_campo_strutturato` che usano le pipeline A e C: il progetto
-        ha una sola lettura di quei campi, non tre.
-
-    CHE COSA RESTA AL MODELLO
-        La prosa, dove sta cio' che nessuna lista contiene: le condizioni (dove
-        il richiamo del gazetteer e' del 20% e il suo del 70%), le allergie, la
-        familiarita', e i farmaci di cui l'anamnesi racconta un fatto — una
-        sospensione, un'intolleranza, un evento avverso.
+    I campi di terapia sono liste con delimitatori: il parser li legge al 100%,
+    il modello al 99,3% pagando (docs/04). Al modello resta la prosa.
     """
     return (record.testo_anamnesi or "").strip()
 
 
 def campo_del_modello(dichiarato: CampoReferto) -> CampoReferto:
-    """Il campo di una menzione del modello e' sempre l'anamnesi.
-
-    Non e' una correzione difensiva ma una conseguenza: al modello arriva solo
-    l'anamnesi, quindi ogni sua citazione viene da li'. Lo schema ammette ancora
-    i tre valori — e' condiviso con le altre pipeline — e se il modello ne
-    scegliesse un altro la citazione verrebbe cercata nel campo sbagliato, dove
-    potrebbe perfino trovarsi per caso. Fissarlo qui rende quell'errore
-    impossibile invece che improbabile.
-    """
+    """Il campo di una menzione del modello e' sempre l'anamnesi: e' l'unico testo che riceve."""
     return CampoReferto.ANAMNESI
 
 
@@ -296,13 +245,7 @@ def _testo_del_campo(record: RecordPaziente, campo: CampoReferto) -> str:
 
 
 def ancora(testo_campo: str, citazione: str) -> tuple[int | None, int | None]:
-    """Posizione della citazione nel campo di origine.
-
-    Prima si cerca la corrispondenza esatta; se fallisce si riprova ignorando
-    maiuscole e minuscole, perche' e' l'unica differenza che il modello introduce
-    con qualche regolarita' e non intacca l'identita' della menzione. Ogni altra
-    difformita' lascia la menzione senza ancoraggio, e questo viene contato.
-    """
+    """Posizione della citazione nel campo: esatta, poi senza maiuscole; altrimenti non ancorata."""
     citazione = citazione.strip()
     if not citazione or not testo_campo:
         return None, None
@@ -347,14 +290,8 @@ def converti(
     condizioni: list[CondizioneEstratta] = []
     for voce in estrazione.condizioni:
         voce.campo = campo_del_modello(voce.campo)
-        # L'espansione proposta dal modello resta sempre nella regola, anche
-        # quando il risolutore aggancia un termine diverso: e' un dato prodotto
-        # dalla pipeline e deve restare ispezionabile, non essere sovrascritto
-        # dall'esito della normalizzazione.
-        # Si tenta prima il concetto esteso e poi la citazione letterale: la
-        # forma estesa e' quella che ha qualche possibilita' di comparire
-        # nell'indice ICD, il letterale e' il ripiego quando l'espansione
-        # allontana dal lessico del volume.
+        # Prima il concetto esteso, poi la citazione letterale; l'espansione
+        # resta nella regola per ispezione.
         esito = risolutore_icd.risolvi(voce.concetto)
         if esito.stato is StatoNormalizzazione.NIL:
             esito = risolutore_icd.risolvi(voce.testo_grezzo)
@@ -365,9 +302,7 @@ def converti(
             f"{regola} concetto='{voce.concetto}' icd:{esito.metodo}",
         )
         non_ancorate += not ancorata
-        # L'asse dell'experiencer non si chiede al modello: si calcola sul testo
-        # del referto con la stessa regola delle altre due pipeline, cosi' il
-        # confronto dello step 6 non misura anche questa differenza.
+        # Il soggetto si calcola sul testo con la regola comune alle tre pipeline.
         soggetto, nota_soggetto = soggetto_della_menzione(
             _testo_del_campo(record, voce.campo) or "",
             provenienza.inizio,
@@ -393,9 +328,7 @@ def converti(
     farmaci: list[FarmacoEstratto] = []
     for voce in estrazione.farmaci:
         voce.campo = campo_del_modello(voce.campo)
-        # La menzione puo' essere composta ("Furosemide (Lasix cpr. 25 mg)"):
-        # `risolvi_menzione` la scompone e dice quale forma ha risolto, che
-        # finisce nella regola perche' la provenienza resti veritiera.
+        # Menzione composta ("Furosemide (Lasix cpr. 25 mg)"): la forma risolta va nella regola.
         codice, stato_norm, fonte, forma = risolutore_atc.risolvi_menzione(voce.testo_grezzo)
         regola_farmaco = regola if forma == voce.testo_grezzo.strip() else f"{regola} forma='{forma}'"
         provenienza, ancorata = _provenienza(
@@ -433,11 +366,7 @@ def converti(
             )
         )
 
-    # I farmaci dei due campi di terapia NON vengono dal modello: li legge lo
-    # stesso parser deterministico delle pipeline A e C. Il progetto ha cosi' una
-    # sola lettura di quei campi, identica nelle tre pipeline, e il confronto
-    # dello step 6 misura la differenza di *estrazione dalla prosa*, che e'
-    # l'unica su cui le tre si distinguono davvero.
+    # I campi di terapia li legge il parser deterministico, come in A e C.
     farmaci = farmaci_da_campo_strutturato(record, risolutore_atc) + farmaci
 
     note: list[str] = []
@@ -473,28 +402,18 @@ def estrai(
         livello_ragionamento=livello_ragionamento,
     )
     risposta = backend.genera(richiesta)
-    # La validazione Pydantic e' la seconda rete: lo schema vincola la
-    # generazione, ma un enum fuori posto o un campo assente devono comunque
-    # fallire qui e non propagarsi nello stato paziente.
+    # Seconda rete: la validazione Pydantic dopo il vincolo di generazione.
     estrazione = EstrazioneLLM.model_validate(risposta.contenuto)
     stato = converti(record, estrazione, risposta.modello, risolutore_atc, risolutore_icd)
     return stato, risposta
 
 
-# ---------------------------------------------------------------------------
-# Esecuzione su un insieme di record
-# ---------------------------------------------------------------------------
+# --- Esecuzione su un insieme di record ---
 
 
 def scegli_record(record: list[RecordPaziente], quanti: int | None, seme: int,
                   solo: list[int] | None = None):
-    """Sottoinsieme riproducibile, per contenere il consumo di quota.
-
-    `solo` seleziona record per identificativo invece che a caso. Serve agli
-    esperimenti mirati: provare una modifica del prompt sui 25 referti del
-    riferimento annotato costa qualche centesimo e si misura subito, mentre
-    rifare il corpus intero costa due ordini di grandezza di piu'.
-    """
+    """Sottoinsieme riproducibile; `solo` seleziona per identificativo (esperimenti mirati)."""
     if solo:
         voluti = set(solo)
         scelti = [r for r in record if r.enc_oid in voluti]
@@ -517,13 +436,7 @@ def _ragionamento_effettivo(backend, opzioni) -> str:
 
 
 def impronta_configurazione(backend, opzioni, schema: dict) -> dict:
-    """Tutto cio' che, cambiando, renderebbe i risultati non confrontabili.
-
-    Riprendere una corsa mescolando modelli o prompt diversi produrrebbe una
-    cartella di risultati che nessuno potrebbe piu' interpretare: meta' prodotti
-    da una configurazione, meta' da un'altra, senza modo di distinguerli. Il
-    registro rende la cosa impossibile per costruzione.
-    """
+    """Tutto cio' che, cambiando, renderebbe i risultati di una cartella non confrontabili."""
     def breve(testo: str) -> str:
         return hashlib.sha256(testo.encode("utf-8")).hexdigest()[:16]
 
@@ -535,9 +448,7 @@ def impronta_configurazione(backend, opzioni, schema: dict) -> dict:
         "ragionamento": _ragionamento_effettivo(backend, opzioni),
         "seme": opzioni.seme,
         "record_richiesti": opzioni.record,
-        # Una corsa mirata non e' confrontabile con una campionata dallo stesso
-        # seme: l'impronta deve dirlo, o riprendere l'una nella cartella
-        # dell'altra passerebbe inosservato.
+        # Una corsa mirata non e' confrontabile con una campionata: l'impronta lo dice.
         "record_scelti": sorted(opzioni.solo) if getattr(opzioni, "solo", None) else None,
         "impronta_istruzioni": breve(ISTRUZIONI),
         "impronta_schema": breve(json.dumps(schema, sort_keys=True, ensure_ascii=False)),
@@ -545,12 +456,7 @@ def impronta_configurazione(backend, opzioni, schema: dict) -> dict:
 
 
 def prepara_cartella(cartella, configurazione: dict, rifai: bool) -> None:
-    """Verifica che la cartella sia coerente con questa configurazione.
-
-    Tre casi: cartella vuota (si parte), registro compatibile (si riprende),
-    tutto il resto (ci si ferma e si spiega perche'). Cancellare in silenzio il
-    lavoro di una notte precedente sarebbe il comportamento peggiore possibile.
-    """
+    """Cartella vuota: si parte; registro compatibile: si riprende; altrimenti ci si ferma."""
     cartella.mkdir(parents=True, exist_ok=True)
     registro = cartella / NOME_REGISTRO
     prodotti = [f for f in cartella.glob("*.json") if not f.name.startswith("_")]
@@ -603,16 +509,7 @@ def salva_registro(cartella, configurazione: dict, fatti: int, totale: int) -> N
 
 
 def _elabora(rec, backend, risolutore_atc, risolutore_icd, ragionamento, interruzione):
-    """Un record, in un thread. Restituisce l'errore invece di sollevarlo.
-
-    Un record che fallisce non deve fermare gli altri: viene contato, segnalato
-    e la corsa prosegue. Con la cache, rilanciare il comando ritenta solo quelli.
-
-    L'esaurimento della quota giornaliera fa eccezione: da quel momento ogni
-    altra richiesta e' destinata a fallire, quindi alza `interruzione` e i
-    record ancora in coda vengono saltati senza chiamare l'API. Cosi' la corsa
-    si ferma in pochi secondi invece di consumare minuti in errori annunciati.
-    """
+    """Un record, in un thread: restituisce l'errore invece di sollevarlo. La quota esaurita alza `interruzione`."""
     if interruzione.is_set():
         return rec, None, None, None
     try:
@@ -694,9 +591,7 @@ def main() -> None:
         argomenti_backend["ragionamento"] = opzioni.ragionamento
     backend = classe(**argomenti_backend)
     risolutore_atc = RisolutoreATC()
-    # Stesso gazetteer della pipeline A: la normalizzazione deve essere
-    # identica nelle due pipeline, altrimenti il confronto dello step 6
-    # misurerebbe anche la differenza di risoluzione dei codici.
+    # Stesso gazetteer della pipeline A: normalizzazione identica.
     risolutore_icd = RisolutoreICD(gazetteer=GazetteerClinico())
 
     cartella = opzioni.uscita
@@ -804,9 +699,7 @@ def main() -> None:
         json.dumps(riepilogo, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     stampa_riepilogo(riepilogo)
-    # `relative_to` solleva se la cartella e' fuori dalla radice o e' stata data
-    # come percorso relativo dalla riga di comando: e' successo con --uscita, e
-    # il programma moriva dopo aver fatto tutto il lavoro e scritto i risultati.
+    # `relative_to` solleva su percorsi fuori dalla radice o relativi.
     try:
         dove = cartella.resolve().relative_to(RADICE)
     except ValueError:
@@ -815,12 +708,7 @@ def main() -> None:
 
 
 def misura_produzione(cartella) -> dict:
-    """Misura tutto cio' che e' stato prodotto, non solo la sessione corrente.
-
-    Su una corsa lunga e ripresa piu' volte, i contatori accumulati in memoria
-    raccontano solo l'ultimo tratto. Le misure che contano si ricavano dai file,
-    che sono la produzione vera.
-    """
+    """Misure dai file prodotti, non dai contatori della sola sessione corrente."""
     percorsi = sorted(f for f in cartella.glob("*.json") if not f.name.startswith("_"))
     misure = {
         "record": len(percorsi),
@@ -852,10 +740,7 @@ def misura_produzione(cartella) -> dict:
             if farmaco["provenienza"]["inizio"] is None:
                 misure["menzioni_non_ancorate"] += 1
         for allergia in stato["allergie"]:
-            # Le allergie erano contate solo nel totale e mai controllate per
-            # l'ancoraggio, mentre il denominatore le comprendeva: il tasso di
-            # menzioni non ritrovate risultava piu' basso del vero. Sono anzi il
-            # tipo di menzione che il modello parafrasa piu' spesso.
+            # Anche le allergie contano nell'ancoraggio: sono le piu' parafrasate.
             misure["allergie"] += 1
             if allergia["provenienza"]["inizio"] is None:
                 misure["menzioni_non_ancorate"] += 1

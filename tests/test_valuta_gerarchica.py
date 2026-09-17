@@ -1,11 +1,4 @@
-"""La misura dello step 11 — P, R e F1 per livello ATC — e le sue trappole.
-
-Una metrica e' un pezzo di codice che produce numeri che nessuno controlla a
-occhio: se sbaglia, sbaglia in silenzio e la conclusione dello step e' falsa.
-Questi test la fissano su esempi calcolati a mano, compresa una proprieta'
-controintuitiva: troncare i codici puo' **abbassare** una misura, non solo
-alzarla, e il ranker casuale guadagna anche lui salendo di livello.
-"""
+"""La misura dello step 11 — P, R e F1 per livello ATC — e le sue trappole."""
 
 from __future__ import annotations
 
@@ -68,13 +61,13 @@ class TestLaMisuraPerLivello(unittest.TestCase):
         self.assertEqual(m[3]["F1"], 1.0)
 
     def test_troncare_puo_ABBASSARE_la_precisione(self) -> None:
-        """Due proposte distinte al 4o livello (C10AA, C10BA) contro due
-        prescrizioni identiche: al 4o P = 1; al 2o le proposte collassano in
-        {C10} e i veri pure, P resta 1. Ma con veri {C10AA, C07AB} e proposte
-        {C10AA, C10BA}: al 4o P = 1/2, R = 1/2; al 2o proposte {C10}, veri
-        {C10, C07}: P = 1, R = 1/2. Il richiamo non sale, la precisione si'.
-        Il punto del test: la misura per livello non e' monotona per
-        costruzione, quindi va calcolata, non dedotta."""
+        """Due proposte distinte al 4o livello (C10AA, C10BA) contro due prescrizioni
+        identiche: al 4o P = 1; al 2o le proposte collassano in {C10} e i veri pure, P
+        resta 1. Ma con veri {C10AA, C07AB} e proposte {C10AA, C10BA}: al 4o P = 1/2, R
+        = 1/2; al 2o proposte {C10}, veri {C10, C07}: P = 1, R = 1/2. Il richiamo non
+        sale, la precisione si'. Il punto del test: la misura per livello non e'
+        monotona per costruzione, quindi va calcolata, non dedotta.
+        """
         casi = {1: caso(1, set(), {"C10AA", "C07AB"})}
         m = misure_per_livello({1: ["C10AA", "C10BA"]}, casi, 5)
         self.assertEqual((m[5]["P"], m[5]["R"]), (0.5, 0.5))
@@ -200,12 +193,7 @@ class TestLIncertezza(unittest.TestCase):
         self.assertGreater(basso, 0)
 
     def test_le_coppie_da_confrontare_sono_esplicite(self) -> None:
-        """Le differenze si chiedono per nome: `a-b`.
-
-        La prima versione confrontava solo ibrido e frequenza, con una chiave
-        fissa; generalizzandola a coppie arbitrarie la chiave e' cambiata e un
-        test e' rimasto indietro. Questo fissa la forma.
-        """
+        """Le differenze si chiedono per nome: `a-b`."""
         esiti = [self.esito("ibr", {i: ["C07AB"] for i in range(10)}),
                  self.esito("freq", {i: ["C03DA"] for i in range(10)}),
                  self.esito("llm_rem", {i: ["A02BC"] for i in range(10)})]

@@ -1,22 +1,9 @@
 """Step 7 - Lo script di import della knowledge base clinica (brief sez. 3.3).
 
-Scrive `kb/conoscenza.ttl` a partire da tre cose:
-
-1. le **indicazioni** (27) e le **controindicazioni** (12) dichiarate qui
-   sotto — curatela manuale con la fonte puntuale per ogni riga, come il brief
-   ammette per il layer delle linee guida, che sono documenti e non API;
-2. le etichette italiane dei codici ATC (registro AIFA) e ICD-10 (Elenco
-   Sistematico 2019), lette dalle knowledge base scaricate;
-3. il manifest `kb/manifest_fonti.json`, dove registra data di generazione e
-   conteggi, cosi' il grafo si rigenera rieseguendo lo script.
-
-Perche' le regole sono curate a mano e non importate da openFDA o Wikidata:
-openFDA pubblica le schede tecniche americane in inglese e come testo libero,
-non come relazioni; Wikidata ha `P2175` (condizione trattata) e `P769`
-(interazione), ma la sonda `--sonda-wikidata` misura quanto coprono i nostri
-principi attivi — il numero e' nel manifest, e la decisione nel doc 7.
-
-Uso:
+Scrive `kb/conoscenza.ttl` dalle 27 indicazioni e 12 controindicazioni
+curate qui (ogni riga con documento e sezione della fonte), con le etichette
+AIFA e ICD-10, e aggiorna `kb/manifest_fonti.json`. Perche' la curatela e'
+manuale e non da openFDA/Wikidata: docs/07_knowledge_graph.md.
 
     python3 src/kb_build.py                  # scrive kb/conoscenza.ttl
     python3 src/kb_build.py --figura         # + docs/img/conoscenza.png
@@ -42,25 +29,10 @@ from conoscenza import (  # noqa: E402
 MANIFEST = RADICE / "kb" / "manifest_fonti.json"
 
 
-# ---------------------------------------------------------------------------
-# LE INDICAZIONI CLINICHE
-#
-# Stessa disciplina delle controindicazioni dello step 8: ogni riga porta la
-# fonte, e la fonte e' un documento pubblicato, non la conoscenza di un modello.
-# La granularita' della citazione e' **documento + sezione**, deliberatamente
-# non la pagina: ho trascritto a mano dalle tabelle di raccomandazione, e un
-# numero di pagina che non posso verificare sarebbe una precisione falsa.
-#
-# Il perimetro e' la cardiologia, perche' e' li' che ho linee guida citabili.
-# Cio' che resta fuori resta fuori: vedi il tetto del 60% nel docstring.
-# ---------------------------------------------------------------------------
+# --- Le indicazioni cliniche: ogni riga con fonte (documento + sezione), perimetro cardiologico ---
 
 INDICAZIONI: tuple[Indicazione, ...] = (
-    # --- Scompenso cardiaco -------------------------------------------------
-    # I quattro pilastri della terapia dello scompenso a frazione di eiezione
-    # ridotta. Il sistema non estrae la frazione di eiezione, quindi non sa
-    # distinguere HFrEF da HFpEF: le regole valgono per I50 nel suo insieme e
-    # questo e' dichiarato, non nascosto.
+    # --- Scompenso cardiaco: i quattro pilastri; la frazione di eiezione non e' estratta ---
     Indicazione(
         "C09A", ("I50",), "I",
         "ACE-inibitore nello scompenso a frazione di eiezione ridotta: riduce "
@@ -108,12 +80,7 @@ INDICAZIONI: tuple[Indicazione, ...] = (
         "ESC 2021, Guidelines for heart failure, alternative all'ACE-inibitore.",
     ),
 
-    # --- Fibrillazione atriale ----------------------------------------------
-    # L'anticoagulazione dipende dal punteggio CHA2DS2-VA, che il sistema non
-    # calcola: mancano eta' e sesso, che non sono nello schema. La regola resta
-    # di classe I perche' nella popolazione di questo corpus — ricoverati in
-    # cardiologia — il punteggio e' quasi sempre sopra la soglia, ma il fatto
-    # mancante e' dichiarato.
+    # --- Fibrillazione atriale: il punteggio CHA2DS2-VA non e' calcolabile (fatto mancante dichiarato) ---
     Indicazione(
         "B01AF", ("I48",), "I",
         "Anticoagulante orale diretto nella fibrillazione atriale: prevenzione "
@@ -150,9 +117,7 @@ INDICAZIONI: tuple[Indicazione, ...] = (
         "ESC 2024, Guidelines for atrial fibrillation, controllo del ritmo.",
     ),
 
-    # --- Ipertensione arteriosa ---------------------------------------------
-    # La classe piu' frequente del corpus fra le condizioni: I10 compare in 486
-    # ricoveri su 841.
+    # --- Ipertensione arteriosa ---
     Indicazione(
         "C09AA", ("I10", "I11", "I12", "I13", "I15"), "I",
         "ACE-inibitore come farmaco di prima linea nell'ipertensione.",
@@ -362,9 +327,7 @@ REGOLE_CONTROINDICAZIONE: tuple[Controindicazione, ...] = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Etichette dei codici, dalle knowledge base scaricate
-# ---------------------------------------------------------------------------
+# --- Etichette dei codici, dalle knowledge base scaricate ---
 
 def etichette_atc() -> dict[str, str]:
     percorso = RADICE / "data" / "external" / "aifa" / "atc.csv"
@@ -392,9 +355,7 @@ def codici_citati() -> set[str]:
     return codici
 
 
-# ---------------------------------------------------------------------------
-# Figura: il grafo di conoscenza come immagine (brief sez. 3.3, networkx + matplotlib)
-# ---------------------------------------------------------------------------
+# --- Figura: il grafo di conoscenza come immagine (brief sez. 3.3, networkx + matplotlib) ---
 
 def figura(percorso: Path) -> None:
     import matplotlib
@@ -440,9 +401,7 @@ def figura(percorso: Path) -> None:
     print(f"figura: {percorso}")
 
 
-# ---------------------------------------------------------------------------
-# Sonda: quanto Wikidata coprirebbe (brief sez. 3.3: «valuta empiricamente»)
-# ---------------------------------------------------------------------------
+# --- Sonda: quanto Wikidata coprirebbe (brief sez. 3.3: «valuta empiricamente») ---
 
 def sonda_wikidata() -> dict:
     """Per i principi attivi risolti ad ATC (step 2b), quanti hanno su Wikidata

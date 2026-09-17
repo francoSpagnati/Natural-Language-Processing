@@ -1,14 +1,4 @@
-"""
-Test del caricamento del dataset.
-
-I test usano dati **sintetici** costruiti nel test stesso, mai il file clinico
-reale. Due motivi: il dataset non e' versionato (chi clona il repository deve
-poter eseguire i test), e i dati clinici non devono comparire in un test che
-finisce su GitHub.
-
-Esecuzione:
-    python3 -m unittest discover -s tests -v
-"""
+"""Test del caricamento del dataset."""
 
 import json
 import sys
@@ -103,12 +93,7 @@ class TestCaricamento(unittest.TestCase):
         self.assertEqual([a.tipo_problema for a in anomalie], ["encOid_duplicato"])
 
     def test_anomalie_accumulate_senza_eccezioni(self):
-        """Il loader non deve fermarsi al primo record difettoso.
-
-        Su dati clinici reali serve *misurare* quanti record sono rotti, non
-        interrompersi: e' la ragione per cui `carica_dataset` restituisce le
-        anomalie invece di sollevarle.
-        """
+        """Il loader non deve fermarsi al primo record difettoso."""
         percorso = scrivi_dataset([
             {"encOid": 5, "referti": [referto(TIPO_ANAMNESI, ""), referto(TIPO_TERAPIA_INGRESSO, "x")]},
             {"encOid": 6, "referti": [referto(TIPO_ANAMNESI, "ok"), referto(TIPO_TERAPIA_INGRESSO, "y")]},

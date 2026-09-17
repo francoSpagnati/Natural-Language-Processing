@@ -1,19 +1,4 @@
-"""Il server MCP dello step 10: sola lettura, e il corpus non passa di qui.
-
-I test importanti non sono quelli sul contenuto delle risposte — quello lo
-misurano gli step 8 e 9 — ma quelli sulle **due promesse strutturali** che
-rendono accettabile mettere un modello linguistico davanti a questo sistema:
-
-1. nessuno strumento scrive o decide;
-2. nessuno strumento fa uscire testo clinico del corpus.
-
-Un test sul primo punto si scrive facilmente. Il secondo e' il piu' importante,
-perche' e' l'unica frontiera dove un errore non produce un numero sbagliato ma
-un dato di paziente spedito a un modello remoto.
-
-Nessun test qui parla con la rete o con ollama: gli strumenti sono funzioni
-Python e si chiamano direttamente.
-"""
+"""Il server MCP dello step 10: sola lettura, e il corpus non passa di qui."""
 
 from __future__ import annotations
 
@@ -42,12 +27,7 @@ class TestLeDuePromesseStrutturali(unittest.TestCase):
     """Cio' che rende accettabile esporre questo sistema a un modello."""
 
     def test_ogni_strumento_e_dichiarato_di_sola_lettura(self) -> None:
-        """`read_only_hint` e' la forma verificabile dal client della promessa.
-
-        Il filtro dello step 8 e' simbolico per vincolo: un modello che potesse
-        modificare regole, grafo o insieme candidato scavalcherebbe l'unico
-        strato che stabilisce che cosa e' ammissibile.
-        """
+        """`read_only_hint` e' la forma verificabile dal client della promessa."""
         for s in strumenti():
             with self.subTest(strumento=s.name):
                 self.assertIsNotNone(s.annotations, f"{s.name} senza annotazioni")
@@ -55,12 +35,7 @@ class TestLeDuePromesseStrutturali(unittest.TestCase):
                 self.assertFalse(s.annotations.destructive_hint)
 
     def test_nessuno_strumento_accetta_un_identificativo_di_ricovero(self) -> None:
-        """Il corpus non e' indirizzabile, e la difesa e' nella firma.
-
-        Se uno strumento accettasse `enc_oid` potrebbe restituire il testo di un
-        referto vero, e un client remoto lo spedirebbe fuori dalla macchina.
-        Gli strumenti lavorano solo sul testo che l'utente incolla.
-        """
+        """Il corpus non e' indirizzabile, e la difesa e' nella firma."""
         vietati = {"enc_oid", "record", "referto", "paziente_id", "id_ricovero"}
         for s in strumenti():
             argomenti = set(s.input_schema.get("properties", {}))
@@ -158,15 +133,7 @@ class TestProponiTerapia(unittest.TestCase):
 
 
 class TestIlFondamentoDiOgniProposta(unittest.TestCase):
-    """La difesa contro l'unica cosa che il server non controlla: la prosa.
-
-    Misurato con `qwen3.5:4b` davanti a questo server: ricevendo proposte con
-    `motivo: null`, il modello ha **riempito il vuoto** con una motivazione
-    propria — un «profilo nefroprotettivo» inventato, e A02BC (inibitori della
-    pompa protonica) presentato come «betabloccante selettivo». Il server non
-    puo' impedirgli di scrivere, ma puo' dirgli in chiaro che quella proposta
-    non ha una regola dietro.
-    """
+    """La difesa contro l'unica cosa che il server non controlla: la prosa."""
 
     def test_ogni_proposta_dichiara_il_proprio_fondamento(self) -> None:
         esito = mcp_server.proponi_terapia(ANAMNESI, TERAPIA, 6)
@@ -185,14 +152,7 @@ class TestIlFondamentoDiOgniProposta(unittest.TestCase):
 
 
 class TestIlPrincipioDelFattoMancante(unittest.TestCase):
-    """Una risposta la cui premessa e' fallita non si presenta come valida.
-
-    E' la terza ricorrenza nel progetto dello stesso principio, e la prima alla
-    frontiera MCP: se il testo non produce nessun fatto, le proposte sono il
-    tasso di base del reparto e non hanno niente a che vedere con il paziente.
-    Restituirle senza dirlo e' il modo piu' rapido per far scrivere a un modello
-    una raccomandazione clinica basata su nulla.
-    """
+    """Una risposta la cui premessa e' fallita non si presenta come valida."""
 
     def test_senza_condizioni_estratte_lo_dichiara(self) -> None:
         # «iperteso» non e' nel gazetteer, che riconosce le forme per esteso.
@@ -214,15 +174,7 @@ class TestIlPrincipioDelFattoMancante(unittest.TestCase):
         self.assertNotIn("fatti_mancanti", esito)
 
     def test_la_descrizione_chiede_il_testo_alla_lettera(self) -> None:
-        """Il difetto piu' grave misurato, e l'unica difesa possibile.
-
-        Passando dalla prosa allo strumento, il modello locale ha riscritto
-        l'anamnesi e la riscrittura ha cambiato un fatto clinico: «iperteso» e'
-        diventato «Ipotensione». Il server riceve la parafrasi del modello, non
-        il testo del clinico, e non ha modo di accorgersene — quindi gli offset
-        di provenienza indicherebbero parole che nessuno ha scritto. L'unica
-        difesa e' chiederlo nella descrizione, e dichiarare il limite.
-        """
+        """Il difetto piu' grave misurato, e l'unica difesa possibile."""
         descrizione = next(s.description for s in strumenti()
                            if s.name == "cardio_proponi_terapia")
         self.assertIn("carattere per carattere", descrizione)
@@ -272,13 +224,7 @@ class TestVerificaSicurezza(unittest.TestCase):
         self.assertEqual(esito["esito"], "ammesso")
 
     def test_un_farmaco_a_cui_il_paziente_e_allergico_e_vietato(self) -> None:
-        """La sezione allergie va scritta come il clinico la scrive.
-
-        La prima stesura di questo test usava «Allergie: principi attivi: ...»
-        e otteneva `ammesso`. Non era un difetto del filtro: la sonda cerca
-        l'intestazione reale del reparto, e un test che inventa una sintassi
-        misura l'invenzione invece del sistema.
-        """
+        """La sezione allergie va scritta come il clinico la scrive."""
         anamnesi = (ANAMNESI + " Allergie e intolleranze: Principi attivi "
                     "(acido acetilsalicilico)")
         esito = mcp_server.verifica_sicurezza(anamnesi, "B01AC06", TERAPIA)
@@ -287,13 +233,7 @@ class TestVerificaSicurezza(unittest.TestCase):
         self.assertTrue(esito["motivi"])
 
     def test_un_nome_al_posto_del_codice_NON_produce_un_verdetto(self) -> None:
-        """Il falso permesso, misurato nella valutazione a dieci domande.
-
-        Il modello ha chiesto la sicurezza di «Bisoprololo» per nome, e il
-        filtro — che confronta codici — non ha trovato nessuna regola e ha
-        risposto `ammesso`. Uno strato di sicurezza che dice si' a cio' che non
-        capisce e' peggio di uno che non c'e'.
-        """
+        """Il falso permesso, misurato nella valutazione a dieci domande."""
         for nome in ("Bisoprololo", "aspirina", "", "XYZ99", "C99ZZ"):
             with self.subTest(ricevuto=nome):
                 esito = mcp_server.verifica_sicurezza(ANAMNESI, nome, TERAPIA)
@@ -328,12 +268,7 @@ class TestCercaCodice(unittest.TestCase):
                       mcp_server.cerca_codice("I50", "icd")["fonte"])
 
     def test_accetta_i_nomi_veri_della_classificazione(self) -> None:
-        """`ICD-10` e' come si chiama davvero, e rifiutarlo costa un giro.
-
-        Misurato: il modello locale ha speso una chiamata su `sistema='ICD-10'`
-        prima di indovinare `icd`. Un cavillo lessicale che costa dieci secondi
-        di inferenza e' un difetto dell'interfaccia, non dell'utente.
-        """
+        """`ICD-10` e' come si chiama davvero, e rifiutarlo costa un giro."""
         for alias in ("ICD-10", "icd10", "ICD 10", "icd"):
             with self.subTest(alias=alias):
                 esito = mcp_server.cerca_codice("I50", alias, 2)

@@ -1,32 +1,10 @@
-"""
-Caricamento del dataset grezzo di anamnesi cardiologiche.
+"""Caricamento del dataset grezzo (`anamnesiterapie.txt`, un array JSON).
 
-Questo modulo fa UNA sola cosa: portare il file `.txt` (che in realta' contiene
-JSON) in strutture Python affidabili, senza interpretare clinicamente nulla.
-L'interpretazione (normalizzazione farmaci, estrazione entita', ...) e' compito
-degli step successivi: tenerla fuori da qui evita che un bug di parsing si
-confonda con un bug di modellazione clinica.
-
-PROVENIENZA DEL DATO (vincolo di progetto, non dettaglio implementativo)
-    Il file caricato e' `anamnesiterapie.txt`, l'export **grezzo** del sistema
-    ospedaliero. Nella stessa macchina esistono varianti dello stesso dataset
-    con i campi gia' separati e un questionario clinico gia' codificato, ma
-    sono state prodotte facendo passare i dati attraverso un LLM per filtrarli e
-    strutturarli. Non sono usate: costruirci sopra la pipeline significherebbe
-    ereditare un'estrazione fatta da un altro modello, che e' esattamente cio'
-    che questo progetto deve invece implementare e misurare.
-
-Scelte tecniche principali (motivate perche' non ovvie):
-
-1. Il referto "Terapia alla Dimissione" e' **opzionale**: 143 record su 1000 ne
-   sono privi. La sua assenza non e' un'anomalia ma una caratteristica del
-   dataset, quindi il loader la registra come tale e non la segnala come errore.
-   Serve pero' distinguerli, perche' solo i record che ce l'hanno possono fare
-   da ground truth nella valutazione (sezione 4 del brief).
-
-2. Il loader non solleva eccezioni sui record malformati: li raccoglie in una
-   lista di anomalie. Su dati clinici reali serve *misurare* quanti record sono
-   difettosi, non fermarsi al primo.
+Porta il file in strutture Python senza interpretare nulla. Si usa solo
+l'export grezzo, mai le varianti gia' passate per un LLM. Il referto di
+dimissione manca in 143 record su 1 000: e' una caratteristica del dataset,
+non un'anomalia; i record malformati si raccolgono in una lista di anomalie
+invece di fermare il caricamento.
 """
 
 from __future__ import annotations
@@ -52,11 +30,7 @@ TIPI_ATTESI = TIPI_OBBLIGATORI + TIPI_OPZIONALI
 
 @dataclass
 class Anomalia:
-    """Un problema riscontrato durante il caricamento di un record.
-
-    Serve a produrre un report quantitativo delle anomalie invece di far
-    fallire l'intero caricamento su un singolo record difettoso.
-    """
+    """Un problema riscontrato nel caricamento di un record."""
 
     enc_oid: int | None
     tipo_problema: str
@@ -75,12 +49,7 @@ class Referto:
 
 @dataclass
 class RecordPaziente:
-    """Un ricovero: identificativo + i suoi referti, interrogabili per tipo.
-
-    `encOid` e' l'identificativo dell'*encounter* (ricovero), non del paziente:
-    lo trattiamo come chiave primaria perche' e' l'unica disponibile e nel
-    dataset risulta unico (verificato nello step 0).
-    """
+    """Un ricovero: `encOid` (identificativo dell'encounter, unico nel dataset) + i referti per tipo."""
 
     enc_oid: int
     referti: list[Referto] = field(default_factory=list)
@@ -106,21 +75,12 @@ class RecordPaziente:
 
     @property
     def ha_terapia_dimissione(self) -> bool:
-        """True se il record puo' fare da ground truth nella valutazione.
-
-        Esposto come proprieta' perche' la distinzione fra i due sottoinsiemi
-        del dataset ricorre in quasi tutti gli step successivi.
-        """
+        """True se il record ha la terapia di dimissione (puo' fare da verita' nella valutazione)."""
         return self.testo_terapia_dimissione is not None
 
 
 def carica_dataset(percorso: str | Path) -> tuple[list[RecordPaziente], list[Anomalia]]:
-    """Carica il dataset e restituisce la coppia (record, anomalie).
-
-    Il file e' un unico array JSON (non JSON-per-riga), quindi lo leggiamo
-    interamente in memoria: ~3,4 MB, del tutto gestibili, e questo evita la
-    complessita' di un parser incrementale che qui non porterebbe vantaggi.
-    """
+    """Carica il dataset: (record, anomalie)."""
     percorso = Path(percorso)
     anomalie: list[Anomalia] = []
 

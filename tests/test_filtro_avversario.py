@@ -1,18 +1,4 @@
-"""Il filtro di sicurezza contro casi scritti apposta per ingannarlo.
-
-Lo step 8 misura la **precisione** del filtro sulle 5 863 prescrizioni reali
-(quante volte blocca a vuoto) ma non il suo **richiamo**: quante
-controindicazioni vere lascia passare. Una verita' di riferimento per questo
-non esiste, e il vincolo dello step 8 vieta di ricavarla dal dataset. Quel che
-si puo' fare e' scrivere casi avversari — la stessa allergia in cinque grafie,
-la condizione negata, quella del familiare, il codice a un livello diverso — e
-contare quanti il filtro coglie **attraverso l'estrazione deterministica**,
-cioe' come lo incontra un utente della demo o del server MCP.
-
-I casi che il filtro manca restano qui come `expectedFailure`, con la causa:
-sono la misura del richiamo, non un difetto da nascondere. Il conteggio e'
-nel doc 8, sez. 10.
-"""
+"""Il filtro di sicurezza contro casi scritti apposta per ingannarlo."""
 
 from __future__ import annotations
 

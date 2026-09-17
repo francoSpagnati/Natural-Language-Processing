@@ -1,37 +1,9 @@
-"""Il riferimento annotato a mano, e le misure che rende possibili.
+"""Il riferimento annotato a mano (25 referti) e le misure che rende possibili.
 
-A COSA SERVE
-    Il progetto non ha mai misurato il **richiamo**. Precisione si', su campioni
-    aggiudicati; richiamo mai, perche' per sapere quante condizioni una pipeline
-    ha *mancato* bisogna sapere quante ce n'erano. Una diagnosi che nessuna delle
-    tre pipeline vede e' invisibile a ogni cifra degli step 3, 5 e 6.
-
-    Qui 25 referti sono annotati a mano, e da quelli si calcolano precisione,
-    richiamo e F1 per tutte e tre.
-
-COME SONO SCRITTE LE ANNOTAZIONI
-    Come **stringhe verbatim**, non come offset. Scrivere gli offset a mano e'
-    un invito all'errore silenzioso: un numero sbagliato sposta l'entita' senza
-    che nulla protesti. Una stringa invece o si trova nel referto o non si trova,
-    e questo modulo si ferma se non si trova.
-
-    Ogni occorrenza distinta della stringa diventa un'entita' del riferimento,
-    come vuole la linea guida 3.5: se una pipeline trova la condizione tutte e
-    tre le volte che compare, non va penalizzata.
-
-PERCHE' IL CONFRONTO E' PER SOVRAPPOSIZIONE
-    Stesso criterio dello step 6. Le tre pipeline scelgono confini
-    sistematicamente diversi — il gazetteer aggancia il termine di vocabolario,
-    il NER l'estensione appresa, il modello spesso la frase intera — e pretendere
-    l'uguaglianza esatta misurerebbe la lunghezza delle citazioni invece del
-    riconoscimento.
-
-LIMITI, DICHIARATI
-    Un solo annotatore, nessuna misura di accordo fra annotatori, e chi ha
-    annotato ha anche scritto le pipeline. La mitigazione e' stata annotare alla
-    cieca — leggendo solo il testo grezzo, senza aprire le uscite delle pipeline
-    per quei record — e fissare le linee guida prima di annotare. Vedi
-    `docs/06b_riferimento_annotato.md`.
+L'unico modo di misurare il richiamo. Le annotazioni sono stringhe verbatim
+(non offset): ogni occorrenza distinta e' un'entita', e il modulo si ferma se
+la stringa non e' nel referto. Il confronto e' per sovrapposizione, come allo
+step 6. Limiti (un solo annotatore, alla cieca): docs/06b_riferimento_annotato.md.
 """
 
 from __future__ import annotations
@@ -61,12 +33,7 @@ class Entita:
 
 
 def _occorrenze(testo_campo: str, frammento: str) -> list[tuple[int, int]]:
-    """Tutte le posizioni del frammento, ai confini di parola.
-
-    Il confine di parola evita che una sigla corta agganci l'interno di una
-    parola piu' lunga: senza, «TVS» si troverebbe dentro «TVSostenuta» e una
-    annotazione ne genererebbe due.
-    """
+    """Tutte le posizioni del frammento, ai confini di parola («TVS» non dentro «TVSostenuta»)."""
     pattern = r"(?<!\w)" + re.escape(frammento) + r"(?!\w)"
     return [(m.start(), m.end()) for m in re.finditer(pattern, testo_campo)]
 
@@ -86,11 +53,7 @@ def carica(anamnesi: dict[int, str], cartella: Path = CARTELLA) -> list[Entita]:
             for tipo, voci in tipi.items():
                 for voce in voci:
                     frammento, stato, soggetto = voce[:3]
-                    # Quarto elemento opzionale: quale occorrenza, contata da 1.
-                    # Serve dove la stessa stringa compare con attributi diversi
-                    # nello stesso referto — «episodio di FA» piu' avanti diventa
-                    # «assenza di FA» — e annotarle tutte con lo stesso stato
-                    # sarebbe semplicemente falso.
+                    # Quarto elemento opzionale: quale occorrenza (da 1), per stati diversi della stessa stringa.
                     quale = voce[3] if len(voce) > 3 else None
                     trovate = _occorrenze(testo, frammento)
                     if not trovate:
@@ -118,13 +81,7 @@ def carica(anamnesi: dict[int, str], cartella: Path = CARTELLA) -> list[Entita]:
 
 
 def valuta(riferimento: list[Entita], menzioni: list, tipo: str) -> dict:
-    """Precisione, richiamo e F1 di una pipeline contro il riferimento.
-
-    Un'entita' del riferimento puo' essere coperta da **una sola** menzione. Se
-    una pipeline ne produce tre sovrapposte, una conta come vero positivo e due
-    come falsi positivi: senza questa regola una pipeline che frammenta
-    guadagnerebbe richiamo senza pagarlo in precisione.
-    """
+    """P, R e F1 di una pipeline contro il riferimento; un'entita' e' coperta da una sola menzione."""
     atteso = [e for e in riferimento if e.tipo == tipo]
     encs = {e.enc_oid for e in riferimento}
     trovato = [m for m in menzioni

@@ -1,39 +1,11 @@
 """Step 11 - La valutazione per livello ATC: precisione, richiamo e F1.
 
-## Che cosa si misura
-
-Per ogni ricovero il sistema produce una **terapia proposta**: la terapia
-d'ingresso continuata, piu' le prime k classi nuove che il ranker mette in
-cima. La si confronta con la **terapia di dimissione** scritta dal medico, che
-e' la verita' e che nessun ranker riceve.
-
-Il confronto si fa a ciascuno dei cinque livelli dell'ATC. Al primo livello i
-codici sono troncati al gruppo anatomico (`C`), al quinto sono le sostanze
-(`C07AB02`). A ogni livello, sui due insiemi troncati:
-
-* **precisione** = quota delle proposte che il medico ha prescritto davvero;
-* **richiamo** = quota delle prescrizioni che il sistema aveva proposto;
-* **F1** = media armonica delle due.
-
-Le tre cifre sono medie sui ricoveri: ogni paziente pesa uno. Salendo di
-livello una statina semplice proposta dove il medico ne ha prescritta una in
-associazione e' giusta fino al terzo livello (`C10A`) e sbagliata dal quarto:
-la tabella per livello mostra **dove** il sistema si ferma, senza pesi
-inventati. E' la metrica primaria del brief (sezione 4).
-
-La versione **top-k** del brief e' la seconda tabella: a ogni livello, la
-quota di ricoveri in cui almeno una delle k proposte nuove coincide con
-un'aggiunta reale.
-
-## Il controllo e l'incertezza
-
-Un ranker che tira a sorte sta in tabella: salendo di livello i codici
-distinti diventano pochi e chiunque migliora, quindi il guadagno vero e' la
-distanza dal caso, non la cifra assoluta.
-
-L'incertezza viene da un bootstrap sui ricoveri, con le differenze fra ranker
-calcolate dentro lo stesso ricampionamento. Il rumore di fondo del progetto e'
-due punti percentuali: una differenza piu' piccola non e' un risultato.
+Per ogni ricovero la terapia proposta (ingresso continuato + le prime k classi
+nuove) contro la terapia di dimissione, troncate a ciascuno dei cinque livelli
+ATC; a ogni livello P, R e F1 medi sui ricoveri, piu' la versione top-k del
+brief (almeno un'aggiunta centrata). Controllo casuale a seme fisso, 5 pieghe,
+bootstrap sui ricoveri con differenze appaiate. Rumore di fondo: due punti.
+Vedi docs/11_valutazione.md.
 """
 from __future__ import annotations
 
@@ -67,11 +39,7 @@ NOMI_LIVELLO = {
 
 
 def livelli_misurabili() -> tuple[int, ...]:
-    """I livelli non piu' fini dell'unita' con cui il ranker lavora.
-
-    Con l'unita' a 5 caratteri (la classe) il quinto livello non e' misurabile:
-    una proposta a 5 caratteri non puo' coincidere con una sostanza a 7.
-    """
+    """I livelli non piu' fini dell'unita' del ranker (a unita' classe il 5o non e' misurabile)."""
     return tuple(n for n in LIVELLI if n <= modulo_ranker.LIVELLO_CLASSE)
 
 
@@ -80,13 +48,7 @@ def livelli_misurabili() -> tuple[int, ...]:
 # ---------------------------------------------------------------------------
 
 class RankerCasuale(Ranker):
-    """Ordina a caso, con seme fisso.
-
-    Non serve a competere: serve a misurare quanto del guadagno per livello e'
-    meccanico. Troncare i codici riduce il numero di classi distinte, quindi
-    alza chiunque, anche chi tira a sorte. Il seme e' fisso perche' due corse
-    devono dare lo stesso numero.
-    """
+    """Il controllo: ordina a caso con seme fisso, per misurare quanto del guadagno per livello e' meccanico."""
 
     sigla = "caso"
     nome = "casuale (seme fisso)"
@@ -125,12 +87,7 @@ def terapia_proposta(caso: Caso, ordine: Sequence[str], k: int) -> set[str]:
 
 def misure_per_livello(ordini: dict[int, list[str]], casi: dict[int, Caso],
                        k: int) -> dict[int, dict[str, float]]:
-    """P, R e F1 medi sui ricoveri, per ogni livello ATC misurabile.
-
-    `ordini[enc]` sono le classi nuove nell'ordine del ranker (l'ingresso e'
-    gia' escluso); il taglio a k avviene **prima** del troncamento, altrimenti
-    troncare e deduplicare regalerebbe proposte in piu' dentro la stessa k.
-    """
+    """P, R e F1 medi sui ricoveri per livello; il taglio a k avviene prima del troncamento."""
     fuori: dict[int, dict[str, float]] = {}
     for n in livelli_misurabili():
         somme = [0.0, 0.0, 0.0]
@@ -146,11 +103,7 @@ def misure_per_livello(ordini: dict[int, list[str]], casi: dict[int, Caso],
 
 def top_k_per_livello(ordini: dict[int, list[str]], casi: dict[int, Caso],
                       k: int) -> dict[int, float]:
-    """Quota dei ricoveri con almeno un'aggiunta reale fra le k proposte nuove.
-
-    Si contano solo i ricoveri che hanno aggiunto qualcosa: dove il medico non
-    ha aggiunto niente non c'e' nulla da centrare.
-    """
+    """Quota dei ricoveri (con almeno un'aggiunta) in cui una delle k proposte nuove e' un'aggiunta reale."""
     fuori: dict[int, float] = {}
     # La chiave del dizionario, non `caso.enc_oid`: il bootstrap ricampiona
     # con reimmissione e rinumera i ricoveri, e lo stesso paziente deve poter
@@ -200,14 +153,7 @@ def intervallo(valori: Sequence[float], confidenza: float = 0.95) -> tuple[float
 def bootstrap(esiti: Sequence[Esito], k: int, giri: int = 1000,
               seme: int = 20260916,
               coppie: Sequence[tuple[str, str]] = (("ibr", "freq"),)) -> dict:
-    """Ricampiona i **ricoveri** con reimmissione e rimisura F1 a ogni livello.
-
-    L'unita' e' il ricovero, non la prescrizione: le prescrizioni dello stesso
-    paziente non sono indipendenti, e trattarle come tali stringerebbe gli
-    intervalli fino a farli mentire. Le differenze fra due ranker si calcolano
-    dentro lo stesso giro, su pazienti identici, perche' due ranker misurati
-    sullo stesso campione sono correlati.
-    """
+    """Bootstrap sui ricoveri (non sulle prescrizioni, che non sono indipendenti): intervalli di F1 e differenze appaiate nello stesso giro."""
     rng = random.Random(seme)
     enc = sorted(esiti[0].casi)
     livelli = livelli_misurabili()
@@ -269,17 +215,7 @@ def proiezioni(r: Ranker, casi: Sequence[Caso], candidati: Sequence[str]
 
 def valuta_incrociata(fabbriche: Sequence, casi: Sequence[Caso], quante: int,
                       k: int, stratifica: bool = False) -> list[Esito]:
-    """Validazione incrociata a `quante` pieghe.
-
-    Per ogni piega l'insieme candidato e i ranker si costruiscono solo sulle
-    altre, e la piega e' misurata come prova. Ogni ricovero contribuisce una
-    volta sola e nessun ranker vede in addestramento il paziente su cui viene
-    misurato. Le proiezioni si concatenano e le misure si calcolano
-    sull'unione, come se fosse un'unica prova.
-
-    `fabbriche` sono funzioni senza argomenti che restituiscono un ranker
-    nuovo: riaddestrare lo stesso oggetto lascerebbe residui.
-    """
+    """Validazione incrociata: candidati e ranker costruiti sulle altre pieghe, ogni ricovero misurato una volta. `fabbriche` creano ranker nuovi."""
     divisione = pieghe(casi, quante, stratifica=stratifica)
     per_enc = {c.enc_oid: c for c in casi}
     accumulo: dict[str, tuple[str, dict]] = {}
@@ -301,13 +237,7 @@ def valuta_incrociata(fabbriche: Sequence, casi: Sequence[Caso], quante: int,
 
 def spiegabilita(esiti: Sequence[Esito], k: int = 5,
                  simbolico: RankerSimbolico | None = None) -> dict[str, dict]:
-    """Quante proposte hanno almeno un'indicazione ESC che scatta sul paziente.
-
-    Si contano a parte le proposte **centrate** (prescritte davvero), perche'
-    e' li' che una motivazione vale: una proposta sbagliata e motivata resta
-    sbagliata. La frequenza per costruzione non guarda il paziente: le sue
-    proposte sono motivate solo per coincidenza, e lo si conta.
-    """
+    """Quante proposte (e quanti centri) hanno un'indicazione ESC che scatta sul paziente."""
     simbolico = simbolico or RankerSimbolico()
     fuori = {}
     for e in esiti:
@@ -335,13 +265,7 @@ def spiegabilita(esiti: Sequence[Esito], k: int = 5,
 # ---------------------------------------------------------------------------
 
 def _llm_su_tutti(casi: Sequence[Caso], opzioni) -> Esito:
-    """Il ranker LLM remoto su tutti i casi, con un tetto di spesa.
-
-    Non impara dai casi, quindi le pieghe non gli servono: si misura su tutti
-    i ricoveri con l'insieme candidato della divisione singola, cosi' le
-    risposte gia' pagate arrivano dalla cache. Con `--llm-solo-cache` non
-    spende nulla e misura solo i ricoveri gia' su disco.
-    """
+    """Il ranker LLM su tutti i casi con i candidati della divisione singola (cache), con tetto di spesa."""
     from llm_backend import CARTELLA_CACHE, BackendOpenRouter, Richiesta
     from ranker import ISTRUZIONI_LLM, SCHEMA_LLM, RankerLLM, descrivi_caso, nomi_icd
 

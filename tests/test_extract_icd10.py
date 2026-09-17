@@ -1,12 +1,4 @@
-"""
-Test dell'estrazione della terminologia ICD-10 dal PDF ufficiale.
-
-Il parser lavora su un layout tipografico ricostruito da `pdftotext`, quindi e'
-il componente piu' fragile scritto finora: piccoli cambiamenti di spaziatura
-possono spostare un termine sotto il codice sbagliato. I test lavorano su
-frammenti di testo sintetici che riproducono le forme reali incontrate nel
-volume, cosi' girano senza il PDF (che non e' versionato).
-"""
+"""Test dell'estrazione della terminologia ICD-10 dal PDF ufficiale."""
 
 import sys
 import unittest
@@ -58,12 +50,7 @@ class TestAnalisiStruttura(unittest.TestCase):
         self.assertEqual(voci["I11"].titolo, "Cardiopatia ipertensiva")
 
     def test_i_termini_esclusi_non_diventano_sinonimi(self):
-        """'Escl.' rimanda ad ALTRI codici: usarli come sinonimi sbaglierebbe.
-
-        E' una distinzione di correttezza, non di completezza: un termine
-        escluso associato al codice sbagliato produrrebbe raccomandazioni
-        basate su una diagnosi che il paziente non ha.
-        """
+        """'Escl.' rimanda ad ALTRI codici: usarli come sinonimi sbaglierebbe."""
         testo = (
             " I10          Ipertensione essenziale\n"
             "              Incl.: pressione arteriosa alta\n"
@@ -89,12 +76,7 @@ class TestAnalisiStruttura(unittest.TestCase):
         self.assertIn("malattia cardiovascolare renale", voce.inclusi)
 
     def test_suffisso_della_graffa_applicato_a_tutto_il_gruppo(self):
-        """Regressione: la graffa a due colonne del volume cartaceo.
-
-        Nel PDF il suffisso comune compare appiattito sulla prima riga del
-        gruppo; senza questa gestione "ipertrofia (benigna)" perdeva
-        "della prostata" e diventava un termine inutilizzabile.
-        """
+        """Regressione: la graffa a due colonne del volume cartaceo."""
         testo = (
             " N40     Iperplasia della prostata\n"
             "         Incl.: ipertrofia:\n"

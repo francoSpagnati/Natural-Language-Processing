@@ -1,49 +1,12 @@
-"""Step 10 - Il server MCP: il sistema diventa uno strumento per un altro agente.
+"""Step 10 - Il server MCP: il sistema come strumento per un altro agente.
 
-Fino allo step 9 il sistema si usa da riga di comando. Qui diventa uno
-**strumento che un modello conversazionale puo' chiamare**, e questo cambia due
-cose che valgono piu' del codice.
-
-## 1. Solo lettura, e non e' una cautela: e' il vincolo dello step 8
-
-Nessuno strumento qui scrive, addestra o decide. Il filtro di sicurezza e'
-simbolico per vincolo — «mai LLM, mai dataset» — e un modello che potesse
-modificare le regole, il grafo o l'insieme candidato scavalcherebbe l'unico
-strato che stabilisce che cosa e' ammissibile. Tutti gli strumenti dichiarano
-`read_only_hint=True`, che e' la forma in cui il protocollo MCP rende
-verificabile quella promessa dal lato del client.
-
-Lo step 9 ha gia' mostrato come si rompe: vincolato all'insieme candidato, il
-modello locale ha comunque nominato 40 codici fuori elenco, 15 dei quali non
-esistono nel registro ATC dell'AIFA. Un codice che non esiste non puo' essere ne'
-vietato ne' verificato. Qui la difesa e' la stessa: il modello **chiede**, il
-codice deterministico **risponde**.
-
-## 2. Il corpus non passa di qui
-
-Gli strumenti lavorano solo su testo che l'utente incolla, mai sui 1 000 referti
-di `data/raw/`. La ragione e' che un client MCP puo' essere remoto: Claude Code
-manda il risultato di uno strumento a un modello che gira altrove, e un tool che
-leggesse un referto per `enc_oid` spedirebbe testo clinico fuori dalla macchina
-senza che nessuno se ne accorga.
-
-E' la stessa regola del grafo dello step 7, applicata a un'altra frontiera: il
-testo clinico non entra nelle triple, e non entra nemmeno in una risposta MCP.
-Del corpus escono solo **aggregati** (`cardio_statistiche_corpus`), che non
-identificano nessuno.
-
-## Trasporto
-
-stdio, non HTTP. Il server gira sulla macchina di Carlo e i dati che indicizza
-non escono dal disco: stdio rende quella proprieta' vera per costruzione, invece
-di affidarla alla configurazione di un firewall.
-
-## Uso
+Sei strumenti di sola lettura (`read_only_hint=True`): il modello chiede, il
+codice deterministico risponde, e il filtro dello step 8 non e' scavalcabile.
+Gli strumenti lavorano solo sul testo o sullo stato che ricevono, mai sui
+referti di `data/raw/`: del corpus escono solo aggregati. Trasporto stdio.
+Vedi docs/10_tool_mcp.md.
 
     claude mcp add cardio -- python3 src/mcp_server.py
-
-oppure, per l'host locale con ollama:
-
     python3 src/mcp_client_locale.py "Che terapia proporresti per ..."
 """
 
@@ -75,18 +38,12 @@ mcp = MCPServer(
 SOLA_LETTURA = ToolAnnotations(read_only_hint=True, destructive_hint=False,
                                idempotent_hint=True, open_world_hint=False)
 
-# La catena costa qualche secondo: legge 1 002 file JSON e addestra il ranker
-# ibrido. Un server MCP risponde a molte chiamate nella stessa sessione, quindi
-# la si paga una volta sola.
+# La catena (lettura dei casi, addestramento del ranker) si paga una volta sola.
 _CACHE: dict[str, object] = {}
 
 
 def _catena():
-    """Il modulo della demo, importato una volta sola.
-
-    Lo step 9bis aveva gia' separato il calcolo dalla presentazione proprio
-    perche' questo step potesse riusare `analizza` senza ricostruire nulla.
-    """
+    """Il modulo della demo, importato una volta sola."""
     if "demo" not in _CACHE:
         import demo
 
@@ -96,35 +53,19 @@ def _catena():
 
 @lru_cache(maxsize=32)
 def _analisi(anamnesi: str, terapia_ingresso: str, con_traccia: bool) -> dict:
-    """Una sola esecuzione della catena per coppia di testi.
-
-    Il motore e' sempre quello deterministico: costa zero e lo step 6 lo ha
-    misurato migliore del modello linguistico sui campi strutturati. Un server
-    che chiamasse un LLM per rispondere a un LLM pagherebbe due volte la stessa
-    estrazione.
-    """
+    """Una sola esecuzione della catena per coppia di testi, col motore deterministico."""
     return _catena().analizza(anamnesi, terapia_ingresso,
                               motore="deterministico", quante=8,
                               con_traccia=con_traccia)
 
 
 def _confeziona(esito: dict, quante: int, terapia_ingresso: str = "") -> dict:
-    """La risposta del server a partire dall'esito della catena.
-
-    Condivisa dai due tool di proposta: quello a testo (estrae, poi entra qui)
-    e quello a stato paziente (entra direttamente qui, come il brief sez. 3.2
-    prevede: lo stato strutturato e' l'unico input del motore).
-    """
+    """La risposta del server dall'esito della catena, condivisa dai due tool di proposta."""
     condizioni = [c for c in esito["condizioni"] if c["codice"]]
     farmaci = esito["farmaci"]
 
-    # Il fondamento di ogni proposta, detto a parole invece che dedotto
-    # dall'assenza di un campo. Un modello conversazionale che riceve una
-    # proposta con `motivo: null` tende a **riempire il vuoto** con una
-    # motivazione propria: misurato su questo server, `qwen3.5:4b` ha inventato
-    # un «profilo nefroprotettivo» e ha chiamato A02BC «betabloccante
-    # selettivo». Dire in chiaro che la proposta non ha una regola e' l'unica
-    # difesa che il server puo' offrire, perche' la prosa finale non e' sua.
+    # Il fondamento detto a parole: con `motivo: null` il modello conversazionale
+    # inventa una motivazione propria (misurato, docs/10).
     proposte = []
     for p in esito["proposte"][:quante]:
         proposte.append({
@@ -158,10 +99,7 @@ def _confeziona(esito: dict, quante: int, terapia_ingresso: str = "") -> dict:
         ),
     }
 
-    # Il principio del fatto mancante, che lo step 8 ha incontrato tre volte:
-    # una risposta la cui premessa e' fallita non si presenta come se fosse
-    # valida. Se non e' stato estratto nulla, le proposte sono il tasso di base
-    # del reparto e non hanno niente a che vedere con questo paziente.
+    # Se non e' stato estratto nulla, le proposte sono il tasso di base del reparto: si dice.
     note: list[str] = []
     if not condizioni:
         note.append("Nessuna condizione codificata dal testo: le proposte qui "
@@ -326,12 +264,8 @@ def verifica_sicurezza(anamnesi: str, farmaco_atc: str,
     from filtro import StatoPerFiltro, valuta
     from ranker import nomi_atc
 
-    # Un verdetto la cui premessa e' fallita non si presenta come valido. Il
-    # filtro confronta CODICI: una stringa che non e' un codice non incontra
-    # nessuna regola e uscirebbe «ammesso» a vuoto — un falso permesso, che e'
-    # l'errore peggiore di uno strato di sicurezza. Misurato: il modello locale
-    # ha chiesto la sicurezza di «Bisoprololo» e «Spironolattone» per nome, e la
-    # prima versione rispondeva ammesso a entrambi.
+    # Una stringa che non e' un codice non incontra regole e uscirebbe
+    # «ammesso» a vuoto: un falso permesso. Si rifiuta.
     codice = farmaco_atc.strip().upper()
     if "atc" not in _CACHE:
         _CACHE["atc"] = nomi_atc()
@@ -389,9 +323,7 @@ def cerca_codice(query: str, sistema: str = "atc", quanti: int = 10) -> dict:
     """
     from ranker import nomi_atc, nomi_icd
 
-    # `ICD-10` e `ICD10` sono i nomi veri della classificazione: rifiutarli
-    # costa un giro di modello per un cavillo lessicale. Misurato: il modello
-    # locale ha speso una chiamata su `sistema='ICD-10'` prima di indovinare.
+    # `ICD-10` e `ICD10` sono nomi validi: non si rifiutano per un cavillo.
     ALIAS = {"atc": "atc", "icd": "icd", "icd-10": "icd", "icd10": "icd",
              "icd 10": "icd"}
     sistema = ALIAS.get(sistema.lower().strip(), sistema.lower().strip())

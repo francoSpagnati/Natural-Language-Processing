@@ -1,29 +1,8 @@
-"""
-Riesecuzione di tutte le analisi dopo una nuova corsa della pipeline B.
+"""Riesecuzione di tutte le analisi dopo una nuova corsa della pipeline B.
 
-A COSA SERVE
-    Le misure del progetto sono sparse fra step diversi — produzione della
-    pipeline B (step 4), confronto fra le tre pipeline (step 6) — e dopo una
-    corsa nuova vanno rifatte tutte insieme, o i documenti finiscono per citare
-    numeri presi da corse diverse.
-
-    Questo modulo le rifa' in un colpo solo e, quando esiste una corsa
-    precedente archiviata, mette le due a confronto: e' l'unico modo per dire se
-    le correzioni hanno funzionato invece di sperarlo.
-
-COSA CONFRONTA CON LA CORSA PRECEDENTE
-    Le quattro correzioni introdotte dopo la prima corsa avevano ciascuna un
-    bersaglio misurabile, e ciascuna ha qui la sua verifica:
-
-    - `maxItems` sugli array         -> nessuna uscita oltre il tetto, e i
-                                        record che prima andavano in timeout
-                                        adesso concludono;
-    - REGOLA 2 contro la narrazione  -> meno condizioni per record, e meno
-                                        menzioni non ancorate;
-    - REGOLA 9 sulle allergie        -> niente allergie su referti che non le
-                                        nominano;
-    - `campo` in AllergiaLLM         -> le allergie citate dai campi di terapia
-                                        si ancorano invece di fallire.
+Rifa' in un colpo solo le misure dello step 4 e dello step 6, e se esiste una
+corsa precedente archiviata le confronta: e' cosi' che si verifica se una
+correzione ha funzionato. Vedi docs/04_pipeline_estrazione_B.md.
 """
 
 from __future__ import annotations

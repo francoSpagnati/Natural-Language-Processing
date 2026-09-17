@@ -1,20 +1,10 @@
 """La knowledge base clinica: strutture, lettura e scrittura del Turtle.
 
-Il grafo di conoscenza del progetto (brief sez. 3.3) sta in `kb/conoscenza.ttl`,
-versionato. Contiene tre tipi di nodo — `Drug` (classi ATC), `Condition`
-(codici ICD-10), `Guideline` (documenti citati) — e due tipi di relazione
-reificata, perche' portano attributi:
-
-* **Indicazione**: farmaco → condizione, con classe di raccomandazione ESC,
-  motivo, fonte, eventuale terapia che la innesca e fatto non estratto;
-* **Controindicazione**: farmaco → condizione, con esito (vietato o da
-  verificare), motivo, fonte, fatti che la revocano e fatto non estratto.
-
-`kb_build.py` e' lo script di import che **scrive** il Turtle a partire dalla
-curatela dichiarata; questo modulo lo **legge**, e il ranker (step 9) e il
-filtro (step 8) prendono le regole da qui. Un test verifica che il Turtle nel
-repository sia identico a quello che `kb_build.py` rigenererebbe: la
-conoscenza che il motore usa e' quella che il grafo dichiara, senza copie.
+`kb/conoscenza.ttl` (versionato) ha nodi `Drug`, `Condition`, `Guideline` e
+due relazioni reificate, `Indicazione` e `Controindicazione`, con attributi.
+`kb_build.py` lo scrive, questo modulo lo legge; ranker e filtro prendono le
+regole da qui, e un test verifica che il Turtle nel repository sia identico
+a quello rigenerato. Vedi docs/07_knowledge_graph.md.
 """
 
 from __future__ import annotations
@@ -43,12 +33,7 @@ class Esito(str, Enum):
 
 @dataclass(frozen=True)
 class Indicazione:
-    """Una ragione citabile per proporre una classe di farmaci.
-
-    `atc_richiesto` esiste perche' un'indicazione puo' essere innescata da una
-    terapia e non da una diagnosi: la gastroprotezione non e' indicata da una
-    malattia, e' indicata dall'antiaggregante che il paziente sta prendendo.
-    """
+    """Una ragione citabile per proporre una classe; `atc_richiesto` per le indicazioni innescate da una terapia."""
 
     atc: str                     # classe raccomandata (prefisso ATC)
     icd: tuple[str, ...]         # prefissi ICD-10 che la innescano
@@ -78,19 +63,15 @@ class Controindicazione:
         return KB[f"controindicazione/{self.atc}-{'+'.join(self.icd)}"]
 
 
-# Una regola la cui applicazione corretta richiede un fatto che il sistema non
-# sa stabilire non puo' emettere un divieto: puo' segnalare. Trovato allo step 8
-# (betabloccante in blocco AV: 12 falsi blocchi su 14 avevano un pacemaker che
-# nessuna pipeline estrae), ricomparso agli step 9, 10 e nel server MCP.
+# Una regola che dipende da un fatto che il sistema non estrae non vieta:
+# segnala (docs/08_filtro_sicurezza.md).
 PRINCIPIO_DEL_FATTO_MANCANTE = (
     "Regola declassata: la sua applicazione corretta richiede un fatto che "
     "nessuna pipeline estrae. Segnala, non vieta."
 )
 
 
-# ---------------------------------------------------------------------------
-# Scrittura
-# ---------------------------------------------------------------------------
+# --- Scrittura ---
 
 def _guideline(g: Graph, fonte: str) -> URIRef:
     """Un nodo Guideline per citazione; l'URI e' il testo stesso, senza troncarlo:
@@ -159,9 +140,7 @@ def scrivi(indicazioni: tuple[Indicazione, ...],
     return g
 
 
-# ---------------------------------------------------------------------------
-# Lettura
-# ---------------------------------------------------------------------------
+# --- Lettura ---
 
 def _codici(g: Graph, soggetto: URIRef, predicato: URIRef) -> tuple[str, ...]:
     return tuple(sorted(str(g.value(o, SKOS.notation)) for o in g.objects(soggetto, predicato)))

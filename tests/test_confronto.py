@@ -1,12 +1,4 @@
-"""
-Test del confronto fra pipeline (step 6).
-
-Il raggruppamento delle menzioni sovrapposte e' il punto critico: se sbaglia,
-ogni cifra del confronto e' sbagliata e nessuno se ne accorge, perche' i numeri
-restano plausibili. Questi test lo fissano sui casi limite che nei dati veri
-ricorrono davvero — citazioni lunghe che ne abbracciano di corte, menzioni
-adiacenti che non si toccano, campi diversi che non vanno mai uniti.
-"""
+"""Test del confronto fra pipeline (step 6)."""
 
 import sys
 import unittest

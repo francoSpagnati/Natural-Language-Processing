@@ -1,40 +1,10 @@
 """Demo end-to-end: da un'anamnesi scritta a mano a una terapia suggerita.
 
-Le metriche degli step 6, 6bis e 9 dicono *quanto bene* il sistema funziona.
-Questo modulo mostra *che cosa fa*, su un paziente che non esiste nel dataset:
-si scrive un'anamnesi e una terapia in atto, e il sistema attraversa tutta la
-catena davanti a chi guarda.
-
-    testo libero
-        |
-        |  [step 3/4/5]  riconoscimento + codifica ICD-10 / ATC
-        v
-    stato del paziente
-        |
-        |  [step 8]      filtro di sicurezza: che cosa NON si puo' dare
-        v
-    candidati ammessi
-        |
-        |  [step 9]      ranker: che cosa conviene dare, e perche'
-        v
-    terapia suggerita, con le fonti
-
-## Perche' il motore predefinito e' quello deterministico
-
-La demo gira **senza rete, senza chiave API e senza costo**: l'estrazione usa la
-pipeline A (gazetteer + ConText) e il parser deterministico della terapia. E'
-una scelta di dimostrabilita' — chi guarda puo' rieseguirla — e non nasconde
-nulla: `--motore locale` usa il modello linguistico via Ollama, e lo step 6bis
-ha misurato che sulle condizioni il modello ha un richiamo di 68,7% contro il
-19,5% del gazetteer. La demo con il motore deterministico mostra **meno** di
-quello che il sistema sa fare, non di piu'.
-
-## Che cosa la demo non e'
-
-Non e' un dispositivo medico e non e' una validazione clinica. Il ranker e'
-misurato contro *una* decisione presa da *un* medico su 841 ricoveri; il sez. 1 di
-`docs/09_ranker.md` spiega perche' la precisione di quella misura non e'
-interpretabile come correttezza.
+testo libero -> [step 3/4/5] stato del paziente -> [step 8] candidati ammessi
+-> [step 9] terapia suggerita con le fonti -> [step 9ter] traccia sul grafo.
+Motore predefinito deterministico (senza rete, senza costo); `--motore locale`
+usa il modello via Ollama. `analizza` e `analizza_stati` sono le funzioni che
+il server MCP riusa. Non e' una validazione clinica. Vedi docs/09b_demo.md.
 """
 
 from __future__ import annotations
@@ -71,12 +41,7 @@ from ranker import (  # noqa: E402
 LARGHEZZA = 78
 
 
-# ---------------------------------------------------------------------------
-# I pazienti d'esempio
-#
-# Tutti sintetici, scritti con la grammatica del corpus — le abbreviazioni, la
-# punteggiatura, l'ordine delle sezioni. Ogni esempio e' costruito per mostrare **una** capacita' del sistema.
-# ---------------------------------------------------------------------------
+# --- I pazienti d'esempio: sintetici, uno per capacita' del sistema ---
 
 @dataclass(frozen=True)
 class Esempio:
@@ -120,13 +85,7 @@ ESEMPI: tuple[Esempio, ...] = (
 
 def paziente_da_testo(anamnesi: str, terapia_ingresso: str,
                       enc_oid: int = 0) -> RecordPaziente:
-    """Costruisce un ricovero dai due testi, senza passare dal dataset.
-
-    E' il punto che rende la demo possibile: `RecordPaziente` non e' legato al
-    file grezzo, e le pipeline leggono **quello**, non il file. Se cosi' non
-    fosse, provare il sistema su un paziente nuovo richiederebbe di scriverlo
-    dentro il dataset.
-    """
+    """Un `RecordPaziente` dai due testi, senza passare dal dataset."""
     return RecordPaziente(
         enc_oid=enc_oid,
         referti=[
@@ -136,9 +95,7 @@ def paziente_da_testo(anamnesi: str, terapia_ingresso: str,
     )
 
 
-# ---------------------------------------------------------------------------
-# Presentazione
-# ---------------------------------------------------------------------------
+# --- Presentazione ---
 
 def titolo(testo: str, carattere: str = "=") -> None:
     print(f"\n{carattere * LARGHEZZA}\n{testo}\n{carattere * LARGHEZZA}")
@@ -150,12 +107,7 @@ def paragrafo(testo: str, rientro: str = "  ") -> None:
 
 
 def evidenzia(testo: str, intervalli: list[tuple[int, int]]) -> str:
-    """Segna nel testo i punti in cui il sistema ha riconosciuto qualcosa.
-
-    Mostrare gli offset invece di un elenco di concetti e' la differenza fra
-    «il sistema dice che il paziente ha lo scompenso» e «il sistema lo dice
-    **per via di queste parole**». La seconda si puo' contestare, la prima no.
-    """
+    """Segna nel testo le parole che il sistema ha riconosciuto."""
     fusi: list[list[int]] = []
     for inizio, fine in sorted(intervalli):
         if fusi and inizio <= fusi[-1][1]:
@@ -259,9 +211,7 @@ def mostra_ranker(caso: Caso, candidati: list[str], ibrido: RankerIbrido,
     print()
     for i, r in enumerate(nuovi[:quante], 1):
         indicazioni = simbolico.motivazioni(caso, r.classe_atc)
-        # La stessa indicazione che il ranker ha usato per il punteggio: quella
-        # con il peso maggiore. Mostrarne un'altra racconterebbe una ragione
-        # diversa da quella che ha deciso la posizione.
+        # L'indicazione con il peso maggiore: quella che ha deciso la posizione.
         ind = max(indicazioni, key=lambda x: PESO_CLASSE[x.classe_racc],
                   default=None)
         marchio = f"classe {ind.classe_racc}" if ind else "appresa dal corpus"
@@ -284,9 +234,7 @@ def mostra_ranker(caso: Caso, candidati: list[str], ibrido: RankerIbrido,
                       "     ")
 
 
-# ---------------------------------------------------------------------------
-# I due motori di estrazione
-# ---------------------------------------------------------------------------
+# --- I due motori di estrazione ---
 
 def estrai_deterministico(record: RecordPaziente):
     """Pipeline A: gazetteer + ConText. Nessuna rete, nessuna chiave, nessun costo."""
@@ -321,16 +269,7 @@ def estrai_con_modello(record: RecordPaziente, motore: str,
 
 def confronta_motori(anamnesi: str, terapia: str, motore: str = "locale",
                      modello: str | None = None) -> None:
-    """Gli stessi due testi letti dai due motori, affiancati.
-
-    E' il risultato centrale del progetto reso tangibile su un paziente solo.
-    Lo step 6bis lo ha misurato su 25 referti annotati a mano: sulle condizioni
-    il gazetteer ha un richiamo del **19,5%**, il modello linguistico del
-    **68,7%**. La ragione e' strutturale — il vocabolario del gazetteer e'
-    costruito dai termini ICD-10, quindi trova **solo cio' che la nomenclatura
-    gia' conosce**, e nella prosa cardiologica la maggior parte delle condizioni
-    non e' scritta in forma da nomenclatura.
-    """
+    """Gli stessi due testi letti dai due motori, affiancati (docs/06b per i numeri)."""
     record = paziente_da_testo(anamnesi, terapia)
     icd = nomi_icd()
 
@@ -378,13 +317,7 @@ def confronta_motori(anamnesi: str, terapia: str, motore: str = "locale",
 
 def mostra_traccia(stati: dict, caso, candidati, ibrido, simbolico,
                    atc: dict, icd: dict, quante: int) -> None:
-    """Da dove viene ogni proposta, interrogando il grafo.
-
-    Il grafo del paziente viene costruito qui e interrogato in SPARQL: e' lo
-    stesso modello di dati del grafo dei 1 000 ricoveri, e la stessa
-    interrogazione gira su entrambi. Senza questo passaggio il knowledge graph
-    dello step 7 resterebbe un artefatto parallelo che nessuno consuma.
-    """
+    """Da dove viene ogni proposta, interrogando in SPARQL il grafo del paziente."""
     from traccia import grafo_del_paziente, stampa_traccia, traccia_raccomandazione
 
     titolo("5. LA TRACCIA — da dove viene ogni proposta")
@@ -402,20 +335,12 @@ def mostra_traccia(stati: dict, caso, candidati, ibrido, simbolico,
                        atc.get(r.classe_atc, ""))
 
 
-# ---------------------------------------------------------------------------
-# La catena
-# ---------------------------------------------------------------------------
+# --- La catena ---
 
 def analizza(anamnesi: str, terapia: str, motore: str = "deterministico",
              quante: int = 6, modello: str | None = None,
              con_traccia: bool = False) -> dict:
-    """La catena intera, come dato invece che come stampa.
-
-    Separare il calcolo dalla presentazione serve a due cose: la pagina di
-    dimostrazione mostra **l'uscita vera di questo comando** invece di numeri
-    ricopiati a mano, e il tool MCP dello step 10 ha gia' la funzione che gli
-    serve senza dover ricostruire la catena.
-    """
+    """La catena intera, come dato invece che come stampa (riusata dal server MCP)."""
     record = paziente_da_testo(anamnesi, terapia)
     stati = {"A": estrai_deterministico(record)}
     if motore != "deterministico":
@@ -425,14 +350,9 @@ def analizza(anamnesi: str, terapia: str, motore: str = "deterministico",
 
 
 def analizza_stati(stati: dict, quante: int = 6, con_traccia: bool = False) -> dict:
-    """La catena dallo stato paziente in poi: filtro, ranker, traccia.
+    """La catena dallo stato paziente in poi (filtro, ranker, traccia): il confine del brief, dove entra `cardio_proponi_da_stato`.
 
-    E' il confine che il brief fissa (sez. 3.2): lo stato strutturato e' l'unico
-    input del motore. Da qui in avanti non importa quale pipeline lo abbia
-    prodotto, e il tool MCP `cardio_proponi_da_stato` entra esattamente qui.
-    `stati` mappa la sigla della pipeline allo `StatoPaziente`; se ce n'e' piu'
-    di uno, il motore usa B (la piu' completa, step 6bis) e il grafo li tiene
-    tutti.
+    `stati`: sigla della pipeline -> `StatoPaziente`; con piu' di uno il motore usa B.
     """
     stato = stati.get("B") or next(iter(stati.values()))
 
@@ -520,11 +440,7 @@ def esegui(anamnesi: str, terapia: str, motore: str = "deterministico",
     icd, atc = nomi_icd(), nomi_atc()
     record = paziente_da_testo(anamnesi, terapia)
 
-    # --- estrazione ---
-    # Il motore deterministico costa zero, quindi quando se ne chiede un altro
-    # si tengono entrambi: il grafo della traccia mostra allora **due agenti**
-    # dove le due pipeline vedono lo stesso punto, che e' esattamente cio' che
-    # il grafo dello step 7 esiste per rendere interrogabile.
+    # --- estrazione: il deterministico sempre, l'altro motore in aggiunta ---
     stato_per_grafo = {"A": estrai_deterministico(record)}
     if motore != "deterministico":
         stato_per_grafo["B"] = estrai_con_modello(record, motore, modello)
@@ -543,11 +459,7 @@ def esegui(anamnesi: str, terapia: str, motore: str = "deterministico",
 
     mostra_filtro(StatoPerFiltro(0, condizioni, allergie, terapia_atc), atc)
 
-    # --- il ranker ---
-    # Addestrato sul corpus **intero**: il paziente della demo non ne fa parte,
-    # quindi non c'e' nulla da cui isolarlo. Nella valutazione dello step 9
-    # l'addestramento e' invece ristretto, perche' li' i casi di prova sono
-    # dentro il corpus.
+    # --- il ranker, addestrato sul corpus intero (il paziente della demo non ne fa parte) ---
     casi = carica_casi(RADICE / "data" / "processed" / "pipeline_b_v3")
     candidati = insieme_candidato(casi)
     ibrido = RankerIbrido()

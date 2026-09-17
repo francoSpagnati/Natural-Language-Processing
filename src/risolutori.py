@@ -1,16 +1,8 @@
-"""Traduzione di una menzione testuale nel codice della knowledge base.
+"""Traduzione di una menzione nel codice della knowledge base, condivisa dalle tre pipeline.
 
-Questo modulo esiste per una ragione precisa: le tre pipeline di estrazione
-(deterministica, LLM, NER+EL) devono normalizzare *allo stesso modo*. Se ognuna
-avesse la sua logica di codifica, il confronto dello step 6 misurerebbe la somma
-di due differenze -- estrazione e codifica -- senza poterle separare. Qui la
-codifica e' una sola, condivisa, e la sola variabile che resta e' quella che si
-vuole misurare.
-
-Vale inoltre il vincolo di provenienza del progetto: nessun codice nasce qui.
-ATC viene dalla mappatura su AIFA prodotta dallo step 2, ICD-10 dall'indice
-estratto dal volume ufficiale italiano nello step 2. Le menzioni che nessuna
-delle due fonti copre restano `NIL`, segnalate e non indovinate.
+Una sola codifica per A, B e C, cosi' il confronto misura la sola estrazione.
+Nessun codice nasce qui: ATC dalla mappatura AIFA dello step 2, ICD-10
+dall'indice del volume ufficiale; cio' che non e' coperto resta NIL.
 """
 
 from __future__ import annotations
@@ -35,23 +27,12 @@ _PUNTEGGIATURA_ESTERNA = re.compile(r"^[\s\-–—•.,;:()\"']+|[\s\-–—•.
 
 
 def normalizza(testo: str) -> str:
-    """Forma comparabile di una menzione: minuscola, spazi e bordi ripuliti.
-
-    Deliberatamente conservativa. Non toglie accenti ne' applica stemming: una
-    normalizzazione aggressiva farebbe collimare termini clinicamente distinti
-    (per esempio singolare e plurale di sedi anatomiche diverse) e trasformerebbe
-    un collegamento mancato -- visibile e misurabile -- in uno sbagliato e muto.
-    """
+    """Forma comparabile: minuscola e spazi ripuliti, niente accenti tolti ne' stemming (conservativa di proposito)."""
     return _SPAZI.sub(" ", _PUNTEGGIATURA_ESTERNA.sub("", testo)).lower()
 
 
 class RisolutoreATC:
-    """Traduce una forma testuale di farmaco nel suo codice ATC.
-
-    Legge la mappatura prodotta dallo step 2 invece di ricalcolarla: la
-    risoluzione e' gia' stata fatta, verificata e documentata, e rifarla qui
-    significherebbe avere due verita' possibili sullo stesso dato.
-    """
+    """Forma testuale di farmaco -> codice ATC, dalla mappatura dello step 2."""
 
     def __init__(self, percorso: Path = PERCORSO_MAPPATURA_ATC) -> None:
         dati = json.loads(percorso.read_text(encoding="utf-8"))
@@ -67,31 +48,11 @@ class RisolutoreATC:
     def risolvi_menzione(
         self, menzione: str
     ) -> tuple[str | None, StatoNormalizzazione, str | None, str]:
-        """Come `risolvi`, ma accetta anche una menzione composta.
+        """Come `risolvi`, ma su una menzione composta ("Furosemide (Lasix cpr. 25 mg)", "Medrol: 4 mg ...").
 
-        I due campi di terapia hanno formati diversi, e un modello linguistico
-        cita la riga intera invece del solo nome:
-
-            dimissione   "Furosemide (Lasix cpr. 25 mg)"
-            ingresso     "Medrol: 4 mg cpr. /die (ore 8)"
-
-        Il vocabolario ATC ha una voce per "Furosemide", una per "Lasix" e una
-        per "Medrol": nessuna delle due righe intere risolve. La pipeline A non
-        incontra il problema perche' il suo parser separa i pezzi *prima* di
-        cercarli; qui la scomposizione va fatta a valle, sulla menzione che il
-        modello ha citato alla lettera.
-
-        Si provano quindi, nell'ordine: la menzione intera; il nome che precede
-        i due punti (formato d'ingresso); il principio attivo che precede la
-        parentesi (formato di dimissione); il nome commerciale dentro la
-        parentesi, ripulito da forma e dose con la funzione gia' usata nello
-        step 0. Il quarto valore restituito dice quale forma ha prodotto il
-        collegamento, perche' la provenienza deve restare vera anche quando il
-        codice e' corretto.
-
-        Se due vie che dovrebbero concordare portano a codici diversi il
-        risultato e' AMBIGUO e nessuna viene scelta: un disaccordo e' un dato da
-        guardare, non da risolvere in silenzio.
+        Prova la menzione intera, il nome prima dei due punti, il principio
+        prima della parentesi, il commerciale dentro la parentesi; dice quale
+        forma ha risolto. Se due vie danno codici diversi: AMBIGUO.
         """
         codice, stato, fonte = self.risolvi(menzione)
         if stato is not StatoNormalizzazione.NIL:
@@ -129,13 +90,7 @@ class RisolutoreATC:
 
 @dataclass(frozen=True)
 class EsitoICD:
-    """Esito di un collegamento a ICD-10, con il metodo che l'ha prodotto.
-
-    Il metodo viaggia insieme al codice perche' un codice di categoria e uno di
-    sottocategoria non valgono la stessa cosa: il primo dice "fibrillazione
-    atriale", il secondo dice quale. Chi legge lo stato paziente deve poterli
-    distinguere senza risalire al testo.
-    """
+    """Esito di un collegamento a ICD-10, con il metodo che l'ha prodotto."""
 
     codice: str | None
     stato: StatoNormalizzazione
@@ -145,36 +100,13 @@ class EsitoICD:
 
 
 class RisolutoreICD:
-    """Traduce una menzione di condizione in un codice ICD-10.
+    """Menzione di condizione -> codice ICD-10, in tre passaggi sull'indice ufficiale.
 
-    Tre passaggi, tutti ancorati all'indice estratto dal volume ufficiale.
-
-    1. **Termine esatto.** La menzione normalizzata compare nell'indice.
-
-    2. **Generalizzazione a categoria.** Il lessico clinico e quello del volume
-       divergono: "fibrillazione atriale" non e' un termine indicizzato, perche'
-       l'ICD elenca solo le forme qualificate -- parossistica (I48.0),
-       persistente (I48.1), cronica (I48.2) -- e la categoria che le raccoglie.
-       Quando *tutti* i termini dell'indice che cominciano con la menzione
-       ricadono in un'unica categoria a 3 caratteri, quella categoria e' cio'
-       che la menzione denota, e il suo codice e' la risposta corretta: un
-       codice a 3 caratteri e' una codifica ICD-10 valida, non un ripiego
-       inventato. Se invece i termini si distribuiscono su categorie diverse --
-       "insufficienza mitralica" sta sia fra le forme reumatiche sia fra quelle
-       non reumatiche -- la menzione resta AMBIGUO: distinguerle richiede il
-       contesto clinico, che e' il compito dello step 5.
-
-       La regola non contiene alcuna conoscenza medica scritta a mano: deriva
-       per intero dalla gerarchia del volume.
-
-    3. **Ripiego sul gazetteer.** Il termine piu' lungo dell'indice contenuto
-       nella menzione, con lo stesso meccanismo della pipeline A, cosi' che
-       "ipertensione arteriosa in trattamento" trovi "ipertensione arteriosa".
-
-    In nessun caso una menzione compatibile con piu' categorie riceve un codice
-    scelto a caso: una copertura piu' alta pagata con una codifica meno
-    affidabile e' il compromesso sbagliato in un sistema che deve poi ragionare
-    sulla sicurezza di una terapia.
+    1. termine esatto; 2. generalizzazione alla categoria a 3 caratteri, se
+    tutte le forme qualificate che estendono la menzione stanno in una sola
+    categoria ("fibrillazione atriale" -> I48), altrimenti AMBIGUO; 3. il
+    termine piu' lungo contenuto nella menzione (gazetteer). Mai un codice a
+    caso fra piu' categorie. Vedi docs/02_terminologia_icd10.md.
     """
 
     def __init__(
@@ -187,20 +119,14 @@ class RisolutoreICD:
             normalizza(termine): codici
             for termine, codici in dati["indice_termini"].items()
         }
-        # Indice per primo token: la generalizzazione deve poter trovare tutti i
-        # termini che cominciano con una data menzione senza scorrere ogni volta
-        # le 13.642 voci.
+        # Indice per primo token, per la generalizzazione.
         self._per_primo_token: dict[str, list[str]] = defaultdict(list)
         for termine in self.indice:
             primo = termine.split(" ", 1)[0]
             self._per_primo_token[primo].append(termine)
 
         self.gazetteer = gazetteer
-        # Il ripiego sul gazetteer attraversa la pipeline spaCy, che non e'
-        # garantita sicura da piu' thread contemporaneamente. Le pipeline
-        # girano in parallelo per ragioni di tempo, quindi qui l'accesso e'
-        # serializzato: e' un ripiego e non il percorso principale, quindi
-        # la contesa resta bassa.
+        # spaCy non e' sicura fra thread: il ripiego sul gazetteer e' serializzato.
         self._lucchetto = threading.Lock()
 
     # -- passaggi ----------------------------------------------------------
@@ -216,13 +142,7 @@ class RisolutoreICD:
         return categorie.pop() if len(categorie) == 1 else None
 
     def _generalizza(self, chiave: str) -> tuple[str | None, tuple[str, ...]]:
-        """(categoria, codici delle forme qualificate) per una menzione generica.
-
-        Considera solo i termini che *estendono* la menzione a confine di
-        parola: "fibrillazione atriale" raccoglie "fibrillazione atriale
-        parossistica" ma non "fibrillazione atriale" stessa (gia' cercata) ne'
-        parole che iniziano allo stesso modo per caso.
-        """
+        """(categoria, codici delle forme qualificate) che estendono la menzione a confine di parola."""
         prefisso = chiave + " "
         forme: list[str] = []
         codici: list[str] = []
@@ -232,13 +152,8 @@ class RisolutoreICD:
                 codici.extend(self.indice[termine])
         if not codici:
             return None, ()
-        # Serve piu' di una forma qualificata. Con una sola non si distingue un
-        # concetto padre da un fratello piu' specifico, e l'errore che ne segue
-        # e' del tipo peggiore: plausibile. Il caso reale che ha imposto il
-        # vincolo e' "insufficienza mitralica", la cui unica forma indicizzata
-        # che la estende e' "insufficienza mitralica congenita" (Q23.3,
-        # malformazioni congenite): generalizzare avrebbe attribuito a una
-        # valvulopatia acquisita un codice di cardiopatia congenita.
+        # Serve piu' di una forma qualificata: con una sola, "insufficienza
+        # mitralica" finirebbe in Q23.3 (congenita).
         if len(forme) < 2:
             return None, tuple(sorted(set(codici)))
         return self._categoria_comune(codici), tuple(sorted(set(codici)))
@@ -305,10 +220,7 @@ class RisolutoreICD:
             return self._esito(codici, forma, "gazetteer")
 
         if qualificate:
-            # Forme qualificate esistono, ma sparse su categorie diverse (o una
-            # sola, troppo poco per generalizzare). Sceglierne una richiede il
-            # contesto clinico, che e' il compito dello step 5: i candidati
-            # restano visibili e la decisione no.
+            # Forme qualificate sparse su piu' categorie: candidati visibili, nessuna scelta.
             return EsitoICD(
                 None, StatoNormalizzazione.AMBIGUO, chiave, qualificate, "generalizzazione_ambigua"
             )
@@ -319,16 +231,7 @@ class RisolutoreICD:
 def soggetto_della_menzione(
     testo_campo: str, inizio: int | None, fine: int | None
 ) -> tuple[Soggetto, str | None]:
-    """Decide se una menzione riguardi il paziente o un suo familiare.
-
-    Vive qui, accanto alle altre normalizzazioni condivise, perche' tutte e tre
-    le pipeline devono applicare *la stessa* regola: se A la calcolasse sui token
-    di spaCy e B sugli offset del modello, il confronto dello step 6 misurerebbe
-    anche quella differenza invece del solo riconoscimento.
-
-    Restituisce anche la nota da aggiungere alla regola di provenienza, cosi'
-    l'espressione che ha deciso resta ispezionabile nel dato finale.
-    """
+    """Paziente o familiare? Regola unica per le tre pipeline; restituisce anche la nota per la provenienza."""
     ambito = soggetto_familiare(testo_campo, inizio, fine)
     if ambito is None:
         return Soggetto.PAZIENTE, None

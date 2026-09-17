@@ -1,35 +1,9 @@
-"""
-Step 3 - Gazetteer sui vocabolari chiusi.
+"""Step 3 - Gazetteer sui vocabolari chiusi.
 
-Riconosce nel testo libero le menzioni di farmaci e condizioni, cercando le
-forme dei vocabolari costruiti negli step 1 e 2. Non fa inferenza: se una
-stringa non e' nel vocabolario, non viene riconosciuta. E' esattamente il
-comportamento voluto per la pipeline A, che deve essere la baseline
-completamente tracciabile contro cui misurare le altre due.
-
-PERCHE' `PhraseMatcher` DI spaCy E NON REGEX
-    Il brief lascia la scelta. `PhraseMatcher` vince per tre motivi concreti:
-
-    1. **Confronta token, non caratteri.** Una regex su "ictus" troverebbe
-       "ictus" dentro "peri-ictus"; il matcher su token no, perche' il confine
-       di parola lo stabilisce il tokenizzatore italiano invece di `\\b`.
-    2. **Scala.** Le forme da cercare sono ~15 000; un'alternanza di regex di
-       quella dimensione diventa lenta e illeggibile, mentre `PhraseMatcher`
-       usa internamente una struttura ad automa.
-    3. **Serve comunque il documento tokenizzato** per la logica di negazione
-       (`context_it.py`), che ragiona su frasi e distanze in token. Usare spaCy
-       per il matching evita di mantenere due nozioni diverse di "parola".
-
-    L'attributo di confronto e' `LOWER`: la capitalizzazione nei referti e'
-    incoerente ("Ipertensione", "ipertensione", "IPERTENSIONE") e non porta
-    informazione clinica.
-
-PERCHE' LE CONDIZIONI VENGONO DALL'ICD E NON DAL DATASET
-    Lo step 0 ha stabilito che il dataset non contiene un elenco di patologie.
-    Il vocabolario delle condizioni e' quindi la terminologia ICD-10 italiana
-    (step 2), filtrata per togliere le voci che come gazetteer farebbero solo
-    danno: quelle troppo corte, quelle numeriche delle tabelle di mortalita' e
-    le parole generiche che in un referto non denotano una diagnosi.
+Riconosce nel testo le forme dei vocabolari (farmaci dallo step 1-2,
+condizioni dall'indice ICD-10) con `PhraseMatcher` di spaCy su token
+minuscoli: nessuna inferenza, tutto tracciabile. Perche' spaCy e non regex,
+e come e' filtrato l'ICD: docs/03_pipeline_estrazione_A.md.
 """
 
 from __future__ import annotations
@@ -103,22 +77,7 @@ PATTERN_UNITA_O_FORMA = re.compile(
 
 
 def forma_farmaco_ammissibile(forma: str) -> bool:
-    """Il vocabolario contiene residui di parsing che come gazetteer fanno danno.
-
-    Il campo di terapia e' semi-strutturato e il suo parsing ha lasciato nel
-    vocabolario voci come "5 mg", "2.5 mg", "ore 17", "cpr." e "-". Da sole non
-    sono nomi di farmaco, ma come forme del gazetteer trovano riscontro
-    ovunque: nella pipeline A producevano 51 menzioni di farmaco inesistenti
-    ("Ramipril 2.5 mg" faceva emergere un farmaco chiamato "2.5 mg"), che
-    finivano nelle etichette silver dello step 5 e da li' venivano imparate dal
-    NER, che le riproduceva su scala maggiore.
-
-    La regola: dopo aver tolto cifre, punteggiatura e parole che sono solo
-    unita' di misura o forme farmaceutiche, deve restare almeno un pezzo
-    alfabetico di tre lettere. Cosi' cadono "5 mg" e "ore 17", e restano nomi
-    commerciali legittimi che contengono cifre come "mag 2", "omega 3 aur" o
-    "cacit 1000".
-    """
+    """Scarta i residui di parsing ("5 mg", "ore 17", "cpr."): tolti cifre, unita' e forme, devono restare tre lettere."""
     forma = forma.strip()
     if len(forma) < 4 or forma == "-":
         return False
@@ -130,13 +89,7 @@ def forma_farmaco_ammissibile(forma: str) -> bool:
 
 
 def carica_forme_farmaci() -> dict[str, list[str]]:
-    """Forma testuale -> codici ATC, dalle voci risolte o ambigue.
-
-    Le voci NIL sono incluse **senza codice**: il gazetteer deve riconoscerle
-    comunque, altrimenti un farmaco realmente presente nel testo risulterebbe
-    assente invece che "riconosciuto ma non normalizzato". Sono due errori
-    diversi e vanno tenuti distinti.
-    """
+    """Forma testuale -> codici ATC; le voci NIL restano, senza codice (riconosciute ma non normalizzate)."""
     dati = json.loads(PERCORSO_MAPPATURA_ATC.read_text(encoding="utf-8"))
     forme: dict[str, list[str]] = {}
     for voce in dati["voci"]:
@@ -161,15 +114,8 @@ def termine_ammissibile(termine: str) -> bool:
     return True
 
 
-# Qualificatori con cui l'ICD costruisce le proprie categorie residuali. Non
-# sono contenuto clinico ma contabilita' della classificazione: "Altro
-# ipotiroidismo" e' il modo in cui l'ICD dice "ipotiroidismo non altrove
-# classificato". Nei referti il medico scrive "ipotiroidismo" e basta, quindi
-# senza rimuoverli il gazetteer manca la forma che compare davvero.
-#
-# La rimozione produce forme *derivate* dall'ICD stesso: nessun sinonimo e'
-# inventato da noi. Restano fuori i qualificatori che sono contenuto clinico
-# ("cronica", "acuta", "maligna"), perche' distinguono condizioni diverse.
+# Qualificatori residuali dell'ICD ("Altro ...", "... non specificata"): non
+# sono contenuto clinico. "cronica" o "acuta" invece lo sono e restano.
 PATTERN_QUALIFICATORE_INIZIALE = re.compile(
     r"^(altro|altra|altri|altre|altre forme di|altri disturbi del|"
     r"altre malattie del|altri)\s+", re.IGNORECASE
@@ -181,14 +127,7 @@ PATTERN_QUALIFICATORE_FINALE = re.compile(
 
 
 def varianti_derivate(termine: str) -> list[str]:
-    """Forme aggiuntive ottenute togliendo i qualificatori residuali dell'ICD.
-
-    "altro ipotiroidismo" -> "ipotiroidismo"
-    "cardiopatia ischemica cronica, non specificata" -> "cardiopatia ischemica cronica"
-
-    Applicata sia in testa sia in coda, e ripetuta finche' il termine si
-    accorcia, perche' i due qualificatori possono comparire insieme.
-    """
+    """Forme senza i qualificatori residuali dell'ICD: "altro ipotiroidismo" -> "ipotiroidismo"."""
     varianti = []
     corrente = termine
     for _ in range(3):  # limite prudenziale: nessun termine reale ne ha di piu'
@@ -202,20 +141,7 @@ def varianti_derivate(termine: str) -> list[str]:
 
 
 def carica_forme_condizioni() -> dict[str, list[str]]:
-    """Termine ICD -> codici, filtrato per l'uso come gazetteer.
-
-    Le forme di **una sola parola** sono ammesse solo se coincidono con il
-    titolo di una categoria ICD. E' il filtro che elimina i tronchi prodotti
-    dall'espansione dei parentetici: da "insufficienza (cardiaca) (renale)"
-    l'indice ricava anche "insufficienza", che pero' da sola non e' una
-    diagnosi — nessun codice ICD si intitola cosi'. "Ipotiroidismo" invece
-    sopravvive, perche' e' il titolo di E03 una volta tolto il qualificatore
-    residuale "Altro".
-
-    La regola e' ricavata dai dati e non da un elenco di parole scritto a mano:
-    e' l'ICD stesso a dire quali termini bastano da soli a nominare una
-    categoria.
-    """
+    """Termine ICD -> codici; una forma di una sola parola resta solo se e' il titolo di una categoria."""
     dati = json.loads(PERCORSO_TERMINOLOGIA_ICD.read_text(encoding="utf-8"))
 
     # I titoli delle categorie, con le loro varianti senza qualificatori.
@@ -247,10 +173,7 @@ class GazetteerClinico:
     """Riconosce farmaci e condizioni cercando le forme dei vocabolari chiusi."""
 
     def __init__(self, nlp=None) -> None:
-        # Il modello serve solo per tokenizzare e segmentare in frasi: gli altri
-        # componenti (NER generico, parser) non servono e costano tempo, quindi
-        # li disattiviamo. Il sentencizzatore a regole basta e non dipende dal
-        # parser statistico, che su prosa clinica abbreviata e' inaffidabile.
+        # Solo tokenizzazione e frasi: il resto della pipeline spaCy e' disattivato.
         if nlp is None:
             nlp = spacy.load(MODELLO_SPACY, exclude=["ner", "parser", "lemmatizer"])
             nlp.add_pipe("sentencizer")
@@ -266,9 +189,7 @@ class GazetteerClinico:
         self._aggiungi(ETICHETTA_CONDIZIONE, self.forme_condizioni)
 
     def _aggiungi(self, etichetta: str, forme: dict[str, list[str]]) -> None:
-        # `nlp.tokenizer.pipe` invece di `nlp.pipe`: per costruire i pattern
-        # serve solo la tokenizzazione, e su decine di migliaia di forme la
-        # differenza di tempo e' sostanziale.
+        # Solo il tokenizzatore: su decine di migliaia di forme conta.
         pattern = list(self.nlp.tokenizer.pipe(forme.keys()))
         self.matcher.add(etichetta, pattern)
 
@@ -280,12 +201,7 @@ class GazetteerClinico:
         return sorgente.get(forma.lower(), [])
 
     def trova(self, documento) -> list[Menzione]:
-        """Trova le menzioni in un documento gia' analizzato da spaCy.
-
-        In caso di sovrapposizione vince la menzione **piu' lunga**: fra
-        "diabete" e "diabete mellito tipo 2" quella giusta e' la seconda, e
-        tenerle entrambe produrrebbe due condizioni dove ce n'e' una.
-        """
+        """Le menzioni in un documento spaCy; fra sovrapposte vince la piu' lunga."""
         grezze = []
         for identificativo, inizio, fine in self.matcher(documento):
             etichetta = self.nlp.vocab.strings[identificativo]

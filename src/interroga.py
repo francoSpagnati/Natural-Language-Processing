@@ -1,22 +1,8 @@
 """Interrogazioni SPARQL sul knowledge graph dello step 7.
 
-A COSA SERVE
-    Un grafo che nessuno interroga è una struttura dati con un nome altisonante.
-    Queste sono le domande per cui il grafo è stato costruito in quella forma, e
-    sono le domande che lo step 8 dovrà porsi per decidere che cosa è sicuro.
-
-    Ciascuna è scritta in SPARQL e non in Python di proposito: se la risposta si
-    ottiene interrogando il grafo, la struttura è quella giusta; se servisse
-    ricalcolarla in Python, vorrebbe dire che il grafo non la contiene.
-
-NOTA SUL COSTO
-    Il grafo intero ha oltre un milione di triple, e **rileggerlo da Turtle costa
-    piu' che ricostruirlo**: il parser di rdflib e' puro Python e impiega diversi
-    minuti, mentre la costruzione dai file delle pipeline ne impiega due. Il
-    comportamento predefinito e' quindi ricostruire (`--da-sorgente` e' implicito
-    se il file Turtle non esiste); `--grafo` serve quando si vuole interrogare
-    esattamente il file serializzato, per esempio per verificare che la
-    serializzazione non abbia perso nulla.
+Le domande per cui il grafo e' stato costruito in quella forma, scritte in
+SPARQL e non in Python. Rileggere il Turtle (oltre un milione di triple) costa
+piu' che ricostruirlo: il predefinito e' ricostruire, `--grafo` legge il file.
 """
 
 from __future__ import annotations
@@ -93,10 +79,7 @@ DOMANDE: list[tuple[str, str, str]] = [
         anatomico. È l'operazione su cui poggia la metrica gerarchica dello
         step 11: due terapie diverse nello stesso gruppo non sono un errore
         quanto due terapie in gruppi diversi.""",
-        # La sottointerrogazione aggrega PRIMA per concetto: il cammino
-        # `skos:broader+` viene cosi' percorso una volta per ciascuno dei
-        # ~1 500 codici distinti invece che per ciascuna delle 32 000
-        # asserzioni. Senza, rdflib impiega minuti dove ne basta uno.
+        # Aggrega prima per concetto: `skos:broader+` percorso una volta per codice, non per asserzione.
         """
         SELECT ?codice ?nome (SUM(?n) AS ?asserzioni) WHERE {
           {

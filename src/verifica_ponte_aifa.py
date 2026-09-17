@@ -1,21 +1,8 @@
-"""
-Verifica il "ponte" interno al dataset contro il registro AIFA.
+"""Verifica il «ponte» commerciale -> principio ricavato dal dataset contro il registro AIFA.
 
-CONTESTO
-    Lo step 0 ha ricavato, incrociando i due campi terapia del dataset, una
-    corrispondenza fra nome commerciale e principio attivo (il "ponte", in
-    `data/interim/ponte_commerciale_principio.csv`). Quella corrispondenza e'
-    prodotta in modo deterministico dal dataset grezzo — nessun LLM — ma resta
-    pur sempre un'*osservazione locale*: dice come un certo ospedale ha
-    trascritto le terapie, non cosa contiene davvero un medicinale.
+Non costruisce il dizionario (step 2): misura quanto fidarsi del ponte.
 
-    Questo script la confronta con l'anagrafica AIFA, che e' la fonte
-    autorevole. Non costruisce il dizionario di normalizzazione (e' lo step 2):
-    serve solo a quantificare quanto ci si possa fidare del ponte, e a rendere
-    quel numero riproducibile invece che affermato.
-
-Esecuzione (richiede prima `python3 src/fetch_external_kb.py`):
-    python3 src/verifica_ponte_aifa.py
+    python3 src/verifica_ponte_aifa.py   (dopo fetch_external_kb.py)
 """
 
 from __future__ import annotations
@@ -33,34 +20,21 @@ PERCORSO_CONFEZIONI = RADICE / "data" / "external" / "aifa" / "confezioni_fornit
 # senza alzare il limite il modulo csv solleva _csv.Error.
 csv.field_size_limit(10**7)
 
-# Lunghezza minima di un token per essere considerato significativo nel
-# confronto: sotto i 5 caratteri si tratta quasi sempre di congiunzioni o
-# frammenti ("di", "e", "acido") che darebbero falsi accoppiamenti.
+# Token significativi: almeno 5 caratteri ("di", "acido" darebbero falsi accoppiamenti).
 LUNGHEZZA_MINIMA_TOKEN = 5
 
-# Confrontiamo solo il prefisso dei token, non la parola intera, perche' fra
-# dataset e AIFA cambiano le desinenze e le forme salino:
-# "Bisoprololo" vs "bisoprololo emifumarato", "Dapagliflozin" vs
-# "dapagliflozin propanediolo monoidrato".
+# Confronto per prefisso: "Bisoprololo" contro "bisoprololo emifumarato".
 LUNGHEZZA_PREFISSO = 6
 
 
 def normalizza(testo: str) -> str:
-    """Minuscolo, punteggiatura ridotta a spazi, spazi collassati.
-
-    La punteggiatura va rimossa perche' le due fonti separano diversamente le
-    associazioni ("Rosuvastatina/ezetimibe" contro "rosuvastatina ezetimibe").
-    """
+    """Minuscolo, punteggiatura ridotta a spazi, spazi collassati."""
     testo = re.sub(r"[^a-z0-9/ ]", " ", testo.strip().lower())
     return re.sub(r"\s+", " ", testo).strip()
 
 
 def carica_indice_aifa(percorso: Path) -> dict[str, set[str]]:
-    """Costruisce l'indice denominazione commerciale -> principi attivi.
-
-    Il campo `PA_ASSOCIATI` elenca i principi attivi della confezione secondo
-    AIFA; `DENOMINAZIONE` e' il nome commerciale senza la confezione.
-    """
+    """Indice denominazione commerciale -> principi attivi (`PA_ASSOCIATI`)."""
     indice: dict[str, set[str]] = {}
     with percorso.open(encoding="utf-8", errors="replace") as f:
         for riga in csv.DictReader(f, delimiter=";"):
@@ -72,19 +46,7 @@ def carica_indice_aifa(percorso: Path) -> dict[str, set[str]]:
 
 
 def principio_confermato(principio_dataset: str, principi_aifa: set[str]) -> bool:
-    """Il principio osservato nel dataset e' compatibile con quelli AIFA?
-
-    Confronto volutamente indulgente: ogni token significativo del principio
-    del dataset deve comparire (per prefisso) fra i principi AIFA. Cosi'
-    "Bisoprololo" risulta confermato da "bisoprololo emifumarato", che e' la
-    stessa sostanza in forma salina.
-
-    Il rovescio della medaglia e' che le associazioni precostituite risultano
-    spesso NON confermate: AIFA registra la confezione sotto il principio
-    principale ("olmesartan medoxomil"), mentre il dataset elenca l'intera
-    associazione ("Olmesartan medoxomil/amlodipina"). Sono falsi disaccordi, di
-    cui va tenuto conto nel leggere il risultato.
-    """
+    """Ogni token significativo del principio del dataset compare per prefisso fra i principi AIFA (le associazioni danno falsi disaccordi)."""
     testo_aifa = " | ".join(sorted(principi_aifa))
     token = [t for t in re.split(r"[/ ]+", principio_dataset) if len(t) >= LUNGHEZZA_MINIMA_TOKEN]
     if not token:
