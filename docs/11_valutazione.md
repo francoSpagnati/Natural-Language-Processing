@@ -1,7 +1,7 @@
 # Step 11 — La valutazione: che cosa sopravvive al campione
 
 **Stato:** completato.
-**Riproducibilità:** `python3 src/valuta_gerarchica.py --pieghe 5` (gratis); `--sostanza` per l'unità a 7 caratteri; `--cartella-b data/processed/pipeline_a` per la pipeline A; `--llm openrouter` per il ranker remoto (in cache: non costa)
+**Riproducibilità:** `python3 src/valuta_gerarchica.py --pieghe 5` (gratis); `--sostanza` per l'unità a 7 caratteri; `--stratifica` per le pieghe stratificate; `--cartella-b data/processed/pipeline_a` per la pipeline A; `--llm openrouter` per il ranker remoto (in cache: non costa)
 
 Lo step 9 aveva misurato i ranker su una divisione singola (597 addestramento,
 244 prova) con il richiamo esatto sulla classe. Qui si mette dietro ogni
@@ -199,13 +199,44 @@ ibrido [−30,1%, −23,7%], contro simbolico [−4,2%, +0,3%]. Il modello local
 (`qwen3.5:4b`, 19,7% sulla divisione singola) non è stato rimisurato: quattro
 ore di CPU per confermare un numero che sta sotto.
 
-## 10. Che cosa resta aperto
+## 10. Pieghe stratificate, e tre casi reali per codici
+
+**Stratificazione.** Il brief chiede pieghe stratificate per patologia
+principale. Con `--stratifica` (strati I50, I48, I25, I10, altro; dentro ogni
+strato i casi vanno nelle pieghe a turno in ordine di impronta): ibrido
+46,8%, frequenza 47,1%, simbolico 22,7%; ibrido − frequenza **[−3,0%,
++2,0%]** sul richiamo, [−2,8%, −0,4%] su hF. La conclusione non dipende
+dalle pieghe: indistinguibili sul richiamo, e sotto hF la frequenza è avanti.
+
+**Tre ricoveri di prova, solo per codici** (il testo non si mostra; le prime
+cinque proposte dell'ibrido a 5 pieghe, con il livello ATC a cui ogni
+proposta incontra un bersaglio: 4 = classe esatta, 0 = nessuna famiglia in
+comune).
+
+| ricovero | condizioni estratte | terapia in atto | aggiunte vere | ibrido, prime 5 → livello |
+| --- | --- | --- | --- | --- |
+| 10235556 | *nessuna* | *nessuna* | A02BC, A10BK, B01AC, C03CA, C03DA, C07AB, C09CA, C10BA | A02BC → 4, C03DA → 4, C07AB → 4, C03CA → 4, B01AC → 4 |
+| 9799541 | I31.3, J95, N19, R56.0 | *nessuna* | A02BC, B01AC, J01DD, M02AA | C03DA → 0, D07AC → 0, A02BC → 4, M04AC → 1, B01AX → 3 |
+| 10067375 | E11, I10, I42.6, I48, I48.1 | A10BK, B01AF, C01BD, C03DA, C07AB, C09AA, C10AA | M04AC | B01AX → 0, A02BC → 0, B01AA → 0, C08CA → 0, C09CA → 0 |
+
+Il primo è il caso più istruttivo: **l'estrazione non ha trovato nulla** e il
+ranker centra 5 su 5 — perché con zero fatti l'ibrido ricade sulla frequenza,
+e in questo reparto un ricovero senza terapia d'ingresso riceve i quattro
+pilastri più il gastroprotettore. È la tesi 4 in un ricovero solo. Il
+simbolico, senza fatti, restituisce i candidati in ordine alfabetico
+(`A02AD`, `A02BC`, …): un artefatto della parità, che vale la pena vedere. Il
+secondo è un paziente non cardiologico (versamento pericardico, insufficienza
+respiratoria e renale): il medico aggiunge un antibiotico e un antiinfiammatorio
+topico, che nessun ranker può prevedere dal profilo. Il terzo sbaglia a ogni
+livello: un paziente in fibrillazione già trattato con tutto, a cui viene
+aggiunta la colchicina `M04AC` — la ragione (una pericardite? la gotta?) non
+è fra le condizioni estratte. Il sistema sbaglia dove il fatto che decide non
+c'è, ed è coerente con tutto il resto del progetto.
+
+## 11. Che cosa resta aperto
 
 - **Il riferimento è una decisione di un medico** per ricovero: la precisione
   non è interpretabile come correttezza.
 - **Il dosaggio non è modellato.**
 - **Frazione di eiezione, punteggio CHA₂DS₂-VA, valori di laboratorio e
   dispositivi** restano i fatti non estratti che limitano le regole.
-- **Le pieghe non sono stratificate** per condizione principale; con 841
-  ricoveri e hash deterministico le pieghe sono bilanciate di fatto, ma non
-  per costruzione.

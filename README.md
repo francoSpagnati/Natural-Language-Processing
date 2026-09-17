@@ -454,6 +454,7 @@ differenze appaiate; un **ranker casuale a seme fisso** come controllo.
 | ibrido − simbolico | [+21,7%, +28,0%] | esclude lo zero |
 | frequenza − simbolico | [+20,9%, +26,9%] | esclude lo zero |
 | `deepseek` − frequenza | [−29,2%, −22,5%] | esclude lo zero |
+| ibrido − frequenza, pieghe stratificate per condizione principale | [−3,0%, +2,0%] | include lo zero |
 
 ### 8.2 Il controllo casuale: il guadagno gerarchico era aritmetica
 
@@ -579,7 +580,7 @@ python3 src/demo.py --esempio 1 --traccia         # un paziente dall'inizio alla
 python3 src/demo.py --interattivo                 # la tua anamnesi da tastiera
 python3 src/kb_build.py --figura                  # rigenera kb/conoscenza.ttl e la figura
 python3 src/valuta_gerarchica.py --pieghe 5       # la valutazione finale, gratis
-python3 src/valuta_gerarchica.py --pieghe 5 --sostanza
+python3 src/valuta_gerarchica.py --pieghe 5 --sostanza    # unita' = sostanza; --stratifica per le pieghe
 claude mcp add cardio -- python3 src/mcp_server.py
 python3 src/mcp_client_locale.py --strumenti      # handshake col server
 python3 src/valuta_mcp.py                         # le dieci domande (ollama, ~1 h)

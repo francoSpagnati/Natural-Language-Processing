@@ -355,7 +355,7 @@ def esito_da_proiezioni(sigla: str, nome: str, ordini, bersagli, k: int) -> Esit
 
 
 def valuta_incrociata(fabbriche: Sequence, casi: Sequence[Caso], quante: int,
-                      k: int) -> list[Esito]:
+                      k: int, stratifica: bool = False) -> list[Esito]:
     """Validazione incrociata a `quante` pieghe.
 
     Per ogni piega: l'insieme candidato e i ranker si costruiscono **solo**
@@ -372,7 +372,7 @@ def valuta_incrociata(fabbriche: Sequence, casi: Sequence[Caso], quante: int,
     `fabbriche` sono funzioni senza argomenti che restituiscono un ranker
     nuovo: riaddestrare lo stesso oggetto cinque volte lascerebbe residui.
     """
-    divisione = pieghe(casi, quante)
+    divisione = pieghe(casi, quante, stratifica=stratifica)
     accumulo: dict[str, tuple[str, dict, dict]] = {}
     for i, prova in enumerate(divisione):
         addestramento = [c for j, p in enumerate(divisione) if j != i for c in p]
@@ -555,6 +555,9 @@ def main() -> None:
     argomenti.add_argument("--tetto-dollari", type=float, default=0.45,
                            help="Con --pieghe e --llm openrouter: la corsa si ferma "
                                 "se la spesa supera questo tetto.")
+    argomenti.add_argument("--stratifica", action="store_true",
+                           help="Pieghe stratificate per condizione principale "
+                                "(I50, I48, I25, I10, altro).")
     argomenti.add_argument("--sostanza", action="store_true",
                            help="Unita' = sostanza (ATC a 7 caratteri, il 5o livello "
                                 "del brief) invece della classe a 5. Aggiunge il "
@@ -577,7 +580,8 @@ def main() -> None:
                      RankerSimbolico, RankerIbrido]
         print(f"Casi: {len(casi)}, validazione incrociata a {opzioni.pieghe} "
               f"pieghe: ogni ricovero misurato una volta come prova.")
-        esiti = valuta_incrociata(fabbriche, casi, opzioni.pieghe, opzioni.k)
+        esiti = valuta_incrociata(fabbriche, casi, opzioni.pieghe, opzioni.k,
+                                  stratifica=opzioni.stratifica)
         coppie = [("ibr", "freq"), ("ibr", "simb"), ("freq", "simb")]
         esito_llm = None
         if opzioni.llm:

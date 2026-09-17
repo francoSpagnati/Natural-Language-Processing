@@ -297,3 +297,14 @@ class TestLaSpiegabilita(unittest.TestCase):
         self.assertEqual((q["proposte"], q["motivate"]), (3, 1))
         self.assertEqual((q["centri"], q["centri_motivati"]), (2, 1))
         self.assertAlmostEqual(q["quota_centri_motivati"], 0.5)
+
+
+class TestLePiegheStratificate(unittest.TestCase):
+
+    def test_ogni_piega_ha_la_stessa_quota_di_scompensi(self):
+        casi = [Caso(i, frozenset({"I50.9"} if i % 4 == 0 else {"I10"}), frozenset(),
+                     frozenset(), frozenset({"C07AB"})) for i in range(200)]
+        parti = pieghe(casi, 5, stratifica=True)
+        quote = [sum(1 for c in p if "I50.9" in c.condizioni) for p in parti]
+        self.assertEqual(quote, [10] * 5)
+        self.assertEqual(sorted(c.enc_oid for p in parti for c in p), list(range(200)))

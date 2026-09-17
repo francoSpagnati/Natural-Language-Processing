@@ -622,7 +622,7 @@ def carica_casi(cartella: Path) -> list[Caso]:
 
 
 def pieghe(casi: Sequence[Caso], quante: int = 5,
-           seme: int = 20260915) -> list[list[Caso]]:
+           seme: int = 20260915, stratifica: bool = False) -> list[list[Caso]]:
     """Divide i casi in `quante` pieghe disgiunte, in modo deterministico.
 
     Stessa idea di `dividi`: l'assegnazione dipende solo dall'`enc_oid` e dal
@@ -633,9 +633,26 @@ def pieghe(casi: Sequence[Caso], quante: int = 5,
     import hashlib
 
     fuori: list[list[Caso]] = [[] for _ in range(quante)]
+    if not stratifica:
+        for caso in casi:
+            impronta = hashlib.sha256(f"{seme}:{caso.enc_oid}".encode()).hexdigest()
+            fuori[int(impronta[:8], 16) % quante].append(caso)
+        return fuori
+    # Stratificate per condizione principale (brief §4): dentro ogni strato i
+    # casi vanno nelle pieghe a turno, in ordine di impronta, cosi' ogni piega
+    # ha la stessa quota di scompensi, fibrillazioni, ipertesi e «altro».
+    def strato(caso: Caso) -> str:
+        for prefisso in ("I50", "I48", "I25", "I10"):
+            if any(c.startswith(prefisso) for c in caso.condizioni):
+                return prefisso
+        return "altro"
+    per_strato: dict[str, list[Caso]] = {}
     for caso in casi:
-        impronta = hashlib.sha256(f"{seme}:{caso.enc_oid}".encode()).hexdigest()
-        fuori[int(impronta[:8], 16) % quante].append(caso)
+        per_strato.setdefault(strato(caso), []).append(caso)
+    for gruppo in per_strato.values():
+        gruppo.sort(key=lambda c: hashlib.sha256(f"{seme}:{c.enc_oid}".encode()).hexdigest())
+        for i, caso in enumerate(gruppo):
+            fuori[i % quante].append(caso)
     return fuori
 
 

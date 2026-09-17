@@ -106,6 +106,7 @@ da 1 000 ricampionamenti dei ricoveri, differenze appaiate.
 | --- | --- | --- |
 | **ibrido − frequenza** | **[−1,5%, +3,4%]** include lo zero | **[+4,1%, +8,7%]** esclude lo zero |
 | ibrido − simbolico | [+21,7%, +28,0%] | [+32,4%, +37,8%] |
+| ibrido − frequenza, pieghe stratificate | [−3,0%, +2,0%] | — |
 | `deepseek` − frequenza | [−29,2%, −22,5%] | — |
 
 Altri numeri che decidono il disegno:
@@ -136,8 +137,6 @@ piccola non è un risultato.
   4 372: prima estensione).
 - **La parafrasi è contata, non impedita**: la difesa vera è un `resource`
   MCP che entra senza passare dal modello.
-- **Le pieghe non sono stratificate** per condizione principale, e i casi
-  reali di prova non sono mostrati per codici nel documento: lavoro futuro.
 
 ---
 
