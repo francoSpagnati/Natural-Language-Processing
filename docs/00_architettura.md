@@ -95,16 +95,16 @@ Misura: la **terapia proposta** (ingresso continuato + 5 classi nuove)
 contro la **terapia di dimissione**, precisione / richiamo / F1 a ogni
 livello ATC. Validazione incrociata a 5 pieghe sugli **841** ricoveri, unità
 = sostanza; intervalli al 95% da 1 000 ricampionamenti dei ricoveri,
-differenze appaiate. Sotto, l'F1 in %.
+differenze appaiate. Sotto, P / R / F1 in %; la tabella completa a cinque livelli è nel doc 11.
 
-| ranker | 1° `C` | 2° `C07` | 3° `C07A` | 4° `C07AB` | 5° `C07AB07` | top-5 al 5° |
-| --- | --- | --- | --- | --- | --- | --- |
-| casuale, seme fisso | 70,9 | 58,9 | 54,3 | 48,9 | 44,9 | 10,8 |
-| continuità della terapia | 81,5 | 72,9 | 64,4 | 60,7 | 47,5 | 31,7 |
-| simbolico, 27 indicazioni ESC | 82,5 | 72,2 | 67,1 | 61,8 | 46,9 | 25,4 |
-| frequenza, non guarda il paziente | **86,1** | **74,8** | **70,5** | 61,0 | 56,2 | 66,8 |
-| **ibrido**, indicazioni + co-occorrenza | 83,7 | 73,3 | 69,2 | 61,7 | **56,9** | **74,5** |
-| `deepseek-v4.1-flash`, unità classe | 82,1 | 67,0 | 58,0 | 51,0 | — | — |
+| ranker · P / R / F1 | 1° `C` | 3° `C07A` | 5° `C07AB07` | top-5 al 5° |
+| --- | --- | --- | --- | --- |
+| casuale, seme fisso | 63,3 / 86,4 / 70,9 | 46,1 / 71,0 / 54,3 | 37,0 / 61,2 / 44,9 | 10,8% |
+| continuità della terapia | 85,8 / 82,6 / 81,5 | 62,7 / 71,0 / 64,4 | 39,4 / 64,1 / 47,5 | 31,7% |
+| simbolico, 27 indicazioni ESC | **90,0** / 80,8 / 82,5 | **68,6** / 70,3 / 67,1 | 38,8 / 63,5 / 46,9 | 25,4% |
+| frequenza, non guarda il paziente | 84,2 / 92,3 / **86,1** | 65,6 / 82,6 / **70,5** | 47,4 / 75,3 / 56,2 | 66,8% |
+| **ibrido**, indicazioni + co-occorrenza | 79,8 / **92,8** / 83,7 | 63,2 / **82,9** / 69,2 | 47,9 / **76,2** / **56,9** | **74,5%** |
+| `deepseek-v4.1-flash`, unità classe (1° e 4°) | 88,8 / 81,1 / 82,1 | 42,2 / 69,5 / 51,0 | — | — |
 
 | differenza appaiata di F1 | 1° | 5° |
 | --- | --- | --- |

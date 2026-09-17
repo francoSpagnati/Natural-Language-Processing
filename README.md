@@ -445,74 +445,124 @@ appaiate; un ranker casuale a seme fisso come controllo; rumore di fondo 2
 punti (una differenza minore non si racconta). Un esempio svolto a mano,
 livello per livello, è nel [documento dello step 11](docs/11_valutazione.md).
 
-### 8.1 Il risultato principale
+**Le prove fatte**, in una tabella; ogni sezione sotto dice che cosa si è
+provato, che cosa si misura e il risultato.
+
+| sez. | prova | misura | risultato in una riga |
+| --- | --- | --- | --- |
+| 8.1 | 5 ranker, 841 ricoveri, 5 pieghe, unità sostanza | P / R / F1 a ogni livello ATC | ibrido e frequenza alla pari a ogni livello; alla sostanza staccano gli altri di 8–11 |
+| 8.2 | stessi ranker | top-5: almeno un'aggiunta centrata | ibrido avanti, [+4,7, +10,8] alla sostanza |
+| 8.3 | + ranker LLM dalla cache (unità classe) | P / R / F1, 4 livelli | LLM sotto la frequenza di 7–9, alla pari col simbolico |
+| 8.4 | ranker casuale a seme fisso | le stesse misure | F1 70,9 al 1°, 44,9 alla sostanza: la distanza dal caso è il guadagno vero |
+| 8.5 | stato da A, B e C | F1 per livello | identico a meno di mezzo punto |
+| 8.6 | proposte con un'indicazione citabile | quota motivate fra le centrate | ibrido 37,2% contro 33,9%: tre punti |
+
+### 8.1 La prova principale: cinque ranker, cinque livelli
+
+**Provato:** casuale, continuità, frequenza, simbolico, ibrido su tutti gli
+841 ricoveri, 5 pieghe, unità = sostanza. **Misurato:** precisione, richiamo
+e F1 della terapia proposta contro la dimissione a ogni livello; intervalli
+al 95% e differenze appaiate di F1 dal bootstrap.
 
 ![F1 alla sostanza per ranker](docs/img/graf-ranker.png)
 
-**F1 per livello ATC, 841 ricoveri, 5 pieghe, unità = sostanza.**
+**Risultato**, P / R / F1 in %:
 
-| ranker | 1° `C` | 2° `C07` | 3° `C07A` | 4° `C07AB` | 5° `C07AB07` | top-5 al 5° |
-| --- | --- | --- | --- | --- | --- | --- |
-| casuale (controllo) | 70,9 | 58,9 | 54,3 | 48,9 | 44,9 | 10,8% |
-| continuità (copia l'ingresso) | 81,5 | 72,9 | 64,4 | 60,7 | 47,5 | 31,7% |
-| simbolico (linee guida ESC) | 82,5 | 72,2 | 67,1 | 61,8 | 46,9 | 25,4% |
-| frequenza (non guarda il paziente) | **86,1** | **74,8** | **70,5** | 61,0 | 56,2 | 66,8% |
-| **ibrido** (indicazioni + co-occorrenza) | 83,7 | 73,3 | 69,2 | 61,7 | **56,9** | **74,5%** |
-| `deepseek-v4.1-flash` (unità classe, dalla cache) | 82,1 | 67,0 | 58,0 | 51,0 | — | 45,8% al 4° |
+| ranker | 1° `C` | 2° `C07` | 3° `C07A` | 4° `C07AB` | 5° `C07AB07` |
+| --- | --- | --- | --- | --- | --- |
+| casuale (controllo) | 63,3 / 86,4 / 70,9 | 51,0 / 74,9 / 58,9 | 46,1 / 71,0 / 54,3 | 40,9 / 65,4 / 48,9 | 37,0 / 61,2 / 44,9 |
+| continuità (copia l'ingresso) | 85,8 / 82,6 / 81,5 | 78,7 / 73,6 / 72,9 | 62,7 / 71,0 / 64,4 | 59,5 / 66,6 / 60,7 | 39,4 / 64,1 / 47,5 |
+| frequenza (non guarda il paziente) | 84,2 / 92,3 / **86,1** | 71,3 / 84,6 / **74,8** | 65,6 / 82,6 / **70,5** | 53,0 / 78,6 / 61,0 | 47,4 / 75,3 / 56,2 |
+| simbolico (linee guida ESC) | **90,0** / 80,8 / 82,5 | **77,0** / 73,2 / 72,2 | **68,6** / 70,3 / 67,1 | **62,3** / 65,7 / **61,8** | 38,8 / 63,5 / 46,9 |
+| **ibrido** (indicazioni + co-occorrenza) | 79,8 / **92,8** / 83,7 | 68,3 / **85,2** / 73,3 | 63,2 / **82,9** / 69,2 | 53,7 / **79,2** / 61,7 | 47,9 / **76,2** / **56,9** |
+
+Intervalli al 95% di F1 alla sostanza: ibrido [55,8, 58,1], frequenza [55,1,
+57,3], continuità [46,2, 48,7], simbolico [45,5, 48,2], casuale [43,5, 46,4].
 
 | differenza appaiata di F1 | 1° | 3° | 5° | lettura |
 | --- | --- | --- | --- | --- |
 | **ibrido − frequenza** | [−2,9, −2,0] | [−1,8, −0,8] | [+0,1, +1,2] | dentro il rumore, segno che cambia: **alla pari** |
 | ibrido − simbolico | [−0,1, +2,6] | [+1,0, +3,4] | **[+9,2, +10,9]** | alla sostanza esclude lo zero |
 | frequenza − continuità | [+3,5, +5,7] | [+5,1, +7,1] | **[+8,0, +9,6]** | esclude lo zero |
-| ibrido − frequenza, **top-5** | [+1,4, +4,1] | [+3,9, +8,1] | **[+4,7, +10,8]** | esclude lo zero |
-| `deepseek` − frequenza (unità classe; 1°, 3°, 4°) | [−5,1, −2,4] | [−11,1, −8,9] | [−9,3, −7,3] | esclude lo zero |
 | ibrido − frequenza, pieghe stratificate | [−2,7, −1,8] | [−1,8, −0,8] | [+0,0, +1,1] | identico |
 
-Che cosa dice: (1) ibrido e frequenza sono **alla pari in F1 a ogni
-livello**; l'ibrido centra più spesso almeno una aggiunta (tre ricoveri su
-quattro alla sostanza contro due su tre), ma sull'insieme della terapia le
-sue proposte sbagliate pesano quanto quelle della frequenza. (2) Alla
-sostanza frequenza e ibrido staccano simbolico e continuità di 8–11 punti:
-una linea guida indica la classe, non la molecola, e dentro la classe il
-simbolico sceglie a caso. (3) Il **simbolico ha la precisione più alta** a
-ogni livello dal 1° al 4° (90,0% al 1°) e il richiamo più basso: propone
-poco e giusto. (4) La continuità è un pavimento alto (F1 81,5 al 1°): i
-ranker aggiungono qualcosa sopra la copia solo alla sostanza.
+**Lettura.** (1) Ibrido e frequenza sono **alla pari in F1 a ogni livello**:
+la frequenza ha la precisione più alta dei due, l'ibrido il richiamo, e la
+differenza cambia segno. (2) Alla sostanza frequenza e ibrido staccano
+simbolico e continuità di 8–11 punti: una linea guida indica la classe, non
+la molecola, e dentro la classe il simbolico sceglie a caso. (3) Il
+**simbolico ha la precisione più alta** a ogni livello dal 1° al 4° (90,0%
+al 1°) e il richiamo più basso: propone poco e giusto. (4) La continuità è
+un pavimento alto (F1 81,5 al 1°): i ranker aggiungono qualcosa sopra la
+copia solo alla sostanza.
 
-### 8.2 Per livello: dove il sistema si ferma
+### 8.2 La prova top-5 del brief
+
+**Provato:** stessi ranker e pieghe. **Misurato:** per ogni livello, la
+quota dei 714 ricoveri con almeno un'aggiunta in cui almeno una delle 5
+proposte nuove coincide con un'aggiunta reale.
+
+**Risultato:** alla sostanza ibrido 74,5%, frequenza 66,8%, simbolico
+25,4%, continuità 31,7%, casuale 10,8%; ibrido − frequenza [+1,4, +4,1] al
+1°, **[+4,7, +10,8]** al 5°. Qui l'ibrido è avanti e sopra il rumore: centra
+più spesso *almeno una* aggiunta (tre ricoveri su quattro contro due su
+tre), ma sull'insieme della terapia le sue proposte sbagliate pesano quanto
+quelle della frequenza, e l'F1 non lo premia.
+
+### 8.3 La prova col ranker LLM, dalla cache
+
+**Provato:** `deepseek-v4.1-flash` (841 risposte in cache, 0 $ nuovi) ordina
+classi a 5 caratteri: prova a unità classe, stessi ricoveri, gli altri
+ranker ricalcolati nella stessa unità. **Misurato:** P / R / F1 ai quattro
+livelli misurabili (i numeri si confrontano per graduatoria con 8.1, non
+cifra per cifra).
+
+**Risultato**, P / R / F1 al 1° e al 4° livello:
+
+| ranker | 1° `C` | 4° `C07AB` | top-5 al 4° |
+| --- | --- | --- | --- |
+| frequenza | 83,6 / 92,3 / **85,8** | 49,7 / 80,2 / **59,3** | 75,0% |
+| ibrido | 77,8 / 92,5 / 82,4 | 49,3 / 79,7 / 58,9 | **78,4%** |
+| simbolico | 86,9 / 84,8 / 83,3 | 43,2 / 70,8 / 52,1 | 51,7% |
+| **modello linguistico** | **88,8** / 81,1 / 82,1 | 42,2 / 69,5 / 51,0 | 45,8% |
+
+LLM − frequenza **[−5,1, −2,4]** al 1°, **[−9,3, −7,3]** al 4°; LLM −
+simbolico [−1,7, −0,5] al 4°. Il modello, vincolato all'insieme candidato e
+con lo stesso stato del paziente, sta sotto la frequenza a ogni livello e
+alla pari col simbolico: precisione al 1° la più alta della tabella, e come
+il simbolico propone poco e cardiologico. 68 codici fuori elenco scartati.
+
+### 8.4 Il controllo casuale
+
+**Provato:** un ranker che permuta i candidati con seme fisso, scritto prima
+dei risultati. **Misurato:** le stesse misure (riga «casuale» delle tabelle).
 
 ![F1 per livello ATC](docs/img/graf-livelli.png)
 
-Salendo di livello i codici distinti diventano pochi e chiunque migliora,
-anche chi tira a sorte (F1 da 44,9 a 70,9). Il 1° livello è generoso con
-chiunque: in cardiologia quasi tutto sta in `C`. Il guadagno vero di un
-ranker è la distanza dal caso, +12 alla sostanza per l'ibrido, non i 57
-punti della cifra assoluta. Il modello linguistico, vincolato all'insieme
-candidato e con lo stesso stato del paziente, sta sotto la frequenza a ogni
-livello e alla pari col simbolico: la sua precisione al 1° livello (88,8%) è
-la più alta della tabella, e come il simbolico propone poco.
+**Risultato:** F1 70,9 al 1° livello e 44,9 alla sostanza. Il 1° livello è
+generoso con chiunque: in cardiologia quasi tutto sta in `C`. Il guadagno
+vero di un ranker è la distanza dal caso, +12 di F1 alla sostanza per
+l'ibrido, non i 57 punti della cifra assoluta.
 
-### 8.3 La spiegabilità, contata invece che affermata
+### 8.5 La prova per pipeline (metrica secondaria del brief)
 
-Quante proposte fra le prime cinque hanno almeno un'indicazione ESC che
-scatta per quel paziente, fra quelle centrate (unità sostanza): frequenza
-33,9%, ibrido 37,2%, simbolico 74,1%; `deepseek` (unità classe) 65,8%. Il
-vantaggio di spiegabilità dell'ibrido sulla frequenza è di tre punti, non
-una differenza di categoria: due terzi dei suoi centri sono «in questo
-reparto si fa», e il sistema lo dice per ogni proposta. Il ranker davvero
-spiegabile è il simbolico, che alla sostanza centra poco (193 proposte
-contro 866).
+**Provato:** gli stessi ranker con lo stato estratto da A, B e C.
+**Misurato:** F1 per livello. **Risultato:** ibrido alla sostanza 56,9 da A,
+56,9 da B, 56,9 da C; il simbolico varia di 1,5 punti al 3° livello (67,1
+con B contro 65,6), al pavimento di rumore. L'estrazione conta poco sul
+ranking, dominato dalla frequenza.
 
-### 8.4 L'estrazione conta poco sul ranking
+### 8.6 La prova di spiegabilità
 
-Metrica secondaria del brief: la stessa valutazione con lo stato estratto da
-ciascuna pipeline. F1 dell'ibrido alla sostanza: 56,9 da A, 56,9 da B, 56,9
-da C. Il richiamo più alto di B sulle condizioni vale 1,5 punti al ranker
-simbolico al 3° livello (67,1 contro 65,6) — al pavimento di rumore — e
-nulla all'ibrido, dominato dalla frequenza.
+**Provato:** le prime 5 proposte di ogni ranker su ogni ricovero (4 205 per
+ranker). **Misurato:** quante hanno almeno un'indicazione ESC che scatta per
+quel paziente, fra tutte e fra le centrate. **Risultato**, centri motivati:
+frequenza 33,9%, ibrido 37,2%, simbolico 74,1%; `deepseek` (unità classe)
+65,8%. Tre punti di vantaggio dell'ibrido, non una categoria: due terzi dei
+suoi centri sono «in questo reparto si fa», e il sistema lo dice per ogni
+proposta.
 
-### 8.5 I limiti della misura
+### 8.7 I limiti della misura
 
 k è fisso a 5: nel 15% dei ricoveri il medico non aggiunge nulla e il
 sistema propone comunque 5 classi, con precisione 17% garantita; un sistema
@@ -524,7 +574,7 @@ non si confrontano fra tabelle: a unità sostanza due proposte della stessa
 classe collassano in una al 4° livello, quindi la riga del modello
 linguistico (unità classe) si confronta per graduatoria, non cifra per cifra.
 
-### 8.6 La provenienza
+### 8.8 La provenienza
 
 ![Consenso prima e dopo](docs/img/graf-consenso.png)
 
