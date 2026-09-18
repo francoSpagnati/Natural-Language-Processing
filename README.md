@@ -19,7 +19,7 @@ codice modulo per modulo.
 
 ## Indice
 
-1. [Il progetto in una pagina](#1-il-progetto-in-una-pagina)
+1. [Il progetto in generale](#1-il-progetto-in-generale)
 2. [Il dataset e i vincoli](#2-il-dataset-e-i-vincoli)
 3. [Architettura](#3-architettura)
 4. [La parte NLP: dal testo allo stato del paziente](#4-la-parte-nlp-dal-testo-allo-stato-del-paziente)
@@ -33,7 +33,7 @@ codice modulo per modulo.
 
 ---
 
-## 1. Il progetto in una pagina
+## 1. Il progetto in generale
 
 **Compito.** Dato un referto — anamnesi in prosa, terapia all'ingresso,
 terapia alla dimissione — proporre le classi di farmaci da **aggiungere**
@@ -81,7 +81,7 @@ davvero prescritto, su **841** ricoveri.
   precisione 31%.
 - Le garanzie finiscono al confine dello strumento: un modello davanti al
   server MCP ha riscritto «iperteso» in «Ipotensione» con una catena di
-  provenienza formalmente corretta. Ora è contato; non è impedibile.
+  provenienza formalmente corretta.
 
 **Rumore di fondo del progetto: due punti percentuali.** È la variazione fra
 corse dello stesso modello sugli stessi record e fra ricampionamenti dello
@@ -100,11 +100,6 @@ per ricovero:
 | Anamnesi | 1 000 | 222 / 1 665 / 17 590 caratteri | prosa libera |
 | Terapia medica all'ingresso | 1 000 | 4 / 275 / 1 899 | lista con `;`, nomi commerciali |
 | Terapia alla Dimissione | 857 | 15 / 649 / 2 281 | voci fra virgolette, principio attivo |
-
-Nella stessa cartella c'erano due varianti «più ricche», con i campi già
-separati e un questionario di condizioni: erano il grezzo passato per un
-modello linguistico, e sono state scartate. Costruire tre pipeline di
-estrazione sopra un'estrazione fatta da un modello avrebbe misurato quella.
 
 **I vincoli, e il perché.**
 
@@ -129,8 +124,7 @@ Il referto entra in tre pipeline indipendenti che producono lo stesso oggetto
 lavorano sui soli fatti affermati del paziente, leggendo le regole dal grafo
 di conoscenza; la traccia interroga entrambi i grafi; il server MCP espone
 tutto a un modello conversazionale. **Tre pipeline e non una** perché lo scopo
-è confrontare metodi di estrazione; **il filtro è simbolico per vincolo**
-perché una regola di sicurezza deve poter essere contestata da un clinico.
+è confrontare metodi di estrazione;
 
 | strato | moduli (`src/`) | step |
 | --- | --- | --- |
@@ -165,11 +159,9 @@ class StatoPaziente(BaseModel):
 ```
 
 Tre scelte reggono tutto il resto. **Tre stati di conoscenza** (affermato,
-negato, incerto) e non un booleano: «non riferisce angina» è la stessa
+negato, incerto): «non riferisce angina» è la stessa
 parola con verità opposta. **Il soggetto separato dallo stato** (paziente,
-familiare): «padre deceduto per infarto» è vero e non è del paziente —
-l'asse è stato aggiunto nella versione 1.1.0 dopo che il confronto dello
-step 6 ha trovato un flutter atriale del *feto* attribuito alla paziente.
+familiare): «padre deceduto per infarto» è vero e non è del paziente.
 **Provenienza obbligatoria** su ogni entità: pipeline, campo, offset di
 carattere, regola che l'ha prodotta. Lo stato della sezione allergie è
 separato dalla lista: sezione assente, «non note» e lista vuota sono tre
@@ -209,8 +201,7 @@ stringhe, e la polarità va decisa dal contesto.
 
 `PhraseMatcher` di spaCy sulle forme dei vocabolari (farmaci da
 `mappatura_atc.json`, condizioni dai termini ICD filtrati e arricchiti di
-varianti senza qualificatori). Poi **ConText riscritto per l'italiano**
-(l'algoritmo è di Harkema et al. 2009, doi:10.1016/j.jbi.2009.05.002):
+varianti senza qualificatori). Poi **ConText riscritto per l'italiano**:
 
 - **marcatori** con attributo, direzione e ampiezza, ricavati contando nel
   corpus: `non` 2 665 occorrenze, `nega` 522, `assenza di` 370, `senza` 319,
@@ -324,17 +315,11 @@ Due grafi RDF (`rdflib`), con lo stesso spazio di nomi per i concetti.
 motivo, fonte, eventuale terapia che la innesca, fatto non estratto) e
 `Controindicazione` (12: esito, fonte RCP/ESC, fatti che la revocano). Lo
 script `kb_build.py` le dichiara e scrive il Turtle; `conoscenza.py` lo
-legge; **ranker e filtro prendono le regole da lì**, e un test verifica che
-il Turtle nel repository sia identico a quello rigenerato.
+legge; **ranker e filtro prendono le regole da lì**.
 
 ![Il grafo di conoscenza](docs/img/conoscenza.png)
 
-Perché la curatela è manuale e non importata: la sonda su Wikidata (372 dei
-439 principi attivi trovati, 273 con «condizione trattata», 158 con
-interazioni) mostra che la copertura c'è, ma senza classe di
-raccomandazione, senza fonte citabile e senza codice ICD-10 per la
-condizione. Le interazioni farmaco-farmaco non ci sono, e l'assenza è
-dichiarata.
+E' stata eeguita anche una sonda da Wikidata (372 dei 439 principi trovati, 273 con "condizione trattata", 158 con interazioni), c'è copertura ma senza classe di raccomandazione, senza fonte e senza codice ICD-10 per le condizioni, le interazioni farmaco-farmaco non sono sate utilizzate.
 
 **La provenienza** — `data/processed/grafo.ttl`, 1,2 M triple, non
 versionato — modella **la menzione come nodo**: l'asserzione clinica è
@@ -352,7 +337,7 @@ Il 46,6% di consenso a tre riportato in prima battuta era il parser dei
 campi strutturati contato come tre agenti: il grafo esiste esattamente per
 rendere interrogabile questo tipo di domanda (`COUNT(DISTINCT ?agente)`).
 Il grafo **non decide**: non fonde le contraddizioni, non scarta le menzioni
-irrisolte (40,8% delle condizioni senza codice). La decisione è dello step 8.
+irrisolte (40,8% delle condizioni senza codice).
 
 ---
 
@@ -371,7 +356,7 @@ verificare, **4 vietate**. La prima versione ne vietava 28: ventiquattro
 erano betabloccanti in pazienti con blocco AV *e pacemaker*, che nessuna
 pipeline estrae. Da qui il **principio del fatto mancante**: una regola la
 cui premessa richiede un fatto che il sistema non sa stabilire segnala, non
-vieta. È ricomparso cinque volte nel progetto.
+vieta.
 
 Il richiamo del filtro non ha una verità; venti casi avversari attraverso
 l'estrazione ne coglie 14. I sei mancati sono tutti termini che il
@@ -606,18 +591,13 @@ linguistico (unità classe) si confronta per graduatoria, non cifra per cifra.
 ## 10. Limiti e lavoro futuro
 
 - **Il riferimento annotato è di un solo annotatore**, che è anche l'autore
-  delle pipeline: nessun accordo inter-annotatore. Mitigato (annotazione alla
-  cieca, linee guida scritte prima, correzioni tracciabili), non risolto.
+  delle pipeline: nessun accordo inter-annotatore.
 - **Il richiamo del filtro è limitato dal vocabolario chiuso**: un allergene
   scritto fuori dalle forme del corpus («aspirina», «ASA») non risolve, e ora
   è dichiarato come fatto mancante. Un filtro reale cercherebbe l'allergene
   nell'intero registro AIFA a runtime.
 - **Le interazioni farmaco-farmaco non ci sono.** Wikidata ne offre 4 372 a
-  livello di sostanza (P769): sarebbe la prima estensione, con lo stesso
-  script di import.
-- **La frazione di eiezione, il punteggio CHA₂DS₂-VA, i valori di
-  laboratorio e i dispositivi impiantati** sono i fatti che più limitano le
-  regole, e nessuna pipeline li estrae.
+  livello di sostanza (P769): sarebbe la prima estensione.
 - **Il dosaggio non è modellato**: una raccomandazione senza posologia è
   incompleta.
 - **La parafrasi è contata, non impedita.** La difesa vera è un `resource`
@@ -652,9 +632,7 @@ python3 src/valuta_mcp.py                         # le dieci domande (ollama, ~1
 
 Il dataset va in `data/raw/anamnesiterapie.txt`; il PDF ICD-10 in
 `data/external/`. Questa relazione è anche in [`docs/relazione.pdf`](docs/relazione.pdf)
-(resa di questo file con `markdown-it` e Chrome headless). Le corse con modello linguistico sono in cache per impronta
-di richiesta: rieseguire una valutazione non chiama il modello. La chiave
-OpenRouter sta in `.env.local`, mai nel codice.
+(resa di questo file con `markdown-it` e Chrome headless).
 
 **Struttura**
 
@@ -675,4 +653,3 @@ ipertensione, dislipidemie), citate una per una in `kb/conoscenza.ttl` · ConTex
 Harkema et al. 2009 · bioBIT, Buonocore et al. 2023 · HUMADEX Italian Medical
 NER, Sallauka et al. 2025 · PROV-O, W3C 2013 · Qwen3.5 4B via Ollama,
 DeepSeek V4.1 Flash via OpenRouter — motori, non fonti di conoscenza ·
-`anthropics/skills` `mcp-builder`, con provenienza dichiarata in `.claude/skills/`.
