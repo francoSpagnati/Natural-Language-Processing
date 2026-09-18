@@ -643,7 +643,6 @@ docs/         un documento per step, l'indice, la guida al codice, il brief, le 
 kb/           conoscenza.ttl (il grafo clinico) e manifest_fonti.json
 notebooks/    quattro notebook di analisi, senza output salvati
 data/         non versionato: grezzo, knowledge base scaricate, intermedi, uscite
-.claude/      skill di progetto per Claude Code
 ```
 
 **Fonti.** AIFA, liste dei farmaci (CC-BY 4.0) · ICD-10 2019 Elenco

@@ -124,9 +124,9 @@ due ordini di grandezza più degli strumenti.**
 
 Con `mcp` 2.x `FastMCP` è diventato `MCPServer` e `inputSchema` è diventato
 `input_schema`: il client è fallito al primo giro sul secondo. La skill
-ufficiale `mcp-builder` (in `.claude/skills/`, con provenienza dichiarata)
-documenta ancora la 1.x e prevede la valutazione con l'API Anthropic, che qui
-non si usa: la valutazione è fatta con il modello locale.
+ufficiale `mcp-builder`, usata in fase di sviluppo, documentava ancora la 1.x
+e prevedeva la valutazione con l'API Anthropic, che qui non si usa: la
+valutazione è fatta con il modello locale.
 
 ## 6. Che cosa resta aperto
 
